@@ -30,12 +30,12 @@ jobs:
       - name: Construire l'APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Préparer le téléchargement
-        run: cp app/build/outputs/apk/debug/app-debug.apk AfterLog-v0.4.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk AfterLog-v0.5.0.apk
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: AfterLog-Android-APK
-          path: AfterLog-v0.4.0.apk
+          path: AfterLog-v0.5.0.apk
           if-no-files-found: error
           retention-days: 30
       - name: Publier l'APK dans GitHub Releases
@@ -43,8 +43,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v0.4.0-debug >/dev/null 2>&1; then
-            gh release upload v0.4.0-debug AfterLog-v0.4.0.apk --clobber
+          if gh release view v0.5.0-debug >/dev/null 2>&1; then
+            gh release upload v0.5.0-debug AfterLog-v0.5.0.apk --clobber
           else
-            gh release create v0.4.0-debug AfterLog-v0.4.0.apk --target "$GITHUB_SHA" --title "AfterLog v0.4.0 (test)" --notes "Version 0.4 : import Shotgun séquentiel des pages événement avec dates, affiche, description, artistes et enrichissement des soirées existantes. APK de debug. Données enregistrées localement. Sauvegarder au format JSON avant une réinstallation : la signature de debug peut changer." --prerelease
+            gh release create v0.5.0-debug AfterLog-v0.5.0.apk --target "$GITHUB_SHA" --title "AfterLog v0.5.0 (test)" --notes "Version 0.5 : retour Android corrigé et sélecteur visuel de consommations avec compteur et heure facultative. APK de debug. Données enregistrées localement. Sauvegarder au format JSON avant une réinstallation : la signature de debug peut changer." --prerelease
           fi

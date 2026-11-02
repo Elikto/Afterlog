@@ -50,7 +50,8 @@ public final class MainActivity extends Activity {
     private AppUpdater updater;
     private LinearLayout page;
     private long currentEventId = 0;
-    private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53;
+    private Runnable backAction;
+    private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53, CONSUMPTION_REQUEST = 54;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,6 +101,7 @@ public final class MainActivity extends Activity {
         return l;
     }
     private void screen(String title, Runnable back) {
+        backAction=back;
         LinearLayout outer = column(); outer.setBackgroundColor(BG);
         outer.setPadding(dp(16), dp(14), dp(16), 0);
         setContentView(outer);
@@ -199,10 +201,10 @@ public final class MainActivity extends Activity {
         if(entries.isEmpty()) add(page,text("Aucune consommation enregistrée pour cette soirée.",14,SOFT,false),14);
         for(JSONObject entry:entries) {
             LinearLayout c=card();
-            add(c,text(entry.optString("name","Consommation"),18,Color.WHITE,true),6);
+            add(c,text(ConsumptionActivity.iconFor(entry.optString("category"),entry.optString("name"))+"  "+entry.optString("name","Consommation"),18,Color.WHITE,true),6);
             add(c,text(entry.optString("category")+" · "+
                 entry.optString("quantity","1")+" "+entry.optString("unit"),14,ACCENT,false),6);
-            add(c,text(entry.optString("date")+"  "+entry.optString("time"),13,SOFT,false),6);
+            add(c,text(entry.optString("date")+"  "+(entry.optBoolean("allNight",false)?"Pendant toute la soirée":entry.optString("time")),13,SOFT,false),6);
             if(entry.optDouble("cost",0)!=0) add(c,text(String.format(Locale.FRANCE,"%.2f €",entry.optDouble("cost")),14,SOFT,false),6);
             if(!entry.optString("notes").isEmpty()) add(c,text(entry.optString("notes"),14,SOFT,false),7);
             add(c,text("Modifier ›",13,Color.WHITE,true),0);
@@ -265,44 +267,10 @@ public final class MainActivity extends Activity {
     }
 
     private void editEntry(JSONObject original,long eventId) {
-        long entryId=original.optLong("id");
-        screen(entryId==0?"Nouvelle consommation":"Modifier la consommation",()->showEvent(eventId));
-        add(page,text("Catégorie",12,SOFT,true),6);
-        Spinner select=new Spinner(this);
-        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,CATEGORIES);
-        select.setAdapter(adapter);
-        for(int i=0;i<CATEGORIES.length;i++) if(CATEGORIES[i].equals(original.optString("category"))) select.setSelection(i);
-        add(page,select,14);
-        EditText name=field(page,"Nom / produit",original.optString("name"),false);
-        EditText qty=field(page,"Quantité",original.optString("quantity","1"),false);
-        qty.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED);
-        EditText unit=field(page,"Unité (verre, cl, mg, etc.)",original.optString("unit","verre"),false);
-        EditText date=field(page,"Date (AAAA-MM-JJ)",original.optString("date",store.event(eventId).optString("date",dateNow())),false);
-        EditText time=field(page,"Heure (HH:mm)",original.optString("time",timeNow()),false);
-        EditText cost=field(page,"Coût (€)",original.optString("cost","0"),false);
-        cost.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED);
-        EditText notes=field(page,"Notes",original.optString("notes"),true);
-        add(page,button("Enregistrer",true,()->{
-            try {
-                if(name.getText().toString().trim().isEmpty()){message("Indique un nom");return;}
-                JSONObject e=new JSONObject(original.toString());
-                e.put("eventId",eventId);
-                e.put("category",select.getSelectedItem().toString());
-                e.put("name",name.getText().toString().trim());
-                e.put("quantity",Double.parseDouble(qty.getText().toString().trim().replace(",",".")));
-                e.put("unit",unit.getText().toString().trim());
-                e.put("date",date.getText().toString().trim());
-                e.put("time",time.getText().toString().trim());
-                e.put("cost",Double.parseDouble(cost.getText().toString().trim().replace(",",".")));
-                e.put("notes",notes.getText().toString().trim());
-                if(e.optDouble("quantity")<0 || e.optDouble("cost")<0) {message("Valeurs négatives non autorisées");return;}
-                store.saveEntry(e);showEvent(eventId);
-            } catch(Exception ex){message("Vérifie les quantités et les champs numériques");}
-        }),12);
-        if(entryId!=0)add(page,button("Supprimer cette consommation",false,()->
-            new AlertDialog.Builder(this).setTitle("Supprimer cette entrée ?")
-                .setNegativeButton("Annuler",null)
-                .setPositiveButton("Supprimer",(d,w)->{store.deleteEntry(entryId);showEvent(eventId);}).show()),0);
+        Intent intent=new Intent(this,ConsumptionActivity.class);
+        intent.putExtra(ConsumptionActivity.EXTRA_EVENT_ID,eventId);
+        intent.putExtra(ConsumptionActivity.EXTRA_ENTRY_ID,original.optLong("id"));
+        startActivityForResult(intent,CONSUMPTION_REQUEST);
     }
 
     private void showStats() {
@@ -475,6 +443,10 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==CONSUMPTION_REQUEST){
+            if(resultCode==RESULT_OK)showEvent(currentEventId);
+            return;
+        }
         if(resultCode!=RESULT_OK || data==null)return;
         if(requestCode==SHOTGUN_REQUEST){receiveShotgunEvents(data);return;}
         if(data.getData()==null)return;
@@ -506,6 +478,10 @@ public final class MainActivity extends Activity {
                     }).show();
             }
         }catch(Exception ex){message("Erreur : "+ex.getMessage());}
+    }
+    @Override public void onBackPressed() {
+        if(backAction!=null)backAction.run();
+        else super.onBackPressed();
     }
     private void loadImage(ImageView image,String url) {
         if(!url.startsWith("https://"))return;
