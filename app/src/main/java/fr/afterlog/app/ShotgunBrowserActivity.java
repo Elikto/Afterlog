@@ -40,6 +40,7 @@ public final class ShotgunBrowserActivity extends Activity {
     private static final int ACCENT = Color.rgb(186, 166, 255);
     private WebView web;
     private TextView status;
+    private ShotgunBatchImporter batch;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -60,7 +61,9 @@ public final class ShotgunBrowserActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(nav);
-        button(nav,"← AfterLog",()->finish(),1);
+        button(nav,"← AfterLog",()->{
+            if(batch!=null && batch.isActive())batch.askCancel();else finish();
+        },1);
         button(nav,"Accueil Shotgun",()->web.loadUrl("https://shotgun.live/fr"),1);
         button(nav,"Actualiser",()->web.reload(),1);
         status = new TextView(this);
@@ -74,9 +77,10 @@ public final class ShotgunBrowserActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(actions);
         button(actions,"Importer cet événement",this::importCurrent,1);
-        button(actions,"Importer les visibles",this::importVisible,1);
+        button(actions,"Tout importer + détails",this::importVisible,1);
 
         web = new WebView(this);
+        batch = new ShotgunBatchImporter(this,web, message -> status.setText(message), this::finishWithEvents);
         outer.addView(web,new LinearLayout.LayoutParams(-1,0,1));
         WebSettings config = web.getSettings();
         config.setJavaScriptEnabled(true);
@@ -100,15 +104,20 @@ public final class ShotgunBrowserActivity extends Activity {
                 return true;
             }
             @Override public void onPageFinished(WebView view,String url) {
-                status.setText("shotgun.live — Utilise le menu Shotgun pour accéder à Mes billets → Passés.");
+                if(batch!=null && batch.isActive()) batch.onPageFinished(url);
+                else status.setText("shotgun.live — Utilise le menu Shotgun pour accéder à Mes billets → Passés.");
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error) {
-                if (req.isForMainFrame()) status.setText("Page inaccessible : vérifie ta connexion puis réessaie.");
+                if (req.isForMainFrame()) {
+                    status.setText("Page inaccessible : vérifie ta connexion puis réessaie.");
+                    if(batch!=null)batch.onLoadFailure();
+                }
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest req,
                                                        android.webkit.WebResourceResponse response) {
                 if (req.isForMainFrame() && response.getStatusCode()==429) {
                     status.setText("Shotgun limite l'accès (HTTP 429). Réessaie plus tard ; ne multiplie pas les demandes.");
+                    if(batch!=null)batch.onHttp429();
                 }
             }
         });
@@ -117,6 +126,7 @@ public final class ShotgunBrowserActivity extends Activity {
         footer.setPadding(dp(12),dp(7),dp(12),dp(10));
         outer.addView(footer,new LinearLayout.LayoutParams(-1,-2));
         button(footer,"← Page précédente",()->{
+            if(batch!=null && batch.isActive()){batch.askCancel();return;}
             if(web.canGoBack()) web.goBack(); else finish();
         },2);
         button(footer,"Déconnecter Shotgun",this::confirmLogout,2);
@@ -139,8 +149,8 @@ public final class ShotgunBrowserActivity extends Activity {
         row.addView(b,lp);
         b.setOnClickListener(v->runnable.run());
     }
-    private void toast(String value) {Toast.makeText(this,value,Toast.LENGTH_LONG).show();}
-    private static boolean trusted(Uri uri) {
+    void toast(String value) {Toast.makeText(this,value,Toast.LENGTH_LONG).show();}
+    static boolean trusted(Uri uri) {
         String host=uri.getHost();
         return "https".equalsIgnoreCase(uri.getScheme()) &&
             host!=null && (host.equalsIgnoreCase("shotgun.live")
@@ -175,32 +185,10 @@ public final class ShotgunBrowserActivity extends Activity {
         });
     }
     private void importVisible() {
-        new AlertDialog.Builder(this)
-            .setTitle("Importer les événements affichés ?")
-            .setMessage("Ouvre d'abord « Mes billets → Passés » sur le site Shotgun. AfterLog va lire uniquement les liens d'événements actuellement visibles, sans récupérer les billets, QR codes ni données de connexion. Tous les événements ne sont pas forcément accessibles depuis cette page.")
-            .setNegativeButton("Annuler",null)
-            .setPositiveButton("Importer", (d,w)->web.evaluateJavascript(VISIBLE_LINKS_JS,value->{
-                try {
-                    JSONArray raw=new JSONArray(decoded(value));
-                    JSONArray out=new JSONArray();
-                    for(int i=0;i<raw.length();i++) {
-                        JSONObject event=raw.optJSONObject(i);
-                        if(event==null||!isEventUrl(event.optString("url")))continue;
-                        if(event.optString("title").trim().length()<3)continue;
-                        event.put("origin","Shotgun (liens visibles)");
-                        out.put(event);
-                    }
-                    if(out.length()==0) {
-                        new AlertDialog.Builder(this).setTitle("Aucun lien trouvé")
-                            .setMessage("Le site ne fournit pas de liens événement exploitables sur cette page. Essaie d'ouvrir une soirée puis « Importer cet événement ».")
-                            .setPositiveButton("OK",null).show();
-                        return;
-                    }
-                    finishWithEvents(out);
-                }catch(Exception e){toast("Impossible de lire les événements affichés");}
-            })).show();
+        batch.begin();
     }
-    private static String decoded(String jsonEncoded) throws Exception {
+
+    static String decoded(String jsonEncoded) throws Exception {
         if(jsonEncoded==null || "null".equals(jsonEncoded))throw new Exception("Aucun résultat");
         return new JSONArray("["+jsonEncoded+"]").getString(0);
     }
@@ -226,10 +214,12 @@ public final class ShotgunBrowserActivity extends Activity {
             }).show();
     }
     @Override public void onBackPressed() {
+        if(batch!=null && batch.isActive()){batch.askCancel();return;}
         if(web!=null && web.canGoBack())web.goBack();
         else super.onBackPressed();
     }
     @Override protected void onDestroy() {
+        if(batch!=null)batch.cancelSilently();
         if(web!=null){
             ViewGroup parent=(ViewGroup)web.getParent();
             if(parent!=null)parent.removeView(web);
@@ -240,7 +230,7 @@ public final class ShotgunBrowserActivity extends Activity {
 
     // Le script ne s'exécute QUE lorsque l'utilisateur choisit d'importer une page événement.
     // Ne lit jamais les formulaires, tokens, cookies, billets ni QR codes.
-    private static final String CURRENT_EVENT_JS = """
+    static final String CURRENT_EVENT_JS = """
         (function(){
           const m=(name)=>{const e=document.querySelector('meta[property="'+name+'"],meta[name="'+name+'"]');return e?e.content.trim():''};
           const safe=(v)=>typeof v==='string'?v:'';
