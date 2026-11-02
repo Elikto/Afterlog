@@ -22,7 +22,11 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Installer le SDK Android
-        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -n "$SDKMANAGER" || { echo "sdkmanager introuvable"; exit 1; }
+          "$SDKMANAGER" --install 'platforms;android-36' 'build-tools;36.0.0'
       - name: Construire l'APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Préparer le téléchargement
