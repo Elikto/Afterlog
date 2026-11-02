@@ -1,0 +1,48 @@
+name: Compiler AfterLog APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Récupérer le projet
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configurer Android
+        uses: android-actions/setup-android@v3
+      - name: Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Installer le SDK Android
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Construire l'APK
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Préparer le téléchargement
+        run: cp app/build/outputs/apk/debug/app-debug.apk AfterLog-v0.1.0.apk
+      - name: Conserver l'APK dans GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: AfterLog-Android-APK
+          path: AfterLog-v0.1.0.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publier l'APK dans GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v0.1.0-debug >/dev/null 2>&1; then
+            gh release upload v0.1.0-debug AfterLog-v0.1.0.apk --clobber
+          else
+            gh release create v0.1.0-debug AfterLog-v0.1.0.apk --target "$GITHUB_SHA" --title "AfterLog v0.1.0 (test)" --notes "Première version Android de test. APK de debug. Données enregistrées localement. Sauvegarder au format JSON avant une réinstallation : la signature de debug peut changer." --prerelease
+          fi
