@@ -1,31 +1,34 @@
-# AfterLog — Journal personnel de soirées Android
+# AfterLog — Application Android
 
-Version de test **0.2.0**.
+Version expérimentale **0.3.0**, avec bouton de mise à jour intégré.
 
-## Téléchargement de l'APK
+## Installation
+- APK : https://github.com/Elikto/Afterlog/releases
+- Code : https://github.com/Elikto/Afterlog
+- Une fois installé, utiliser **↻ Rechercher une mise à jour** depuis l'accueil ou les réglages.
+- AfterLog vérifie les **Releases GitHub**, propose l'APK, le télécharge et ouvre le programme d'installation Android. Android demande toujours l'approbation de l'utilisateur.
 
-https://github.com/Elikto/Afterlog/releases
+## Fonctionnement du système de mise à jour
+- Utilise l'API GitHub `/repos/Elikto/Afterlog/releases` (les préversions sont incluses).
+- Compare les versions et utilise uniquement les fichiers APK du dépôt officiel.
+- Télécharge via HTTPS, vérifie l'empreinte SHA-256 si GitHub la fournit.
+- Valide l'identifiant du paquet et le numéro de version, puis **vérifie le certificat de signature installé avant de proposer la mise à jour**.
+- La mise à jour n'installe rien silencieusement : Android doit confirmer l'installation.
+- Aucun APK ni donnée de consommation n'est envoyé à un serveur externe.
 
-**Pour mettre à jour depuis l'APK de test 0.1.0** : exporter les données au format JSON dans les réglages AVANT toute désinstallation. Les APK de test GitHub Actions peuvent être signés avec des clés différentes ; si Android refuse la mise à jour, désinstaller la 0.1.0, installer la nouvelle APK puis réimporter la sauvegarde.
+### IMPORTANT : signature de l'APK de test
+Les versions 0.1 et 0.2 ont été signées avec des **clés de debug temporaires de GitHub Actions**. La nouvelle 0.3.0 utilise encore une signature debug provisoire. Android **refusera l'installation par-dessus une version signée différemment**. Avant de passer de la 0.2.0 à la 0.3.0 :
+1. Dans AfterLog 0.2, exporter les données depuis **Réglages et sauvegarde → Exporter toutes mes données (JSON)** et conserver ce fichier.
+2. Télécharger l'APK 0.3 sur GitHub dans le navigateur.
+3. Désinstaller l'ancienne AfterLog (cela efface les données locales de l'application).
+4. Installer la 0.3, puis importer la sauvegarde JSON.
 
-## Ce que permet la version 0.2
+**Pour rendre les futures mises à jour réellement installables en un clic**, configurer une clé de signature Android *permanente et privée* dans les secrets de GitHub Actions, et l'utiliser pour toutes les releases suivantes. Ne jamais publier la clé privée ni son mot de passe dans ce dépôt public. La mise à jour intégrée détecte et bloque les signatures incompatibles jusqu'à cette configuration.
 
-- **Connexion au site officiel Shotgun via un navigateur WebView intégré** (adresse e-mail et mot de passe saisis sur la page Shotgun, jamais dans un formulaire AfterLog).
-- Depuis Shotgun, ouvrir **Mes billets → Passés**, puis cliquer **Importer les visibles** pour récupérer les liens d'événements présents dans le document, dans la mesure où Shotgun les fournit.
-- Ou ouvrir une fiche d'événement Shotgun et utiliser **Importer cet événement** pour importer titre, affiche, description et éventuelles données structurées publiées sur la page.
-- Ajouter ou modifier des soirées manuellement, noter des consommations, heures, quantités et dépenses, consulter des statistiques, exporter/restaurer en JSON.
-- Se déconnecter depuis le navigateur Shotgun intégré.
+## Autres fonctions
+- Navigateur Shotgun intégré pour ouvrir la session sur le site officiel.
+- Import volontaire des pages événements et liens visibles, selon le DOM de Shotgun.
+- Ajout manuel de soirées, suivi des consommations, des heures et du coût.
+- Statistiques simples, export/import JSON.
 
-## Limites
-
-- **Ce n'est pas une intégration API officielle Shotgun ni une synchronisation automatique de tout le compte.** L'accès complet à l'historique privé ne dispose pas d'une API participant publiquement documentée.
-- La récupération depuis les liens visibles dépend de la structure du site Shotgun et peut donner 0 résultat. Aucune requête HTTP automatisée en boucle n'est envoyée pour contourner un 429.
-- L'authentification WebView peut ne pas fonctionner si Shotgun ou son système anti-bot bloque les navigateurs intégrés ; dans ce cas, utiliser la page Shotgun normale et l'ajout manuel.
-- **Ne pas importer de QR codes ou de billets personnels** : l'application lit seulement les métadonnées publiques d'une fiche d'événement ou les liens visibles à la demande.
-- Les données de consommation restent **locales**. Les exports JSON sont **non chiffrés** et doivent rester privés.
-- La session du navigateur intégré est sauvegardée par WebView sur le téléphone. Le bouton Déconnecter efface ces cookies ; l'application ne les lit pas.
-
-## Technique
-
-Java 17, Gradle 8.13, Android SDK 36, AGP 8.13.2, Android 8+.
-Compilation et publication automatique de l'APK avec GitHub Actions.
+La synchronisation privée de l'historique de comptes Shotgun n'est pas officiellement prise en charge.

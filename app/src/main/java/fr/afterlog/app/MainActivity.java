@@ -47,6 +47,7 @@ public final class MainActivity extends Activity {
         "Alcool", "Autres substances", "Sans alcool", "Médicaments", "Autre"
     };
     private AppStore store;
+    private AppUpdater updater;
     private LinearLayout page;
     private long currentEventId = 0;
     private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53;
@@ -54,6 +55,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = new AppStore(this);
+        updater = new AppUpdater(this);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         showHome();
@@ -128,6 +130,7 @@ public final class MainActivity extends Activity {
         add(page, button("🔐  Connexion Shotgun · Mes billets", true, this::connectShotgun),10);
         add(page, button("↗  Importer un lien Shotgun", false, this::importShotgun),10);
         add(page, button("Statistiques", false, this::showStats),10);
+        add(page, button("↻  Rechercher une mise à jour", false, () -> updater.check()),10);
         add(page, button("Réglages et sauvegarde", false, this::showSettings),24);
         List<JSONObject> events = store.events();
         add(page,text("MES SOIRÉES  •  "+events.size(),15,ACCENT,true),13);
@@ -399,9 +402,14 @@ public final class MainActivity extends Activity {
         }catch(Exception e){return "";}
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        if(updater!=null)updater.onResume();
+    }
     private void showSettings() {
         screen("Confidentialité et sauvegarde",this::showHome);
         subtitle("Les consommations sont stockées localement sur cet appareil. Aucun compte Shotgun ou Gmail n'est nécessaire.");
+        add(page,button("↻ Rechercher une mise à jour",false,()->updater.check()),10);
         add(page,button("Exporter toutes mes données (JSON)",true,()->{
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
