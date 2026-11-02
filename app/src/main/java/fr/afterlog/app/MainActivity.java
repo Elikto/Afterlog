@@ -12,7 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
-import android.view.inputmethod.InputType;
+import android.text.InputType;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
