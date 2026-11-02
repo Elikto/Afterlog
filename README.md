@@ -1,34 +1,31 @@
-# AfterLog — Journal de soirées Android
+# AfterLog — Journal personnel de soirées Android
 
-Application Android personnelle : historique de soirées, événements importés par lien Shotgun et suivi de consommation par soirée.
+Version de test **0.2.0**.
 
-## Version 0.1.0
+## Téléchargement de l'APK
 
-- Ajouter, modifier et supprimer des soirées manuellement
-- Importer les **informations publiques** d'un événement à partir d'un lien `https://shotgun.live/...` (le titre, l'affiche et la description selon les données proposées par Shotgun)
-- Saisir les détails de l'événement (date, heure, lieu, artistes, genres, organisateur, description et notes)
-- Enregistrer des consommations personnelles (catégorie, nom, quantité, unité, date, heure, coût, notes)
-- Voir les consommations par soirée et des statistiques globales
-- Exporter et restaurer les données au format JSON
+https://github.com/Elikto/Afterlog/releases
 
-**Non disponible dans cette version :** connexion au compte Shotgun et récupération automatique de « Mes billets → Passés ». L'import par URL publique peut être partiel selon la page.
+**Pour mettre à jour depuis l'APK de test 0.1.0** : exporter les données au format JSON dans les réglages AVANT toute désinstallation. Les APK de test GitHub Actions peuvent être signés avec des clés différentes ; si Android refuse la mise à jour, désinstaller la 0.1.0, installer la nouvelle APK puis réimporter la sauvegarde.
 
-## Télécharger l'APK sur téléphone
+## Ce que permet la version 0.2
 
-1. Ouvrir **Releases** : https://github.com/Elikto/Afterlog/releases
-2. Sélectionner **AfterLog v0.1.0 (test)** puis télécharger `AfterLog-v0.1.0.apk`.
-3. Autoriser l'installation depuis le navigateur Android pour installer l'APK.
+- **Connexion au site officiel Shotgun via un navigateur WebView intégré** (adresse e-mail et mot de passe saisis sur la page Shotgun, jamais dans un formulaire AfterLog).
+- Depuis Shotgun, ouvrir **Mes billets → Passés**, puis cliquer **Importer les visibles** pour récupérer les liens d'événements présents dans le document, dans la mesure où Shotgun les fournit.
+- Ou ouvrir une fiche d'événement Shotgun et utiliser **Importer cet événement** pour importer titre, affiche, description et éventuelles données structurées publiées sur la page.
+- Ajouter ou modifier des soirées manuellement, noter des consommations, heures, quantités et dépenses, consulter des statistiques, exporter/restaurer en JSON.
+- Se déconnecter depuis le navigateur Shotgun intégré.
 
-L'APK de test est compilé automatiquement via **GitHub Actions** lors des envois sur `main`. Si la release n'est pas encore disponible, vérifier l'onglet Actions.
+## Limites
 
-## Confidentialité
+- **Ce n'est pas une intégration API officielle Shotgun ni une synchronisation automatique de tout le compte.** L'accès complet à l'historique privé ne dispose pas d'une API participant publiquement documentée.
+- La récupération depuis les liens visibles dépend de la structure du site Shotgun et peut donner 0 résultat. Aucune requête HTTP automatisée en boucle n'est envoyée pour contourner un 429.
+- L'authentification WebView peut ne pas fonctionner si Shotgun ou son système anti-bot bloque les navigateurs intégrés ; dans ce cas, utiliser la page Shotgun normale et l'ajout manuel.
+- **Ne pas importer de QR codes ou de billets personnels** : l'application lit seulement les métadonnées publiques d'une fiche d'événement ou les liens visibles à la demande.
+- Les données de consommation restent **locales**. Les exports JSON sont **non chiffrés** et doivent rester privés.
+- La session du navigateur intégré est sauvegardée par WebView sur le téléphone. Le bouton Déconnecter efface ces cookies ; l'application ne les lit pas.
 
-Les soirées et consommations sont stockées localement sur l'appareil et ne sont pas publiées sur GitHub. L'application ne demande pas d'identifiants Shotgun ou Gmail. Les sauvegardes JSON exportées ne sont **pas chiffrées** : les garder privées.
+## Technique
 
-**Attention :** un APK debug est signé avec une clé temporaire de GitHub Actions. Une future version peut demander une désinstallation pour être installée : exporter la sauvegarde JSON avant. Projet expérimental à tester sur appareil Android.
-
-## Développement
-
-- Android SDK 36, Java 17, AGP 8.13.2, Gradle 8.13
-- Compilation : `gradle :app:assembleDebug`
-- Fichier : `app/build/outputs/apk/debug/app-debug.apk`
+Java 17, Gradle 8.13, Android SDK 36, AGP 8.13.2, Android 8+.
+Compilation et publication automatique de l'APK avec GitHub Actions.

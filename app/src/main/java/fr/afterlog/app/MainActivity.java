@@ -22,6 +22,7 @@ import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -48,7 +49,7 @@ public final class MainActivity extends Activity {
     private AppStore store;
     private LinearLayout page;
     private long currentEventId = 0;
-    private static final int EXPORT = 51, IMPORT = 52;
+    private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -124,6 +125,7 @@ public final class MainActivity extends Activity {
         screen("AfterLog", null);
         subtitle("Ton journal personnel de soirées. Données conservées sur ton téléphone.");
         add(page, button("＋  Ajouter une soirée", true, () -> editEvent(new JSONObject())),10);
+        add(page, button("🔐  Connexion Shotgun · Mes billets", true, this::connectShotgun),10);
         add(page, button("↗  Importer un lien Shotgun", false, this::importShotgun),10);
         add(page, button("Statistiques", false, this::showStats),10);
         add(page, button("Réglages et sauvegarde", false, this::showSettings),24);
@@ -325,45 +327,76 @@ public final class MainActivity extends Activity {
         subtitle("Les catégories utilisent des unités différentes : leurs quantités ne sont pas additionnées.");
     }
 
+    private void connectShotgun() {
+        Intent browser = new Intent(this, ShotgunBrowserActivity.class);
+        startActivityForResult(browser, SHOTGUN_REQUEST);
+    }
     private void importShotgun() {
         EditText input=new EditText(this);
         input.setSingleLine(false);
         input.setTextColor(BG);
         input.setHint("https://shotgun.live/...");
         input.setPadding(dp(16),dp(10),dp(16),dp(10));
-        new AlertDialog.Builder(this).setTitle("Importer une soirée Shotgun")
-            .setMessage("Colle le lien public d'un événement. Aucun identifiant Shotgun n'est demandé.")
+        new AlertDialog.Builder(this)
+            .setTitle("Importer via le site Shotgun")
+            .setMessage("L'ancien téléchargement direct est supprimé (erreur HTTP 429). Le lien s'ouvre maintenant dans le navigateur Shotgun intégré.")
             .setView(input)
             .setNegativeButton("Annuler",null)
             .setNeutralButton("Saisie manuelle",(d,w)->editEvent(new JSONObject()))
-            .setPositiveButton("Importer",(d,w)->{
+            .setPositiveButton("Ouvrir sur Shotgun",(d,w)->{
                 String url=input.getText().toString().trim();
-                if(url.isEmpty()){message("Lien manquant");return;}
-                message("Récupération des informations publiques…");
-                new Thread(()->{
-                    try {
-                        JSONObject event=ShotgunImporter.fetch(url);
-                        runOnUiThread(()->{
-                            JSONObject previous=store.eventByUrl(url);
-                            if(previous!=null){
-                                message("Cette soirée est déjà enregistrée");
-                                showEvent(previous.optLong("id")); return;
-                            }
-                            editEvent(event);
-                            message("Vérifie les informations puis enregistre");
-                        });
-                    } catch(Exception ex) {
-                        runOnUiThread(()->new AlertDialog.Builder(this)
-                            .setTitle("Importation incomplète")
-                            .setMessage("Impossible d'extraire automatiquement la page Shotgun. Tu peux renseigner ses informations manuellement.\n\n"+ex.getMessage())
-                            .setPositiveButton("Continuer manuellement",(dialog,which)->{
-                                JSONObject draft=new JSONObject();
-                                try{draft.put("url",url);draft.put("origin","Shotgun");}catch(Exception ignored){}
-                                editEvent(draft);
-                            }).setNegativeButton("Annuler",null).show());
+                try {
+                    Uri uri=Uri.parse(url);
+                    String host=uri.getHost();
+                    if(!"https".equalsIgnoreCase(uri.getScheme())||host==null||
+                        !(host.equalsIgnoreCase("shotgun.live") ||
+                          host.equalsIgnoreCase("www.shotgun.live"))) {
+                        message("Entre un lien HTTPS shotgun.live");return;
                     }
-                }).start();
+                    Intent browser=new Intent(this,ShotgunBrowserActivity.class);
+                    browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,url);
+                    startActivityForResult(browser,SHOTGUN_REQUEST);
+                }catch(Exception ex){message("Lien Shotgun invalide");}
             }).show();
+    }
+    private void receiveShotgunEvents(Intent data) {
+        try {
+            JSONArray records=new JSONArray(data.getStringExtra(ShotgunBrowserActivity.EXTRA_EVENTS));
+            if(records.length()==0){message("Aucun événement trouvé");return;}
+            if(records.length()==1){
+                JSONObject item=records.getJSONObject(0);
+                String canonical=normalizedEventUrl(item.optString("url"));
+                item.put("url",canonical);
+                JSONObject existing=store.eventByUrl(canonical);
+                if(existing!=null){message("Cette soirée figure déjà dans ton journal");showEvent(existing.optLong("id"));return;}
+                editEvent(item);
+                message("Vérifie les informations et enregistre la soirée");
+                return;
+            }
+            int added=0,skipped=0;
+            for(int i=0;i<records.length();i++){
+                JSONObject item=records.getJSONObject(i);
+                String canonical=normalizedEventUrl(item.optString("url"));
+                if(canonical.isEmpty()||item.optString("title").trim().isEmpty()){skipped++;continue;}
+                if(store.eventByUrl(canonical)!=null){skipped++;continue;}
+                item.put("url",canonical);
+                store.saveEvent(item);added++;
+            }
+            showHome();
+            new AlertDialog.Builder(this).setTitle("Import terminé")
+                .setMessage(added+" soirée(s) ajoutée(s), "+skipped+" déjà présente(s) ou ignorée(s).\n\nSeuls les liens visibles ont été importés. Les détails manquants peuvent être complétés sur chaque fiche.")
+                .setPositiveButton("OK",null).show();
+        }catch(Exception e){message("Import impossible : "+e.getMessage());}
+    }
+    private String normalizedEventUrl(String url) {
+        try {
+            Uri u=Uri.parse(url);
+            String host=u.getHost();
+            if(!"https".equalsIgnoreCase(u.getScheme()) || host==null ||
+                !(host.equalsIgnoreCase("shotgun.live") || host.equalsIgnoreCase("www.shotgun.live")))
+                return "";
+            return u.buildUpon().clearQuery().fragment(null).build().toString();
+        }catch(Exception e){return "";}
     }
 
     private void showSettings() {
@@ -383,11 +416,13 @@ public final class MainActivity extends Activity {
             startActivityForResult(intent,IMPORT);
         }),14);
         subtitle("Attention : la sauvegarde JSON exportée contient ton journal en clair. Garde-la dans un emplacement privé. L'import remplace toutes les données actuelles.");
-        subtitle("Cette version importe des liens publics Shotgun. La synchronisation complète de « Mes billets → Passés » n'est pas encore disponible.");
+        subtitle("Connecte-toi à Shotgun dans le navigateur intégré. Ouvre « Mes billets → Passés », puis importe les liens affichés. Une synchronisation complète automatique n’est pas encore disponible.");
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(resultCode!=RESULT_OK || data==null || data.getData()==null)return;
+        if(resultCode!=RESULT_OK || data==null)return;
+        if(requestCode==SHOTGUN_REQUEST){receiveShotgunEvents(data);return;}
+        if(data.getData()==null)return;
         Uri uri=data.getData();
         try {
             if(requestCode==EXPORT) {
