@@ -282,6 +282,47 @@ public final class ShotgunBrowserActivity extends Activity {
             result.artists=names(node.performer);
             result.organizer=names(node.organizer);
           }
+          const txt=(sel,max)=>{
+            const n=document.querySelector(sel);
+            return (n?.innerText||n?.textContent||'').trim().replace(/\\s+/g,' ').slice(0,max);
+          };
+          const fromDate=(iso,dateField,timeField)=>{
+            if(typeof iso!=='string')return;
+            if(/^\\d{4}-\\d\\d-\\d\\d/.test(iso))result[dateField]=iso.slice(0,10);
+            if(/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d/.test(iso))result[timeField]=iso.slice(11,16);
+          };
+          if(!result.date){
+            const metaDate=m('event:start_time')||m('event:startDate');
+            if(metaDate)fromDate(metaDate,'date','start');
+          }
+          if(!result.endDate){
+            const metaEnd=m('event:end_time')||m('event:endDate');
+            if(metaEnd)fromDate(metaEnd,'endDate','end');
+          }
+          const dates=[...document.querySelectorAll('time[datetime]')].map(x=>x.getAttribute('datetime'));
+          if(!result.date && dates.length)fromDate(dates[0],'date','start');
+          if(!result.endDate && dates.length>1)fromDate(dates[dates.length-1],'endDate','end');
+          if(!result.poster){
+            const img=document.querySelector('main img[src],article img[src]');
+            const src=img?.currentSrc||img?.src||'';
+            if(/^https:\\/\\//.test(src))result.poster=src;
+          }
+          if(!result.description){
+            result.description=txt('[data-testid*="description"]',7000) ||
+              txt('[class*="eventDescription"]',7000) ||
+              txt('[class*="EventDescription"]',7000) ||
+              txt('[id*="description"]',7000);
+          }
+          if(!result.address)result.address=txt('main address',250);
+          const linked=(pattern,max)=>{
+            const anchors=[...document.querySelectorAll('main a[href]')];
+            return [...new Set(anchors.filter(a=>pattern.test(a.getAttribute('href')||''))
+              .map(a=>(a.textContent||'').trim()).filter(x=>x && x.length<85))]
+              .slice(0,max).join(', ');
+          };
+          if(!result.genres)result.genres=linked(/\\/genre|\\/music\\//i,20);
+          if(!result.artists)result.artists=linked(/\\/artist/i,45);
+          if(!result.organizer)result.organizer=linked(/\\/organi[sz]er/i,10);
           return JSON.stringify(result);
         })();
         """;

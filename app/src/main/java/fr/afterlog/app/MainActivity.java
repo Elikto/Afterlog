@@ -365,31 +365,78 @@ public final class MainActivity extends Activity {
     private void receiveShotgunEvents(Intent data) {
         try {
             JSONArray records=new JSONArray(data.getStringExtra(ShotgunBrowserActivity.EXTRA_EVENTS));
-            if(records.length()==0){message("Aucun événement trouvé");return;}
-            if(records.length()==1){
-                JSONObject item=records.getJSONObject(0);
-                String canonical=normalizedEventUrl(item.optString("url"));
-                item.put("url",canonical);
-                JSONObject existing=store.eventByUrl(canonical);
-                if(existing!=null){message("Cette soirée figure déjà dans ton journal");showEvent(existing.optLong("id"));return;}
-                editEvent(item);
-                message("Vérifie les informations et enregistre la soirée");
-                return;
-            }
-            int added=0,skipped=0;
+            if(records.length()==0){message("Aucun événement récupéré");return;}
+            int added=0,updated=0,unchanged=0,ignored=0;
             for(int i=0;i<records.length();i++){
-                JSONObject item=records.getJSONObject(i);
-                String canonical=normalizedEventUrl(item.optString("url"));
-                if(canonical.isEmpty()||item.optString("title").trim().isEmpty()){skipped++;continue;}
-                if(store.eventByUrl(canonical)!=null){skipped++;continue;}
-                item.put("url",canonical);
-                store.saveEvent(item);added++;
+                JSONObject incoming=records.optJSONObject(i);
+                if(incoming==null){ignored++;continue;}
+                String canonical=normalizedEventUrl(incoming.optString("url"));
+                if(canonical.isEmpty() || incoming.optString("title").trim().isEmpty()){
+                    ignored++;continue;
+                }
+                incoming.put("url",canonical);
+                JSONObject existing=findMatchingShotgunEvent(incoming);
+                if(existing==null) {
+                    store.saveEvent(incoming);
+                    added++;
+                    continue;
+                }
+                if(mergeShotgunFields(existing,incoming)) {
+                    store.saveEvent(existing);
+                    updated++;
+                } else unchanged++;
             }
             showHome();
-            new AlertDialog.Builder(this).setTitle("Import terminé")
-                .setMessage(added+" soirée(s) ajoutée(s), "+skipped+" déjà présente(s) ou ignorée(s).\n\nSeuls les liens visibles ont été importés. Les détails manquants peuvent être complétés sur chaque fiche.")
+            new AlertDialog.Builder(this).setTitle("Import Shotgun terminé")
+                .setMessage(added+" soirée(s) ajoutée(s)\n"+
+                    updated+" soirée(s) complétée(s) avec leurs informations\n"+
+                    unchanged+" déjà à jour, "+ignored+" ignorée(s).\n\n"+
+                    "Les notes personnelles et toutes les consommations existantes sont conservées. "+
+                    "Les valeurs que tu as déjà saisies ne sont pas remplacées.")
                 .setPositiveButton("OK",null).show();
         }catch(Exception e){message("Import impossible : "+e.getMessage());}
+    }
+    private JSONObject findMatchingShotgunEvent(JSONObject incoming) {
+        String url=incoming.optString("url");
+        for(JSONObject existing:store.events()){
+            String previous=normalizedEventUrl(existing.optString("url"));
+            if(!previous.isEmpty() && previous.equalsIgnoreCase(url))return existing;
+        }
+        // Anciennes fiches importées sans lien exact : utiliser titre+date uniquement
+        // en cas d'une correspondance unique (jamais fusionner deux soirées homonymes).
+        String title=normalizeTitle(incoming.optString("title"));
+        String date=incoming.optString("date");
+        JSONObject match=null;
+        for(JSONObject existing:store.events()){
+            if(!existing.optString("origin").toLowerCase(java.util.Locale.ROOT).contains("shotgun"))
+                continue;
+            if(!normalizeTitle(existing.optString("title")).equals(title))continue;
+            if(date.isEmpty() || existing.optString("date").isEmpty() ||
+                !date.equals(existing.optString("date")))continue;
+            if(match!=null)return null;
+            match=existing;
+        }
+        return match;
+    }
+    private String normalizeTitle(String title) {
+        return java.text.Normalizer.normalize(title.toLowerCase(java.util.Locale.ROOT),
+            java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}","").replaceAll("[^a-z0-9]+"," ").trim();
+    }
+    private boolean mergeShotgunFields(JSONObject existing,JSONObject incoming) throws Exception {
+        // Ne pas écraser les champs personnalisés ni l'identifiant de la soirée.
+        String[] fields={"poster","description","venue","city","address","organizer",
+            "artists","genres","date","start","end","endDate","url"};
+        boolean changed=false;
+        for(String field:fields) {
+            String newValue=incoming.optString(field).trim();
+            String oldValue=existing.optString(field).trim();
+            if(!newValue.isEmpty() && oldValue.isEmpty()) {
+                existing.put(field,newValue);
+                changed=true;
+            }
+        }
+        return changed;
     }
     private String normalizedEventUrl(String url) {
         try {
