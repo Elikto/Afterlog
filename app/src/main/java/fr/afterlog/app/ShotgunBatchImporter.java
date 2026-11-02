@@ -288,7 +288,7 @@ final class ShotgunBatchImporter {
 
     // Sur une fiche de billet : recherche un lien explicite « Voir l'événement ».
     // S'il est caché derrière « Plus », ouvre ce menu. Aucun paiement/commande n'est déclenché.
-    private static final String FOLLOW_EVENT_JS = """
+    static final String FOLLOW_EVENT_JS = """
         (function(){
           const eventPath=/^\\/(?:[a-z]{2}\\/)?(?:events|festivals)\\/[^/]+\\/?$/;
           const link=(a)=>{

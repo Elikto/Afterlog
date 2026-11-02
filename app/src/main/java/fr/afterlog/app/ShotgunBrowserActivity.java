@@ -41,6 +41,8 @@ public final class ShotgunBrowserActivity extends Activity {
     private WebView web;
     private TextView status;
     private ShotgunBatchImporter batch;
+    private boolean autoSyncMode;
+    private boolean syncTriggered;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -77,7 +79,7 @@ public final class ShotgunBrowserActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(actions);
         button(actions,"Importer cet événement",this::importCurrent,1);
-        button(actions,"Tout importer + détails",this::importVisible,1);
+        button(actions,"Synchroniser mon compte",()->launchSync(web.getUrl()),1);
 
         web = new WebView(this);
         batch = new ShotgunBatchImporter(this,web, message -> status.setText(message), this::finishWithEvents);
@@ -105,7 +107,11 @@ public final class ShotgunBrowserActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view,String url) {
                 if(batch!=null && batch.isActive()) batch.onPageFinished(url);
-                else status.setText("shotgun.live — Utilise le menu Shotgun pour accéder à Mes billets → Passés.");
+                else if(autoSyncMode && !syncTriggered) {
+                    status.setText("Connexion Shotgun · recherche de ton compte…");
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                        .postDelayed(()->detectLoginAndSync(),1200);
+                } else status.setText("shotgun.live — Utilise le menu Shotgun pour accéder à Mes billets → Passés.");
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error) {
                 if (req.isForMainFrame()) {
@@ -131,6 +137,8 @@ public final class ShotgunBrowserActivity extends Activity {
         },2);
         button(footer,"Déconnecter Shotgun",this::confirmLogout,2);
 
+        autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
+        if(autoSyncMode)status.setText("Connecte-toi à Shotgun. La synchronisation démarrera automatiquement lorsque ta session sera reconnue.");
         String initial=getIntent().getStringExtra(EXTRA_URL);
         if(initial!=null && trusted(Uri.parse(initial))) web.loadUrl(initial);
         else web.loadUrl(SHOTGUN_LOGIN);
@@ -184,6 +192,46 @@ public final class ShotgunBrowserActivity extends Activity {
             }catch(Exception e){toast("Informations manquantes. Tu peux saisir cette soirée manuellement.");}
         });
     }
+    private void detectLoginAndSync() {
+        if(!autoSyncMode||syncTriggered||web==null||isFinishing())return;
+        String address=web.getUrl();
+        if(address==null || !trusted(Uri.parse(address)))return;
+        web.evaluateJavascript("""
+          (function(){
+            const path=location.pathname.toLowerCase();
+            const entries=[...document.querySelectorAll('a[href]')];
+            const ticket=entries.find(a=>/mes billets|my tickets/i.test(
+              (a.innerText||a.textContent||'').trim()));
+            const profile=!!document.querySelector(
+              'a[href*="/profile"],button[aria-label*="Profil"],button[aria-label*="Profile"],[data-testid*="avatar"]');
+            const login=/(login|sign-?in)/.test(path);
+            return JSON.stringify({ok:!login && (!!ticket||profile), url:ticket?.href||location.href});
+          })();
+          """,raw->{
+            if(!autoSyncMode||syncTriggered)return;
+            try {
+                JSONObject state=new JSONObject(decoded(raw));
+                if(!state.optBoolean("ok")){
+                    status.setText("Connecte-toi à Shotgun. Si la connexion n'est pas détectée, utilise « Synchroniser ».");
+                    return;
+                }
+                launchSync(state.optString("url",address));
+            }catch(Exception ignored){}
+        });
+    }
+    private void launchSync(String url) {
+        if(syncTriggered)return;
+        syncTriggered=true;
+        try {
+            AutoSyncScheduler.enable(this);
+            ShotgunSyncService.start(this,url);
+            setResult(RESULT_OK);
+            finish();
+        }catch(Exception e) {
+            syncTriggered=false;
+            toast("Synchronisation impossible : "+e.getMessage());
+        }
+    }
     private void importVisible() {
         batch.begin();
     }
@@ -204,6 +252,8 @@ public final class ShotgunBrowserActivity extends Activity {
             .setMessage("Les cookies de connexion enregistrés dans le navigateur intégré seront supprimés. Tes soirées AfterLog resteront intactes.")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Déconnecter",(d,w)->{
+                AutoSyncScheduler.disable(this);
+                ShotgunSyncService.cancel(this);
                 web.loadUrl("about:blank");
                 CookieManager.getInstance().removeAllCookies(ok->{
                     CookieManager.getInstance().flush();
@@ -302,6 +352,14 @@ public final class ShotgunBrowserActivity extends Activity {
               txt('[class*="eventDescription"]',7000) ||
               txt('[class*="EventDescription"]',7000) ||
               txt('[id*="description"]',7000);
+          }
+          // Texte complet de la section À propos s'il est visible sur la fiche.
+          const sections=[...document.querySelectorAll('main h2,main h3,article h2,article h3')];
+          const about=sections.find(h=>/^(à propos|about|description)$/i.test((h.textContent||'').trim()));
+          if(about){
+            const content=about.nextElementSibling;
+            const full=(content?.innerText||content?.textContent||'').trim();
+            if(full.length>result.description.length && full.length<12000)result.description=full;
           }
           if(!result.address)result.address=txt('main address',250);
           const linked=(pattern,max)=>{

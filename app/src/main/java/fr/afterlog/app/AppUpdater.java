@@ -42,12 +42,21 @@ final class AppUpdater {
 
     AppUpdater(Activity activity) {this.activity=activity;}
 
-    void check() {
-        showStatus("Recherche des mises à jour…");
+    void check() {check(false);}
+    void checkAutomatically() {
+        android.content.SharedPreferences prefs=activity.getSharedPreferences("afterlog_updates",0);
+        long now=System.currentTimeMillis();
+        if(now-prefs.getLong("lastCheck",0)<12*60*60*1000L)return;
+        prefs.edit().putLong("lastCheck",now).apply();
+        check(true);
+    }
+    private void check(boolean automatic) {
+        if(!automatic)showStatus("Recherche des mises à jour…");
         new Thread(()->{
             try {
                 JSONObject release=latestRelease();
                 if(release==null) {
+                    if(automatic)return;
                     ui(()->new AlertDialog.Builder(activity)
                         .setTitle("AfterLog est à jour")
                         .setMessage("Tu utilises déjà la dernière version disponible sur GitHub.")
@@ -83,6 +92,7 @@ final class AppUpdater {
                     .setPositiveButton("Télécharger et installer",(d,w)->download(url,digest,size))
                     .show());
             }catch(Exception e) {
+                if(automatic)return;
                 ui(()->new AlertDialog.Builder(activity).setTitle("Vérification impossible")
                     .setMessage("Impossible de consulter les versions GitHub.\n\n"+e.getMessage())
                     .setPositiveButton("OK",null).show());

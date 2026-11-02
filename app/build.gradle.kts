@@ -8,8 +8,8 @@ android {
         applicationId = "fr.afterlog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -18,4 +18,5 @@ android {
 }
 dependencies {
     implementation("org.jsoup:jsoup:1.18.3")
+    implementation("androidx.work:work-runtime:2.12.0")
 }
