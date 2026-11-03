@@ -85,7 +85,7 @@ final class AppUpdater {
                     if(item==null)continue;
                     String name=item.optString("name");
                     if(name.equals("AfterLog-"+tag.replaceFirst("-debug$","")+".apk")
-                        || name.matches("AfterLog-v\\d+\\.\\d+\\.\\d+\\.apk")) {
+                        || name.matches("(?:AfterLog|NOCTIS)-v\\d+\\.\\d+\\.\\d+\\.apk")) {
                         apk=item; break;
                     }
                 }
@@ -157,7 +157,7 @@ final class AppUpdater {
                 activity.getPackageName(),0);
             if(code<=installed.versionCode)return null;
             JSONObject apk=new JSONObject();
-            apk.put("name","AfterLog-v"+version+".apk");
+            apk.put("name","NOCTIS-v"+version+".apk");
             apk.put("browser_download_url",asset);
             apk.put("digest","sha256:"+sha);
             apk.put("size",size);
