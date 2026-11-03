@@ -5,6 +5,9 @@ on:
     paths-ignore:
       - README.md
   workflow_dispatch:
+concurrency:
+  group: noctis-android-release
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -105,10 +108,11 @@ jobs:
           else
             SOURCE=app/build/outputs/apk/debug/app-debug.apk
           fi
-          cp "$SOURCE" "AfterLog-v${VERSION}.apk"
+          cp "$SOURCE" "NOCTIS-v${VERSION}.apk"
+          cp "$SOURCE" "AfterLog-v${VERSION}.apk"  # Alias historique, anciennes versions
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "AfterLog-v${VERSION}.apk" > "$RUNNER_TEMP/signing-report.txt"
+          "$APKSIGNER" verify --verbose --print-certs "NOCTIS-v${VERSION}.apk" > "$RUNNER_TEMP/signing-report.txt"
           SIGNER="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/signing-report.txt" | head -n 1 | tr '[:upper:]' '[:lower:]')"
           test -n "$SIGNER"
           if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
@@ -123,11 +127,12 @@ jobs:
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: NØCTIS-Android-APK
-          path: AfterLog-v*.apk
+          name: NOCTIS-Android-APK
+          path: NOCTIS-v*.apk
           if-no-files-found: error
           retention-days: 30
       - name: Publier l'APK dans GitHub Releases
+        id: release
         if: steps.signing.outputs.persistent == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,7 +143,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK="AfterLog-v${VERSION}.apk"
+          LATEST="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$LATEST" != "$GITHUB_SHA" ]]; then
+            echo "::notice::Une version plus récente est déjà sur main, publication ignorée."
+            exit 0
+          fi
+          APK="NOCTIS-v${VERSION}.apk"
           if [[ "$PERSISTENT" == "true" ]]; then
             TAG="v${VERSION}"
             NOTE="APK NØCTIS signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
@@ -148,14 +158,15 @@ jobs:
             NOTE="Version bêta signée temporairement. Les mises à jour en place ne fonctionnent pas lorsque les clés changent."
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
+            gh release upload "$TAG" "$APK" "AfterLog-v${VERSION}.apk" --clobber
           elif [[ "$PERSISTENT" == "true" ]]; then
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION}" --notes "$NOTE"
+            gh release create "$TAG" "$APK" "AfterLog-v${VERSION}.apk" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION}" --notes "$NOTE"
           else
             gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION} (test)" --notes "$NOTE" --prerelease
           fi
           if [[ "$PERSISTENT" == "true" ]]; then
             cp "$APK" AfterLog.apk
+            cp "$APK" NOCTIS.apk
             export APK_SHA256="$(sha256sum AfterLog.apk | awk '{print $1}')"
             export APK_SIZE="$(stat -c%s AfterLog.apk)"
             python3 - <<'PY'
@@ -174,15 +185,16 @@ jobs:
               json.dump(data,fp,ensure_ascii=False,indent=2)
           PY
             if gh release view apk-latest >/dev/null 2>&1; then
-              gh release upload apk-latest AfterLog.apk update.json --clobber
+              gh release upload apk-latest AfterLog.apk NOCTIS.apk update.json --clobber
               gh release edit apk-latest --title "NØCTIS — dernière version stable" --notes "$NOTE"
             else
-              gh release create apk-latest AfterLog.apk update.json --target "$GITHUB_SHA" \
+              gh release create apk-latest AfterLog.apk NOCTIS.apk update.json --target "$GITHUB_SHA" \
                 --title "NØCTIS — dernière version stable" --notes "$NOTE"
             fi
           fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
       - name: Garder le bouton de téléchargement du README à jour
-        if: steps.signing.outputs.persistent == 'true'
+        if: steps.release.outputs.published == 'true'
         continue-on-error: true
         env:
           VERSION: ${{ steps.appversion.outputs.version }}
@@ -200,16 +212,16 @@ jobs:
           suffix = "" if os.environ.get("SIGNED") == "true" else "-debug"
           new_url = (
               f"https://github.com/Elikto/Afterlog/releases/download/"
-              f"v{version}{suffix}/AfterLog-v{version}.apk"
+              f"v{version}{suffix}/NOCTIS-v{version}.apk"
           )
           current = re.sub(
               r"https://github\.com/Elikto/Afterlog/releases/download/"
-              r"v\d+\.\d+\.\d+(?:-debug)?/AfterLog-v\d+\.\d+\.\d+\.apk",
+              r"v\d+\.\d+\.\d+(?:-debug)?/(?:AfterLog|NOCTIS)-v\d+\.\d+\.\d+\.apk",
               new_url,
               current,
           )
           current = re.sub(r"Bêta v\d+\.\d+\.\d+", f"Bêta v{version}", current)
-          current = re.sub(r"AfterLog-v\d+\.\d+\.\d+\.apk", f"AfterLog-v{version}.apk", current)
+          current = re.sub(r"(?:AfterLog|NOCTIS)-v\d+\.\d+\.\d+\.apk", f"NOCTIS-v{version}.apk", current)
           readme.write_text(current, encoding="utf-8")
           PY
           if ! git diff --quiet -- README.md; then
