@@ -1,3 +1,13 @@
+# NØCTARIA v0.18.1 — Cartes d'artistes circulaires, affiches et couleurs
+
+- Chaque **carte d'artiste entière** est un vrai cercle, au diamètre identique (3 colonnes responsives), avec photo, nom et statut Spotify intégrés. Les noms longs sont limités à deux lignes pour conserver l'alignement.
+- Les consommations possèdent chacune une **couleur visuelle stable** : bulles du journal, choix des substances, fiche de prise et courbes de suivi. Les avertissements RDR restent indépendants (orange/rouge).
+- Chaque événement, même une **soirée privée chez un ami**, affiche automatiquement une affiche NØCTARIA illustrée et disponible hors ligne. L'éditeur permet de choisir une photo d'affiche personnelle et de revenir à l'illustration par défaut. Les affiches Shotgun existantes restent prioritaires lorsqu'aucune photo personnelle n'est choisie.
+- Le moteur Spotify propage immédiatement les liens déjà identifiés à tous les événements et enrichit les autres progressivement. Sept profils d'artistes de festival supplémentaires ont été vérifiés à partir de pages Spotify publiques. Les homonymes non confirmés ne sont jamais inventés.
+- L'identifiant Android `fr.afterlog.app` et les chemins de mise à jour historiques ne changent pas.
+
+---
+
 # NØCTARIA v0.18.0 — Nouveau nom, même journal
 
 **NØCTIS devient NØCTARIA.** Le logo néon, la galerie multimédia, les
