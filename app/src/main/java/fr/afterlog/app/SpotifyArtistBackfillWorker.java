@@ -60,7 +60,8 @@ public final class SpotifyArtistBackfillWorker extends Worker {
         if(now-prefs.getLong("forcedAt",0)<60_000L)return;
         SharedPreferences.Editor editor=prefs.edit().putLong("forcedAt",now);
         for(String key:prefs.getAll().keySet())
-            if(key.startsWith("attempt_"))editor.remove(key);
+            if(key.startsWith("attempt_")||key.startsWith("portrait_"))
+                editor.remove(key);
         editor.apply();
         SpotifyArtistFinder.clearNegativeCache(context);
         schedule(context,true);
@@ -107,6 +108,12 @@ public final class SpotifyArtistBackfillWorker extends Worker {
         Context ctx=getApplicationContext();
         SharedPreferences prefs=ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         try {
+            // A fresh app version must retry artists wrongly cached as missing
+            // by the previous Spotify oEmbed-only implementation.
+            if(!prefs.getBoolean("initialPhotoRescan",false)){
+                SpotifyArtistFinder.clearNegativeCache(ctx);
+                prefs.edit().putBoolean("initialPhotoRescan",true).apply();
+            }
             // Capture all events. Even older imported festivals may have only an
             // "artists" string and no "artistProfiles" objects.
             ensureProfiles(ctx);
