@@ -143,6 +143,46 @@ final class RiskGuidance {
         // preuve de prises rapprochées : n'en déduire aucun délai.
         return warnings;
     }
+    /**
+     * 0 = aucun signal détectable, 1 = vigilance, 2 = association grave
+     * avec horaires/intervalle explicitement compatibles.
+     * Ne déduit PAS la toxicité d'un grammage inconnu ou de la taille d'une prise.
+     */
+    static int eventSeverity(List<JSONObject> entries) {
+        if(forEvent(entries).isEmpty())return 0;
+        for(int i=0;i<entries.size();i++){
+            JSONObject a=entries.get(i);
+            for(int j=i+1;j<entries.size();j++){
+                JSONObject b=entries.get(j);
+                boolean severePair=(alcohol(a)&&ghb(b))||(ghb(a)&&alcohol(b));
+                if(!severePair)continue;
+                if(overlappingDeclaredIntervals(a,b))return 2;
+            }
+        }
+        return 1;
+    }
+    private static boolean overlappingDeclaredIntervals(JSONObject a,JSONObject b){
+        // Deux prises signalées le même jour sans horaire ne suffisent pas à
+        // affirmer une co-consommation. Pas de fenêtre de sécurité inventée.
+        if(a.optBoolean("allNight")||b.optBoolean("allNight"))return false;
+        LocalDate da=day(a),db=day(b);
+        if(da==null||db==null)return false;
+        try{
+            String ma=a.optString("timeMode","exact");
+            String mb=b.optString("timeMode","exact");
+            if(!("exact".equals(ma)||"between".equals(ma))||
+               !("exact".equals(mb)||"between".equals(mb)))return false;
+            LocalDateTime startA=da.atTime(LocalTime.parse(a.optString("time")));
+            LocalDateTime startB=db.atTime(LocalTime.parse(b.optString("time")));
+            LocalDateTime endA="between".equals(ma)?
+                da.atTime(LocalTime.parse(a.optString("timeEnd"))):startA;
+            LocalDateTime endB="between".equals(mb)?
+                db.atTime(LocalTime.parse(b.optString("timeEnd"))):startB;
+            if(endA.isBefore(startA))endA=endA.plusDays(1);
+            if(endB.isBefore(startB))endB=endB.plusDays(1);
+            return !endA.isBefore(startB)&&!endB.isBefore(startA);
+        }catch(Exception ignored){return false;}
+    }
     static List<Warning> forPeriod(List<JSONObject> entries,LocalDate from,LocalDate end){
         List<Warning> warnings=forEvent(within(entries,from,end));
         // Le repère hebdomadaire concerne les verres standards, non une estimation

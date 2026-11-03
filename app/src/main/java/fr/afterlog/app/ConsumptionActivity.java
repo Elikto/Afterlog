@@ -69,12 +69,6 @@ public final class ConsumptionActivity extends Activity {
         new Choice("💧","GHB / GBL","Autres substances","prise"),
         new Choice("➕","Autre","Autres substances","prise")
     };
-    private static final Choice[] NON_ALCOHOL={
-        new Choice("💧","Eau","Sans alcool","verre"),
-        new Choice("🥤","Soft","Sans alcool","verre"),
-        new Choice("➕","Autre","Sans alcool","verre")
-    };
-
     private AppStore store;
     private JSONObject original=new JSONObject();
     private long eventId,entryId;
@@ -235,7 +229,6 @@ public final class ConsumptionActivity extends Activity {
 
         section(content,"🍹  Alcool",ALCOHOL);
         section(content,"💊  Autres substances",SUBSTANCES);
-        section(content,"💧  Sans alcool",NON_ALCOHOL);
 
         details=column();
         details.setPadding(dp(17),dp(20),dp(17),dp(20));
@@ -953,7 +946,7 @@ public final class ConsumptionActivity extends Activity {
             }).show();
     }
     public static String iconFor(String category,String name) {
-        for(Choice[] group:new Choice[][]{ALCOHOL,SUBSTANCES,NON_ALCOHOL}){
+        for(Choice[] group:new Choice[][]{ALCOHOL,SUBSTANCES}){
             for(Choice c:group)
                 if(c.category.equalsIgnoreCase(category)&&c.name.equalsIgnoreCase(name))return c.icon;
         }

@@ -27,6 +27,8 @@ final class SpotifyArtistFinder {
             case "lekkerfaces":return "https://open.spotify.com/artist/45Meh6B3L1TNh03On3y349";
             case "zapravka":return "https://open.spotify.com/artist/4oCaLmRVMM4Ck4VGrmh4VC";
             case "amygdala":return "https://open.spotify.com/artist/7BGTl5Swxc7pcXnSgqzSSM";
+            case "a5km":return "https://open.spotify.com/artist/3SIWzGY4GAe5R18PTHOK1v";
+            case "hortense de beauharnais":return "https://open.spotify.com/artist/6dwoHBXfXApma5YaoM2vE3";
             default:return "";
         }
     }

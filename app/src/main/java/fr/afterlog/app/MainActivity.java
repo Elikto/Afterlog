@@ -466,23 +466,41 @@ public final class MainActivity extends Activity {
             String venue=e.optString("venue");
             if(venue.isEmpty())venue=e.optString("city");
             if(!venue.isEmpty())add(details,text(venue,13,SOFT,false),5);
+            List<JSONObject> intakes=store.entries(e.optLong("id"));
             java.util.LinkedHashSet<String> icons=new java.util.LinkedHashSet<>();
-            for(JSONObject intake:store.entries(e.optLong("id"))) {
-                String picture=ConsumptionActivity.iconFor(
+            for(JSONObject intake:intakes){
+                String emoji=ConsumptionActivity.iconFor(
                     intake.optString("category"),intake.optString("name"));
-                if(!picture.trim().isEmpty())icons.add(picture);
+                if(!emoji.trim().isEmpty())icons.add(emoji);
             }
-            if(!icons.isEmpty()){
-                StringBuilder marks=new StringBuilder();
+            int severity=RiskGuidance.eventSeverity(intakes);
+            if(!icons.isEmpty()||severity>0){
+                LinearLayout iconsRow=new LinearLayout(this);
+                iconsRow.setGravity(Gravity.CENTER_VERTICAL);
+                iconsRow.setOrientation(LinearLayout.HORIZONTAL);
+                add(details,iconsRow,5);
+                StringBuilder emojiLine=new StringBuilder();
                 int shown=0;
-                for(String picture:icons){
+                for(String icon:icons){
                     if(shown++>=8)break;
-                    if(marks.length()>0)marks.append("  ");
-                    marks.append(picture);
+                    if(emojiLine.length()>0)emojiLine.append("  ");
+                    emojiLine.append(icon);
                 }
-                TextView badges=text(marks.toString(),19,Color.WHITE,false);
-                badges.setContentDescription("Produits notés pour cette soirée");
-                add(details,badges,5);
+                TextView emojiText=text(emojiLine.toString(),19,Color.WHITE,false);
+                emojiText.setContentDescription("Consommations notées dans cette soirée");
+                iconsRow.addView(emojiText);
+                if(severity>0){
+                    TextView triangle=text("⚠",23,severity==2?
+                        Color.rgb(251,113,119):Color.rgb(255,180,94),true);
+                    triangle.setPadding(dp(8),0,dp(5),0);
+                    triangle.setContentDescription(severity==2?
+                        "Alerte rouge : association grave avec horaires compatibles"+
+                        ". Ouvrir les sources RDR.":
+                        "Alerte orange : vigilance RDR. Ouvrir les sources.");
+                    iconsRow.addView(triangle);
+                    triangle.setOnClickListener(v->new RdrWarningDialog(this,
+                        RiskGuidance.forEvent(store.entries(e.optLong("id")))).show());
+                }
             }
             add(details,text("Ouvrir  ›",12,SOFT,true),0);
             row.setOnClickListener(v->showEvent(e.optLong("id")));
@@ -501,10 +519,7 @@ public final class MainActivity extends Activity {
         screen("Événement",this::showHome);
         eventScreen=true;
         renderedEventRevision=AppStore.revision(this);
-        renderJournalFirst(id);
-        renderRdrAlerts(id);
-        // Structure proche de la fiche Shotgun : grande affiche, titre, date et lieu,
-        // à propos, programmation, ambiance musicale et localisation.
+        // L'affiche et le titre apparaissent avant le journal personnel.
         String poster=event.optString("poster");
         if(!poster.isEmpty()) {
             ImageView image=new ImageView(this);
@@ -516,7 +531,19 @@ public final class MainActivity extends Activity {
             page.addView(image,lp);
             loadImage(image,poster);
         }
-        add(page,text(event.optString("title","Soirée"),25,Color.WHITE,true),9);
+        add(page,text(event.optString("title","Soirée"),24,Color.WHITE,true),8);
+        String headlineDate=prettyDate(event.optString("date"));
+        String startHour=event.optString("start");
+        if(!headlineDate.isEmpty())
+            add(page,text(headlineDate+(startHour.isEmpty()?"":" · "+startHour),
+                13,ACCENT,false),5);
+        String headlinePlace=event.optString("venue");
+        if(headlinePlace.isEmpty())headlinePlace=event.optString("city");
+        if(!headlinePlace.isEmpty())
+            add(page,text("📍 "+headlinePlace,13,SOFT,false),15);
+        renderJournalFirst(id);
+        renderRdrAlerts(id);
+        add(page,text("Informations de l'événement",21,Color.WHITE,true),12);
         renderEventPhotos(event);
         if(!event.optString("organizer").isEmpty())
             add(page,text("Par "+event.optString("organizer"),14,SOFT,false),14);
@@ -688,10 +715,7 @@ public final class MainActivity extends Activity {
     private void renderJournalFirst(long id){
         List<JSONObject> entries=store.entries(id);
         add(page,text("Mon journal de soirée",21,Color.WHITE,true),12);
-        if(entries.isEmpty()){
-            add(page,button("＋ Ajouter une consommation",true,
-                ()->editEntry(new JSONObject(),id)),13);
-        }else{
+        { // La même bulle + existe même en l'absence de prises.
             // Cinq petites bulles rondes par rangée (~la moitié du diamètre initial).
             final int columns=5;
             int availableDp=getResources().getConfiguration().screenWidthDp-42;
@@ -757,7 +781,6 @@ public final class MainActivity extends Activity {
                 }
             }
         }
-        add(page,text("Informations de l'événement",21,Color.WHITE,true),13);
     }
 
     private void renderRdrAlerts(long eventId) {

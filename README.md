@@ -1,3 +1,19 @@
+# AfterLog v0.16.0 — Risques visibles et fiche soirée épurée
+
+- **Cartes des soirées :** les pictogrammes des substances restent affichés sans légende ; un petit **⚠ orange** apparaît quand le journal contient une situation de vigilance documentée, **⚠ rouge** uniquement lorsque l'horaire déclaré est compatible avec un chevauchement de GHB/GBL et d'alcool. Un simple enregistrement sans horaire ne suffit pas à attribuer un danger rouge.
+- Un appui sur le triangle affiche la **fiche RDR détaillée**, avec les sources officielles. Ces couleurs **ne constituent ni diagnostic ni mesure de surdosage**.
+- **Fiche de soirée :** affiche, titre, date et lieu en premier ; ensuite les bulles de prises, la petite vigilance RDR et les informations détaillées.
+- **Journal :** toujours une **bulle ronde +**, même si aucune consommation n'est enregistrée. Cinq petits cercles par rangée, avec les détails en fenêtre moderne au toucher.
+- **Catégorie « Sans alcool »** masquée de la saisie ; les éventuels anciens enregistrements sont conservés et restent visibles.
+- **Galerie photos/vidéos et fenêtre de modification stylisée :** conservées telles qu'introduites en 0.15, sans revenir au sélecteur de fichiers.
+- **Profils Spotify directs :** ajout de deux liens vérifiés supplémentaires, **A5KM** et **Hortense de Beauharnais** ; les autres liens déjà confirmés restent actifs. Pour **RDØ**, l'identification n'est pas certifiée : l'application permet de renseigner manuellement l'URL d'artiste, sans renvoyer vers une recherche ou Shotgun.
+
+**Limites à noter :** il n'est pas possible de déduire une dose toxique d'un simple nombre de verres ou d'un adjectif « petit/moyen/grand », ni de garantir les portraits Shotgun depuis une compilation. Une application installée avec une signature différente ne pourra pas être mise à jour en place.
+
+Sources RDR : [GHB/GBL et alcool, Drogues Info Service](https://www.drogues-info-service.fr/Actualites/Prise-de-GBL-GHB-en-soiree-savoir-limiter-les-risques) ; [MDMA, Drogues Info Service](https://drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Ecstasy-MDMA).
+
+---
+
 # AfterLog v0.15.0 — Galerie, bulles et Spotify
 
 **Mises à jour de cette version :**
