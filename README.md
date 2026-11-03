@@ -1,3 +1,15 @@
+# NØCTARIA v0.18.2 — Recherche de structures par adresse
+
+- La section **Structures et associations** ne dépend plus d'une liste fixe limitée à Arles. Une adresse, une ville ou un code postal est géocodé avec le service public **Géoplateforme/IGN**.
+- Recherche asynchrone de structures cartographiées **CSAPA**, **CAARUD** et autres lieux d'addictologie autour des coordonnées demandées, via **OpenStreetMap Overpass** : liste triée par proximité, distance à vol d'oiseau, contacts et accès à une carte quand ces données sont disponibles.
+- Les résultats sont **recalculés à chaque changement d'adresse**, avec état de chargement, gestion des erreurs et bouton pour relancer.
+- L'**annuaire officiel Drogues Info Service** reste accessible et est mis en avant lorsque la base cartographique ne contient pas de résultats : les données OpenStreetMap ne sont pas exhaustives.
+- L'application n'utilise pas le GPS : la saisie d'adresse part au géocodeur public de l'IGN, et les coordonnées sont utilisées pour la recherche publique de structures. Les données de consommation ne sont pas envoyées.
+- La recherche des profils Spotify dans toutes les soirées se poursuit par **petits lots chaînés**, plutôt qu'avec des délais de reprise croissants entre les lots.
+- Version Android 0.18.2, identifiant `fr.afterlog.app` inchangé.
+
+---
+
 # NØCTARIA v0.18.1 — Cartes d'artistes circulaires, affiches et couleurs
 
 - Chaque **carte d'artiste entière** est un vrai cercle, au diamètre identique (3 colonnes responsives), avec photo, nom et statut Spotify intégrés. Les noms longs sont limités à deux lignes pour conserver l'alignement.
