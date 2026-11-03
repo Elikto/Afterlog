@@ -13,20 +13,22 @@ import java.util.List;
 final class TrackingChartView extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final ArrayList<String> labels=new ArrayList<>();
-    private int[][] values=new int[3][0];
+    private int[][] values=new int[0][0];
     private int[] alerts=new int[0]; // 0 rien, 1 vigilance, 2 risque documenté
-    private final int[] colors={Color.rgb(183,164,255),Color.rgb(74,213,187),
-        Color.rgb(255,188,129)};
+    private int[] colors=new int[0];
     private float density;
     TrackingChartView(Context context){
         super(context);
         density=getResources().getDisplayMetrics().density;
         setMinimumHeight((int)(252*density));
     }
-    void show(List<String> labels,int[][] values,int[] alerts){
+    void show(List<String> labels,int[][] values,int[] alerts,
+              int[] colors,String[] names){
         this.labels.clear();this.labels.addAll(labels);
-        this.values=values;this.alerts=alerts;
-        setContentDescription("Graphique d'évolution : alcool violet, MDMA turquoise, autres substances orange. Points de vigilance indiqués en orange et risques documentés en rouge.");
+        this.values=values;this.alerts=alerts;this.colors=colors;
+        setContentDescription("Graphique par produit : "+String.join(", ",names)+
+            ". Les couleurs servent à distinguer les produits, pas le danger. "+
+            "Seuls les points orange et rouges indiquent des vigilances.");
         invalidate();
     }
     private float dp(float value){return density*value;}
@@ -68,7 +70,8 @@ final class TrackingChartView extends View {
         for(int series=0;series<values.length;series++){
             int[] nums=values[series];
             if(nums==null||nums.length!=n)continue;
-            color(colors[Math.min(series,colors.length-1)],2.5f);
+            int seriesColor=series<colors.length?colors[series]:Color.WHITE;
+            color(seriesColor,2.5f);
             Path line=new Path();
             for(int i=0;i<n;i++){
                 float x=left+i*spacing;
@@ -77,7 +80,7 @@ final class TrackingChartView extends View {
             }
             canvas.drawPath(line,paint);
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(colors[Math.min(series,colors.length-1)]);
+            paint.setColor(seriesColor);
             for(int i=0;i<n;i++)if(nums[i]>0)
                 canvas.drawCircle(left+i*spacing,bottom-nums[i]/(float)maximum*(bottom-top),
                     dp(3.2f),paint);
