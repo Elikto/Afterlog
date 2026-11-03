@@ -159,8 +159,9 @@ public final class SuiviActivity extends Activity {
             LinearLayout breakdown=card(body);
             add(breakdown,text("SUBSTANCES ET BOISSONS NOTÉES",13,ACCENT,true),12);
             for(Map.Entry<String,Integer> item:classes.entrySet()){
-                add(breakdown,text(item.getKey()+" · "+item.getValue()+" entrée(s)",
-                    15,WHITE,false),8);
+                String substance=item.getKey();
+                add(breakdown,text("● "+substance+" · "+item.getValue()+" entrée(s)",
+                    15,ConsumptionPalette.forEntry("",substance),false),8);
             }
         }
         List<RiskGuidance.Warning> warnings=RiskGuidance.forPeriod(store.allEntries(),from,until);
@@ -226,7 +227,9 @@ public final class SuiviActivity extends Activity {
         }
         // Courbes multi-séries, plutôt que des barres horizontales.
         int n=labels.size();
-        int[][] series=new int[3][n]; // alcool, MDMA/ecstasy, autres
+        LinkedHashMap<String,int[]> bySubstance=new LinkedHashMap<>();
+        LinkedHashMap<String,Integer> colorBySubstance=new LinkedHashMap<>();
+        LinkedHashMap<String,String> labelBySubstance=new LinkedHashMap<>();
         int[] alerts=new int[n];
         ArrayList<ArrayList<JSONObject>> grouped=new ArrayList<>();
         for(int i=0;i<n;i++)grouped.add(new ArrayList<>());
@@ -250,8 +253,15 @@ public final class SuiviActivity extends Activity {
                     start.withDayOfMonth(1),date.withDayOfMonth(1));
             }
             if(bucket<0||bucket>=n)continue;
-            int type=RiskGuidance.alcohol(item)?0:RiskGuidance.mdma(item)?1:2;
-            series[type][bucket]++;
+            String category=item.optString("category","");
+            String name=item.optString("name","Autre");
+            String seriesKey=category+"|"+name;
+            if(!bySubstance.containsKey(seriesKey)){
+                bySubstance.put(seriesKey,new int[n]);
+                colorBySubstance.put(seriesKey,ConsumptionPalette.forEntry(category,name));
+                labelBySubstance.put(seriesKey,name);
+            }
+            bySubstance.get(seriesKey)[bucket]++;
             grouped.get(bucket).add(item);
         }
         for(int i=0;i<n;i++){
@@ -263,10 +273,25 @@ public final class SuiviActivity extends Activity {
                         alerts[i]=2;
             }
         }
+        int[][] series=bySubstance.values().toArray(new int[0][]);
+        int[] seriesColors=new int[colorBySubstance.size()];
+        String[] seriesNames=labelBySubstance.values().toArray(new String[0]);
+        int ci=0;for(int color:colorBySubstance.values())seriesColors[ci++]=color;
         TrackingChartView drawing=new TrackingChartView(this);
-        drawing.show(labels,series,alerts);
+        drawing.show(labels,series,alerts,seriesColors,seriesNames);
         add(chart,drawing,7);
-        add(chart,text("● Alcool     ● MDMA / ecstasy     ● Autres",12,SOFT,false),7);
+        for(int offset=0;offset<seriesNames.length;offset+=2){
+            LinearLayout legend=new LinearLayout(this);
+            legend.setOrientation(LinearLayout.HORIZONTAL);
+            add(chart,legend,5);
+            for(int k=offset;k<Math.min(offset+2,seriesNames.length);k++){
+                TextView item=text("● "+seriesNames[k],12,seriesColors[k],true);
+                item.setMaxLines(1);
+                item.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(23),1);
+                legend.addView(item,lp);
+            }
+        }
         add(chart,text("Points orange : vigilance. Rouge : interaction connue à risque ; ce n'est pas une mesure de toxicité. Les prises sans heure précise ne figurent pas dans le graphique horaire.",
             11,SOFT,false),0);
 
