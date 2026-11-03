@@ -15,6 +15,7 @@ import android.view.View;
 import android.text.InputType;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -58,6 +59,8 @@ public final class MainActivity extends Activity {
     private long currentEventId = 0;
     private Runnable backAction;
     private boolean homeScreen=false;
+    private boolean eventScreen=false;
+    private long renderedEventRevision=-1L;
     private long displayedEventsRevision=-1L;
     private final Handler syncHandler=new Handler(Looper.getMainLooper());
     private LinearLayout syncPanel;
@@ -71,6 +74,9 @@ public final class MainActivity extends Activity {
                 // Nouveaux événements enregistrés par le service : rafraîchir la
                 // liste immédiatement, sans relancer ni redémarrer AfterLog.
                 showHome();
+            } else if(eventScreen && currentEventId>0 &&
+                renderedEventRevision!=AppStore.revision(MainActivity.this)){
+                showEvent(currentEventId);
             } else {
                 renderSyncProgress();
             }
@@ -79,7 +85,7 @@ public final class MainActivity extends Activity {
     };
     private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53, CONSUMPTION_REQUEST = 54,
         EVENT_EDITOR_REQUEST=55,EVENT_IMAGES_REQUEST=56,EVENT_VIDEOS_REQUEST=57,
-        SHOTGUN_EVENT_REFRESH=58;
+        SHOTGUN_EVENT_REFRESH=58,EVENT_MEDIA_REQUEST=59;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -130,6 +136,7 @@ public final class MainActivity extends Activity {
     }
     private void screen(String title, Runnable back) {
         homeScreen=back==null;
+        eventScreen=false;
         backAction=back;
         LinearLayout outer = column(); outer.setBackgroundColor(BG);
         outer.setPadding(dp(16), dp(14), dp(16), 0);
@@ -422,7 +429,8 @@ public final class MainActivity extends Activity {
         add(page,shortcuts,18);
         TextView rdr=button("♡ RDR",false,()->startActivity(new Intent(this,RdrActivity.class)));
         shortcuts.addView(rdr,new LinearLayout.LayoutParams(0,-2,1));
-        TextView stats=button("Statistiques",false,this::showStats);
+        TextView stats=button("Suivi",false,()->
+            startActivity(new Intent(this,SuiviActivity.class)));
         LinearLayout.LayoutParams statsParams=new LinearLayout.LayoutParams(0,-2,1);
         statsParams.leftMargin=dp(8);shortcuts.addView(stats,statsParams);
 
@@ -464,11 +472,17 @@ public final class MainActivity extends Activity {
     }
 
     private void showEvent(long id) {
+        // Une activité de saisie utilise une instance AppStore distincte.
+        // Recharger depuis le disque avant de reconstruire le journal.
+        store=new AppStore(this);
         JSONObject event=store.event(id);
         if(event==null){showHome();return;}
         currentEventId=id;
         screen("Événement",this::showHome);
+        eventScreen=true;
+        renderedEventRevision=AppStore.revision(this);
         renderJournalFirst(id);
+        renderRdrAlerts(id);
         // Structure proche de la fiche Shotgun : grande affiche, titre, date et lieu,
         // à propos, programmation, ambiance musicale et localisation.
         String poster=event.optString("poster");
@@ -595,56 +609,98 @@ public final class MainActivity extends Activity {
     }
     private void renderJournalFirst(long id) {
         List<JSONObject> entries=store.entries(id);
-        LinearLayout bar=new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        add(page,bar,12);
-        TextView heading=text("Mon journal de soirée",20,Color.WHITE,true);
-        bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
-        if(!entries.isEmpty()) {
-            TextView addOne=button("＋",true,()->editEntry(new JSONObject(),id));
-            addOne.setContentDescription("Ajouter une consommation");
-            addOne.setTextSize(25);
-            bar.addView(addOne,new LinearLayout.LayoutParams(dp(56),dp(52)));
-        } else {
-            // Pour la première saisie, laisser un appel à l'action explicite.
+        add(page,text("Mon journal de soirée",21,Color.WHITE,true),12);
+        if(entries.isEmpty()){
             add(page,button("＋ Ajouter une consommation",true,
                 ()->editEntry(new JSONObject(),id)),13);
-            LinearLayout empty=card();
-            add(empty,text("Aucune consommation enregistrée.",14,SOFT,false),0);
-            add(page,empty,13);
-        }
-        for(int index=0;index<entries.size();index+=2){
-            LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.TOP);
-            add(page,row,10);
-            for(int slot=0;slot<2;slot++){
-                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1);
-                cell.setMargins(dp(3),0,dp(3),0);
-                int n=index+slot;
-                if(n>=entries.size()) {row.addView(new View(this),cell);continue;}
-                JSONObject entry=entries.get(n);
-                LinearLayout bubble=column();
-                bubble.setPadding(dp(13),dp(13),dp(11),dp(13));
-                bubble.setBackground(rounded(PANEL,17));
-                row.addView(bubble,cell);
-                String icon=ConsumptionActivity.iconFor(
-                    entry.optString("category"),entry.optString("name"));
-                add(bubble,text(icon+" "+entry.optString("name","Consommation"),
-                    16,Color.WHITE,true),7);
-                add(bubble,text(primaryQuantity(entry),13,ACCENT,true),6);
-                String time=timeDescription(entry);
-                if(!time.isEmpty())
-                    add(bubble,text("🕒 "+time,12,SOFT,false),6);
-                add(bubble,text("Voir les détails ›",12,SOFT,false),0);
-                bubble.setContentDescription("Détails : "+entry.optString("name")+
-                    " · "+primaryQuantity(entry));
-                bubble.setOnClickListener(v->showEntryDetails(entry,id));
+        }else{
+            // 2 colonnes, même taille pour toutes les bulles. Le + occupe
+            // exactement la case qui suit la dernière prise.
+            int total=entries.size()+1;
+            for(int offset=0;offset<total;offset+=2){
+                LinearLayout row=new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.TOP);
+                add(page,row,9);
+                for(int slot=0;slot<2;slot++){
+                    int position=offset+slot;
+                    LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(0,dp(125),1f);
+                    layout.setMargins(dp(3),0,dp(3),0);
+                    if(position>=total) {
+                        row.addView(new View(this),layout);continue;
+                    }
+                    if(position==entries.size()){
+                        TextView plus=text("＋",35,BG,true);
+                        plus.setGravity(Gravity.CENTER);
+                        plus.setContentDescription("Ajouter une consommation");
+                        plus.setBackground(rounded(ACCENT,27));
+                        plus.setElevation(dp(2));
+                        plus.setOnClickListener(v->editEntry(new JSONObject(),id));
+                        row.addView(plus,layout);
+                        continue;
+                    }
+                    JSONObject entry=entries.get(position);
+                    LinearLayout bubble=column();
+                    bubble.setPadding(dp(13),dp(14),dp(13),dp(10));
+                    GradientDrawable bg=new GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR,
+                        new int[]{Color.rgb(39,37,58),Color.rgb(28,29,44)});
+                    bg.setCornerRadius(dp(27));
+                    bg.setStroke(dp(1),Color.rgb(62,55,84));
+                    bubble.setBackground(bg);
+                    bubble.setElevation(dp(2));
+                    row.addView(bubble,layout);
+                    String icon=ConsumptionActivity.iconFor(
+                        entry.optString("category"),entry.optString("name"));
+                    TextView name=text(icon+" "+entry.optString("name","Consommation"),
+                        15,Color.WHITE,true);
+                    name.setMaxLines(1);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    add(bubble,name,6);
+                    TextView summary=text(primaryQuantity(entry),12,ACCENT,true);
+                    summary.setMaxLines(2);
+                    summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    add(bubble,summary,4);
+                    String when=timeDescription(entry);
+                    if(!when.isEmpty()){
+                        TextView time=text("◷ "+when,11,SOFT,false);
+                        time.setMaxLines(1);
+                        time.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                        add(bubble,time,0);
+                    }
+                    // Consulter reste possible en cliquant sur toute la bulle,
+                    // sans texte supplémentaire qui change la hauteur.
+                    bubble.setContentDescription("Voir la prise "+entry.optString("name")+
+                        " : "+primaryQuantity(entry)+(when.isEmpty()?"":", "+when));
+                    bubble.setOnClickListener(v->showEntryDetails(entry,id));
+                }
             }
         }
         add(page,text("Informations de l'événement",21,Color.WHITE,true),13);
     }
+    private void renderRdrAlerts(long eventId){
+        List<RiskGuidance.Warning> risks=RiskGuidance.forEvent(store.entries(eventId));
+        if(risks.isEmpty())return;
+        LinearLayout panel=column();
+        panel.setPadding(dp(14),dp(13),dp(14),dp(13));
+        GradientDrawable background=new GradientDrawable();
+        background.setColor(Color.rgb(37,32,46));
+        background.setCornerRadius(dp(18));
+        background.setStroke(dp(1),Color.rgb(104,78,83));
+        panel.setBackground(background);
+        add(page,panel,12);
+        add(panel,text("⚠ Prévention · "+risks.size()+" point(s) de vigilance",
+            15,Color.rgb(244,191,151),true),8);
+        for(int i=0;i<Math.min(2,risks.size());i++) {
+            RiskGuidance.Warning warning=risks.get(i);
+            add(panel,text("• "+warning.title,13,Color.WHITE,true),5);
+            add(panel,text(warning.detail,12,SOFT,false),9);
+        }
+        add(panel,text("Ces alertes reposent sur les informations saisies, pas sur une analyse du produit ou un diagnostic.",
+            11,SOFT,false),9);
+        add(panel,button("Voir le suivi, les sources et les contacts d'aide",false,()->
+            startActivity(new Intent(this,SuiviActivity.class))),0);
+    }
+
     private void showEntryDetails(JSONObject entry,long eventId){
         LinearLayout content=column();
         content.setPadding(dp(18),dp(13),dp(18),dp(6));
@@ -841,82 +897,78 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void renderEventPhotos(JSONObject event) {
-        long id=event.optLong("id");
-        LinearLayout buttons=new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        add(page,buttons,14);
-        TextView photos=button("＋ Photo",false,()->{
-            currentEventId=id;
-            Intent picker=new Intent(Intent.ACTION_GET_CONTENT);
-            picker.setType("image/*");picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-            startActivityForResult(Intent.createChooser(picker,"Photos de la soirée"),EVENT_IMAGES_REQUEST);
-        });
-        buttons.addView(photos,new LinearLayout.LayoutParams(0,-2,1));
-        TextView videos=button("＋ Vidéo",false,()->{
-            currentEventId=id;
-            Intent picker=new Intent(Intent.ACTION_GET_CONTENT);
-            picker.setType("video/*");picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-            startActivityForResult(Intent.createChooser(picker,"Vidéos de la soirée"),EVENT_VIDEOS_REQUEST);
-        });
-        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,-2,1);
-        second.leftMargin=dp(8);buttons.addView(videos,second);
-
-        JSONArray items=EventPhotos.gallery(event);
-        if(items.length()>0){
-            add(page,text("Mes photos · "+items.length(),18,Color.WHITE,true),9);
-            for(int start=0;start<items.length();start+=3){
-                LinearLayout row=new LinearLayout(this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                add(page,row,9);
-                for(int j=0;j<3;j++){
-                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(104),1);
-                    lp.setMargins(dp(3),0,dp(3),0);
-                    if(start+j>=items.length()){row.addView(new View(this),lp);continue;}
-                    String name=items.optString(start+j);
-                    ImageView photo=new ImageView(this);
-                    photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    photo.setBackground(rounded(PANEL,12));
-                    android.graphics.Bitmap bitmap=EventPhotos.preview(this,name,260);
-                    if(bitmap!=null)photo.setImageBitmap(bitmap);
-                    row.addView(photo,lp);
-                    photo.setOnClickListener(v->{
-                        android.graphics.Bitmap large=EventPhotos.preview(this,name,1300);
-                        if(large==null){message("Cette photo est introuvable.");return;}
-                        ImageView view=new ImageView(this);
-                        view.setImageBitmap(large);view.setAdjustViewBounds(true);
-                        view.setPadding(dp(6),dp(6),dp(6),dp(6));
-                        new AlertDialog.Builder(this).setView(view)
-                            .setPositiveButton("Fermer",null).show();
-                    });
-                }
-            }
-        }
-        JSONArray clips=EventVideos.list(event);
-        if(clips.length()>0){
-            add(page,text("Mes vidéos · "+clips.length(),18,Color.WHITE,true),9);
-            for(int i=0;i<clips.length();i++){
-                final int position=i;
-                String name=clips.optString(i);
-                LinearLayout card=card();
-                android.graphics.Bitmap thumb=EventVideos.thumbnail(this,name);
-                if(thumb!=null){
-                    ImageView image=new ImageView(this);
-                    image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    image.setImageBitmap(thumb);
-                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(160));
-                    lp.bottomMargin=dp(10);card.addView(image,lp);
-                    image.setOnClickListener(v->EventVideos.play(this,name));
-                }
-                add(card,button("▶ Lire la vidéo "+(i+1),false,
-                    ()->EventVideos.play(this,name)),0);
-                add(page,card,10);
-            }
-        }
+    private void startGallery(long id,int mediaIndex){
+        Intent intent=new Intent(this,EventGalleryActivity.class);
+        intent.putExtra(EventGalleryActivity.EXTRA_EVENT_ID,id);
+        intent.putExtra(EventGalleryActivity.EXTRA_INDEX,mediaIndex);
+        startActivity(intent);
     }
-
+    private void pickMedia(long id){
+        currentEventId=id;
+        Intent chooser=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        chooser.addCategory(Intent.CATEGORY_OPENABLE);
+        chooser.setType("*/*");
+        chooser.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
+        chooser.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(Intent.createChooser(chooser,"Photos et vidéos"),EVENT_MEDIA_REQUEST);
+    }
+    private void renderEventPhotos(JSONObject event) {
+        long eventId=event.optLong("id");
+        JSONArray photos=EventPhotos.gallery(event);
+        JSONArray videos=EventVideos.list(event);
+        int total=photos.length()+videos.length();
+        LinearLayout galleryHeader=new LinearLayout(this);
+        galleryHeader.setOrientation(LinearLayout.HORIZONTAL);
+        galleryHeader.setGravity(Gravity.CENTER_VERTICAL);
+        add(page,galleryHeader,12);
+        TextView title=text("Ma galerie"+(total>0?" · "+total:""),20,Color.WHITE,true);
+        galleryHeader.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
+        TextView addMedia=button("＋ Médias",false,()->pickMedia(eventId));
+        addMedia.setContentDescription("Ajouter des photos ou des vidéos");
+        galleryHeader.addView(addMedia,new LinearLayout.LayoutParams(dp(136),dp(51)));
+        if(total==0){
+            add(page,text("Ajoute ici les photos et vidéos de ta soirée.",13,SOFT,false),12);
+            return;
+        }
+        for(int offset=0;offset<total;offset+=3){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            add(page,row,8);
+            for(int slot=0;slot<3;slot++){
+                int index=offset+slot;
+                LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(0,dp(108),1f);
+                layout.setMargins(dp(3),0,dp(3),0);
+                if(index>=total){row.addView(new View(this),layout);continue;}
+                boolean video=index>=photos.length();
+                String filename=video?videos.optString(index-photos.length()):photos.optString(index);
+                FrameLayout thumb=new FrameLayout(this);
+                thumb.setBackground(rounded(Color.rgb(35,34,54),15));
+                thumb.setClipToOutline(true);
+                row.addView(thumb,layout);
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                Bitmap picture=video?
+                    EventVideos.thumbnail(this,filename):EventPhotos.preview(this,filename,360);
+                if(picture!=null)image.setImageBitmap(picture);
+                thumb.addView(image,new FrameLayout.LayoutParams(-1,-1));
+                if(video){
+                    TextView play=text("▶",26,Color.WHITE,true);
+                    play.setGravity(Gravity.CENTER);
+                    GradientDrawable circle=new GradientDrawable();
+                    circle.setColor(Color.argb(204,26,24,42));
+                    circle.setShape(GradientDrawable.OVAL);
+                    play.setBackground(circle);
+                    FrameLayout.LayoutParams playLayout=new FrameLayout.LayoutParams(
+                        dp(48),dp(48),Gravity.CENTER);
+                    thumb.addView(play,playLayout);
+                }
+                thumb.setContentDescription((video?"Ouvrir la vidéo ":"Ouvrir la photo ")+(index+1));
+                thumb.setOnClickListener(v->startGallery(eventId,index));
+            }
+        }
+        add(page,text("Touche un média pour ouvrir la galerie plein écran.",12,SOFT,false),15);
+    }
     private String prettyDate(String date) {
         try {
             return java.time.LocalDate.parse(date)
@@ -1184,6 +1236,55 @@ public final class MainActivity extends Activity {
             else showHome();
             return;
         }
+        if(requestCode==EVENT_MEDIA_REQUEST){
+            if(resultCode!=RESULT_OK||data==null)return;
+            ArrayList<Uri> sources=new ArrayList<>();
+            if(data.getClipData()!=null){
+                for(int i=0;i<data.getClipData().getItemCount();i++)
+                    sources.add(data.getClipData().getItemAt(i).getUri());
+            }else if(data.getData()!=null)sources.add(data.getData());
+            if(sources.isEmpty())return;
+            long target=currentEventId;
+            message("Importation de "+sources.size()+" média(s) dans AfterLog…");
+            new Thread(()->{
+                int added=0,errors=0;
+                String failure="";
+                try{
+                    AppStore localStore=new AppStore(getApplicationContext());
+                    JSONObject event=localStore.event(target);
+                    if(event==null)throw new Exception("Soirée introuvable");
+                    for(Uri uri:sources){
+                        try {
+                            String mime=getContentResolver().getType(uri);
+                            if(mime!=null&&mime.startsWith("image/")){
+                                if(EventPhotos.gallery(event).length()>=40)
+                                    throw new Exception("40 photos maximum");
+                                EventPhotos.append(event,EventPhotos.importUri(this,uri));
+                            }else{
+                                if(EventVideos.list(event).length()>=EventVideos.MAX_COUNT)
+                                    throw new Exception("30 vidéos maximum");
+                                EventVideos.append(event,EventVideos.importVideo(this,uri));
+                            }
+                            added++;
+                        }catch(Exception e){
+                            errors++;
+                            failure=e.getMessage();
+                        }
+                    }
+                    if(added>0)localStore.saveEvent(event);
+                }catch(Exception e){errors++;failure=e.getMessage();}
+                final int imported=added,rejected=errors;
+                final String errorText=failure;
+                runOnUiThread(()->{
+                    if(isFinishing())return;
+                    store=new AppStore(this);
+                    if(eventScreen&&currentEventId==target)showEvent(target);
+                    message(imported+" média(s) ajouté(s)"+
+                        (rejected>0?" · "+rejected+" non importé(s) : "+errorText:""));
+                });
+            },"AfterLog-media-import").start();
+            return;
+        }
         if(requestCode==EVENT_VIDEOS_REQUEST){
             if(resultCode==RESULT_OK && data!=null){
                 JSONObject current=store.event(currentEventId);
@@ -1230,7 +1331,10 @@ public final class MainActivity extends Activity {
             return;
         }
         if(requestCode==CONSUMPTION_REQUEST){
-            if(resultCode==RESULT_OK)showEvent(currentEventId);
+            if(resultCode==RESULT_OK) {
+                store=new AppStore(this);
+                if(currentEventId>0)showEvent(currentEventId);
+            }
             return;
         }
         if(requestCode==SHOTGUN_REQUEST && resultCode==RESULT_OK && data==null){

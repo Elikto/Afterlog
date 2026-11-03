@@ -9,8 +9,8 @@ android {
         applicationId = "fr.afterlog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.10.0"
+        versionCode = 11
+        versionName = "0.11.0"
     }
     signingConfigs {
         if (!persistentKeystore.isNullOrBlank()) {
@@ -37,4 +37,6 @@ android {
 dependencies {
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("androidx.work:work-runtime:2.12.0")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
 }

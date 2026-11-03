@@ -34,6 +34,7 @@ public final class EventEditorActivity extends Activity {
     static final String EXTRA_EVENT="event_json", EXTRA_SAVED_ID="saved_id";
     private static final int PICK_IMAGES=704;
     private static final int PICK_VIDEOS=705;
+    private static final int PICK_MEDIA=706;
     private static final int BG=Color.rgb(12,14,24),CARD=Color.rgb(25,28,44);
     private static final int TILE=Color.rgb(38,41,64),ACCENT=Color.rgb(186,166,255);
     private static final int WHITE=Color.WHITE,SOFT=Color.rgb(185,190,205);
@@ -128,18 +129,16 @@ public final class EventEditorActivity extends Activity {
         add(basic,endButton,0);
         refreshDate();
 
-        LinearLayout gallery=group("📸 Photos de la soirée",
-            "Ajoute plusieurs photos depuis ton téléphone. Elles restent privées.",content);
-        photoCount=text("",13,ACCENT,true);add(gallery,photoCount,10);
-        add(gallery,button("＋ Ajouter des photos",true,this::pickImages),13);
-        images=column();add(gallery,images,0);
-        showImages();
-        LinearLayout videoGallery=group("🎬 Vidéos de la soirée",
-            "Ajoute tes vidéos, lis-les directement dans AfterLog.",content);
-        videoCount=text("",13,ACCENT,true);add(videoGallery,videoCount,10);
-        add(videoGallery,button("＋ Ajouter des vidéos",true,this::pickVideos),12);
-        videoItems=column();add(videoGallery,videoItems,0);
-        showVideos();
+        LinearLayout gallery=group("Galerie de la soirée",
+            "Photos et vidéos, visibles dans une galerie plein écran.",content);
+        add(gallery,button("＋ Ajouter des médias",true,this::pickMedia),12);
+        photoCount=text("",13,SOFT,false);
+        add(gallery,photoCount,8);
+        images=column();add(gallery,images,8);
+        videoCount=text("",13,SOFT,false);
+        add(gallery,videoCount,8);
+        videoItems=column();add(gallery,videoItems,0);
+        showImages();showVideos();
 
         LinearLayout where=group("📍 Où ça se passe ?","Lieu et localisation",content);
         field(where,"venue","Nom du lieu","Salle, festival, club…",false);
@@ -196,6 +195,20 @@ public final class EventEditorActivity extends Activity {
             refreshDate();
         },time.getHour(),time.getMinute(),true).show();
     }
+    private void pickMedia() {
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        startActivityForResult(Intent.createChooser(intent,"Photos et vidéos"),PICK_MEDIA);
+    }
+    private void previewMedia(int index) {
+        Intent intent=new Intent(this,EventGalleryActivity.class);
+        intent.putExtra(EventGalleryActivity.EXTRA_EVENT_JSON,event.toString());
+        intent.putExtra(EventGalleryActivity.EXTRA_INDEX,index);
+        startActivity(intent);
+    }
     private void pickVideos() {
         Intent intent=new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("video/*");
@@ -213,6 +226,31 @@ public final class EventEditorActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(result!=RESULT_OK || data==null)return;
+        if(request==PICK_MEDIA) {
+            int success=0,errors=0;
+            java.util.ArrayList<Uri> selected=new java.util.ArrayList<>();
+            if(data.getClipData()!=null) {
+                for(int i=0;i<data.getClipData().getItemCount();i++)
+                    selected.add(data.getClipData().getItemAt(i).getUri());
+            }else if(data.getData()!=null)selected.add(data.getData());
+            for(Uri uri:selected){
+                try{
+                    String mime=getContentResolver().getType(uri);
+                    if(mime!=null && mime.startsWith("image/")) {
+                        if(EventPhotos.gallery(event).length()>=40)throw new Exception("Limite de photos");
+                        EventPhotos.append(event,EventPhotos.importUri(this,uri));
+                    }else{
+                        if(EventVideos.list(event).length()>=EventVideos.MAX_COUNT)throw new Exception("Limite de vidéos");
+                        EventVideos.append(event,EventVideos.importVideo(this,uri));
+                    }
+                    success++;
+                }catch(Exception e){errors++;}
+            }
+            showImages();showVideos();
+            Toast.makeText(this,success+" média(s) ajoutés"+(errors>0?" · "+errors+" non importés":""),
+                Toast.LENGTH_LONG).show();
+            return;
+        }
         if(request==PICK_VIDEOS) {
             int added=0,errors=0;
             String lastError="";
@@ -268,6 +306,7 @@ public final class EventEditorActivity extends Activity {
                 frame.addView(image,new LinearLayout.LayoutParams(-1,dp(100)));
                 Bitmap thumb=EventPhotos.preview(this,file,200);
                 if(thumb!=null)image.setImageBitmap(thumb);
+                image.setOnClickListener(v->previewMedia(index));
                 add(frame,button("Retirer",false,()->new AlertDialog.Builder(this)
                     .setTitle("Retirer cette photo ?")
                     .setNegativeButton("Annuler",null)
@@ -282,7 +321,7 @@ public final class EventEditorActivity extends Activity {
         if(videoItems==null)return;
         videoItems.removeAllViews();
         JSONArray videos=EventVideos.list(event);
-        videoCount.setText(videos.length()+" / "+EventVideos.MAX_COUNT+" vidéos · 200 Mo max chacune");
+        videoCount.setText(videos.length()+" vidéo(s) · 1 Go max chacune");
         for(int index=0;index<videos.length();index++){
             int position=index;
             String video=videos.optString(index);
@@ -297,8 +336,8 @@ public final class EventEditorActivity extends Activity {
                 image.setImageBitmap(preview);
                 item.addView(image,new LinearLayout.LayoutParams(-1,dp(135)));
             }
-            add(item,button("▶ Lire la vidéo "+(index+1),false,
-                ()->EventVideos.play(this,video)),7);
+            add(item,button("▶ Lire dans la galerie "+(index+1),false,
+                ()->previewMedia(EventPhotos.gallery(event).length()+position)),7);
             add(item,button("Retirer la vidéo",false,()->new AlertDialog.Builder(this)
                 .setTitle("Supprimer cette vidéo ?")
                 .setMessage("Elle sera supprimée du stockage d'AfterLog.")

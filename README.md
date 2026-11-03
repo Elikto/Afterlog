@@ -1,6 +1,6 @@
 # AfterLog — Application Android
 
-## Nouveautés de la version 0.10.0
+## Nouveautés de la version 0.11.0
 
 - **Soirées visibles sans redémarrer :** l'accueil repère chaque nouvel événement enregistré par Shotgun et rafraîchit automatiquement ses cartes pendant la synchronisation.
 - **Événements décochés :** ils ne comptent pas comme échecs. Dès que toutes les soirées choisies sont présentes, le bandeau de fin de synchronisation disparaît. Les vrais problèmes d'import restent consultables.
@@ -18,11 +18,36 @@
 **À tester :** le parcours Shotgun dépend de l'interface du site et n'est pas une intégration officielle garantie. Les APK bêta utilisent encore des certificats de signature temporaires : sauvegarde ton journal JSON avant toute éventuelle réinstallation.
 
 
-**Version 0.10.0 (bêta expérimentale)**
+**Version 0.11.0 (bêta expérimentale)**
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.10.0-debug/AfterLog-v0.10.0.apk)
+[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.11.0-debug/AfterLog-v0.11.0.apk)
 
-## Nouveautés v0.10.0 — Journal compact, vidéos et synchronisation
+## Mise à jour 0.11.0 — Galerie et Suivi
+
+**Journal de soirée**
+- Les consommations s'affichent en bulles de **dimensions identiques**, sur deux colonnes.
+- Les informations longues sont tronquées dans la bulle et restent accessibles au clic.
+- Le bouton **＋** occupe la cellule immédiatement après les bulles.
+- Après l'enregistrement d'une prise, le journal se reconstruit depuis la mémoire locale automatiquement : plus besoin de quitter et rouvrir la soirée.
+
+**Galerie privée**
+- Un seul bouton **＋ Médias** pour photos et vidéos, sur les fiches et dans l'éditeur.
+- Une visionneuse **plein écran** permet de faire défiler les photos et vidéos ; zoom tactile sur photo et commandes de lecture Media3 pour les vidéos.
+- Vidéos importables dans divers conteneurs (MP4, MOV, WebM, MKV, AVI, WMV, MPEG, TS, etc.), selon les décodeurs disponibles sur Android. Le lecteur propose une ouverture dans une application externe compatible si nécessaire.
+- **Chromecast :** un raccourci permet de passer le fichier à une application compatible ; la diffusion Cast native de médias stockés localement *n'est pas encore intégrée* ni garantie. La lecture directe de tous les formats n'est pas techniquement garantie.
+- 30 vidéos maximum par soirée, 1 Go par vidéo. **L'export JSON ne contient pas les médias** : conserver les originaux indépendamment.
+
+**Mon Suivi**
+- « Statistiques » est remplacé par **Suivi** ; périodes jour, semaine, mois et année avec navigation entre périodes, graphiques simples et répartition par boisson / substance.
+- Les alertes RDR signalent certaines situations consignées (verres d'alcool au-delà des repères, prises répétées, mélanges signalés le même jour). Elles donnent les **sources vérifiables** et les numéros **15, 112 et 0 800 23 13 13**.
+- Pour l'alcool : repères officiels Santé publique France de 2 verres **standards** par jour et 10 par semaine. Une quantité exprimée en « verres » dans le journal n'est pas automatiquement un verre standard.
+- Pour les autres substances : **aucune limite sûre en mg inventée**. Une prise notée « petit/moyen/grand » ou « toute la soirée » ne permet pas un diagnostic. Les prises répétées ou rapprochées déclenchent seulement des messages de vigilance selon les données horaires disponibles, et ne constituent pas un seuil de sécurité.
+- En cas de perte de conscience, douleur thoracique, respiration anormale ou convulsions, appeler immédiatement les secours.
+
+Sources : [Santé publique France](https://www.santepubliquefrance.fr/alcool/comment-reduire-les-risques-de-la-consommation-dalcool), [Drogues Info Service — Ecstasy/MDMA](https://drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Ecstasy-MDMA), [Kétamine](https://drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Ketamine) et [Drogues Info Service](https://www.drogues-info-service.fr/).
+
+
+## Nouveautés v0.11.0 — Journal compact, vidéos et synchronisation
 
 - **Synchronisation Shotgun :** seuls les échecs des soirées réellement cochées restent visibles. Les billets décochés volontairement ne maintiennent plus le bandeau « fiche non récupérée ».
 - **Journal de soirée :** petites bulles avec substance, quantité, taille, mode et heure éventuelle ; rien n'est affiché pour l'heure quand « Toute la soirée » est sélectionné. Un petit bouton ＋ remplace le texte d'ajout lorsqu'il existe déjà des prises.

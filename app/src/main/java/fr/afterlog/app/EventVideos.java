@@ -6,6 +6,9 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
+import java.util.Locale;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -21,8 +24,10 @@ import java.util.UUID;
 
 /** Vidéos privées de la soirée, accessibles et lisibles hors ligne dans AfterLog. */
 final class EventVideos {
-    static final long MAX_BYTES=200L*1024*1024;
-    static final int MAX_COUNT=12;
+    static final long MAX_BYTES=1024L*1024*1024;
+    static final int MAX_COUNT=30;
+    private static final String SUPPORTED_EXTENSIONS=
+        "mp4|m4v|mov|webm|3gp|3g2|mkv|avi|wmv|mpg|mpeg|ts|m2ts|flv|ogv";
     private static final String DIR="event_videos";
 
     private static File folder(Context context) {
@@ -31,23 +36,63 @@ final class EventVideos {
         return folder;
     }
     static File file(Context context,String name) {
-        if(name==null || !name.matches("[0-9a-f-]{36}\\.(mp4|webm|3gp|mkv)"))return null;
+        if(name==null || !name.matches("[0-9a-f-]{36}\\.("+SUPPORTED_EXTENSIONS+")"))return null;
         return new File(folder(context),name);
     }
     static JSONArray list(JSONObject event) {
         JSONArray videos=event.optJSONArray("videos");
         return videos==null?new JSONArray():videos;
     }
+    static String mimeFor(String name){
+        String extension=name.contains(".")?name.substring(name.lastIndexOf('.')+1):"";
+        switch(extension){
+            case "mp4":case "m4v":return "video/mp4";
+            case "mov":return "video/quicktime";
+            case "webm":return "video/webm";
+            case "3gp":case "3g2":return "video/3gpp";
+            case "mkv":return "video/x-matroska";
+            case "avi":return "video/x-msvideo";
+            case "wmv":return "video/x-ms-wmv";
+            case "mpg":case "mpeg":return "video/mpeg";
+            case "ts":case "m2ts":return "video/mp2t";
+            case "flv":return "video/x-flv";
+            case "ogv":return "video/ogg";
+            default:return "video/*";
+        }
+    }
+    private static String originalExtension(Context ctx,Uri uri) {
+        try(Cursor cursor=ctx.getContentResolver().query(uri,
+            new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
+            if(cursor!=null&&cursor.moveToFirst()){
+                String name=cursor.getString(0).toLowerCase(Locale.ROOT);
+                int at=name.lastIndexOf('.');
+                if(at>0){
+                    String ext=name.substring(at+1);
+                    if(ext.matches("("+SUPPORTED_EXTENSIONS+")"))return ext;
+                }
+            }
+        }catch(Exception ignored){}
+        return "";
+    }
     static String importVideo(Context context,Uri uri)throws Exception {
         if(uri==null||!"content".equalsIgnoreCase(uri.getScheme()))
             throw new IllegalArgumentException("Choisis une vidéo de la galerie.");
         String mime=context.getContentResolver().getType(uri);
-        if(mime==null||!mime.startsWith("video/"))
-            throw new IllegalArgumentException("Le fichier sélectionné n'est pas une vidéo.");
-        String extension="mp4";
-        if(mime.contains("webm"))extension="webm";
-        else if(mime.contains("3gpp"))extension="3gp";
-        else if(mime.contains("matroska"))extension="mkv";
+        String extension=originalExtension(context,uri);
+        if((mime==null||!mime.startsWith("video/")) && extension.isEmpty())
+            throw new IllegalArgumentException("Le fichier sélectionné n'est pas une vidéo reconnue.");
+        if(extension.isEmpty()){
+            if(mime.contains("quicktime"))extension="mov";
+            else if(mime.contains("webm"))extension="webm";
+            else if(mime.contains("3gpp"))extension="3gp";
+            else if(mime.contains("matroska"))extension="mkv";
+            else if(mime.contains("msvideo"))extension="avi";
+            else if(mime.contains("wmv"))extension="wmv";
+            else if(mime.contains("mpeg"))extension="mpg";
+            else if(mime.contains("mp2t"))extension="ts";
+            else if(mime.contains("flv"))extension="flv";
+            else extension="mp4";
+        }
         String filename=UUID.randomUUID().toString()+"."+extension;
         File destination=file(context,filename);
         if(destination==null)throw new Exception("Nom de fichier invalide.");
@@ -58,7 +103,7 @@ final class EventVideos {
             byte[] block=new byte[32768];int length;
             while((length=in.read(block))!=-1){
                 bytes+=length;
-                if(bytes>MAX_BYTES)throw new Exception("Vidéo trop grande (200 Mo maximum).");
+                if(bytes>MAX_BYTES)throw new Exception("Vidéo trop grande (1 Go maximum).");
                 out.write(block,0,length);
             }
             out.getFD().sync();
@@ -72,7 +117,7 @@ final class EventVideos {
     static void append(JSONObject event,String filename)throws Exception {
         JSONArray videos=list(event);
         if(videos.length()>=MAX_COUNT)
-            throw new IllegalArgumentException("12 vidéos maximum par soirée.");
+            throw new IllegalArgumentException("30 vidéos maximum par soirée.");
         videos.put(filename);
         event.put("videos",videos);
     }
