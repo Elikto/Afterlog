@@ -20,6 +20,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import org.json.JSONObject;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -81,6 +83,20 @@ public final class ConsumptionActivity extends Activity {
     private String date="";
     private String time="";
     private boolean allNight=false;
+    private String timeMode="exact",timeEnd="";
+    private int quarterCount=0,halfCount=0,wholeCount=0;
+    private String lastPart="";
+    private LinearLayout substanceOptions,measurementBlock,routeBlock;
+    private EditText measuredQty,customRoute;
+    private Spinner unitSelect;
+    private String routeChoice="";
+    private String subjectiveSize="";
+    private LinearLayout sizeBlock;
+    private final List<TextView> sizeButtons=new ArrayList<>();
+    private final List<TextView> routeButtons=new ArrayList<>();
+    private LinearLayout ecstasyParts;
+    private TextView partsSummary,quarterBtn,halfBtn,wholeBtn;
+    private TextView exactMode,rangeMode,wholeNightMode,timeEndButton;
 
     private final List<View> tiles=new ArrayList<>();
     private final List<Choice> tileChoices=new ArrayList<>();
@@ -113,8 +129,18 @@ public final class ConsumptionActivity extends Activity {
         if(!validDate(date))date=LocalDate.now().toString();
         time=original.optString("time","");
         allNight=original.optBoolean("allNight",false);
+        timeMode=original.optString("timeMode",allNight?"all":"exact");
+        if(!timeMode.equals("exact")&&!timeMode.equals("between")&&!timeMode.equals("all"))timeMode="exact";
+        timeEnd=original.optString("timeEnd","");
+        JSONObject parts=original.optJSONObject("parts");
+        if(parts!=null){
+            quarterCount=Math.max(0,parts.optInt("quart",0));
+            halfCount=Math.max(0,parts.optInt("demi",0));
+            wholeCount=Math.max(0,parts.optInt("entier",0));
+        }
         build(event);
         if(entryId!=0)restoreSelection();
+        else if(substanceOptions!=null)substanceOptions.setVisibility(View.GONE);
     }
 
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -213,23 +239,80 @@ public final class ConsumptionActivity extends Activity {
 
         measureText=text("",13,SOFT,false);
         measureText.setGravity(Gravity.CENTER);
-        add(details,measureText,23);
+        add(details,measureText,12);
+        ecstasyParts=column();
+        add(details,ecstasyParts,18);
+        add(ecstasyParts,text("AJOUTER LES MORCEAUX",12,ACCENT,true),8);
+        LinearLayout typeRow=horizontal();
+        add(ecstasyParts,typeRow,9);
+        quarterBtn=action("Quart",false,()->addEcstasyPart("quart"));
+        halfBtn=action("Demi",false,()->addEcstasyPart("demi"));
+        wholeBtn=action("Entier",false,()->addEcstasyPart("entier"));
+        for(TextView part:new TextView[]{quarterBtn,halfBtn,wholeBtn}){
+            part.setTextSize(13);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(58),1);
+            lp.setMargins(dp(2),0,dp(2),0);
+            typeRow.addView(part,lp);
+        }
+        partsSummary=text("",15,WHITE,true);
+        add(ecstasyParts,partsSummary,9);
+        add(ecstasyParts,action("↶  Retirer le dernier choix",false,this::undoLastEcstasyPart),6);
+        add(ecstasyParts,text("Le compteur revient à zéro après chaque choix. L'application enregistre les fractions déclarées, pas une quantité de substance active.",12,SOFT,false),10);
+        substanceOptions=column();
+        add(details,substanceOptions,16);
+        measurementBlock=column();
+        add(substanceOptions,measurementBlock,12);
+        add(measurementBlock,text("QUANTITÉ DÉCLARÉE",12,ACCENT,true),5);
+        add(measurementBlock,text("Indique une quantité observée, sans estimation de teneur.",12,SOFT,false),8);
+        LinearLayout doseRow=horizontal();
+        add(measurementBlock,doseRow,6);
+        measuredQty=editText("Quantité (facultatif)",false);
+        measuredQty.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        doseRow.addView(measuredQty,new LinearLayout.LayoutParams(0,dp(52),2));
+        unitSelect=new Spinner(this);
+        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(0,dp(52),1);
+        ulp.leftMargin=dp(7);
+        doseRow.addView(unitSelect,ulp);
+        sizeBlock=column();
+        add(substanceOptions,sizeBlock,13);
+        add(sizeBlock,text("TAILLE APPARENTE (OPTIONNELLE)",12,ACCENT,true),9);
+        LinearLayout sizes=horizontal();
+        add(sizeBlock,sizes,7);
+        for(String size:new String[]{"Petit","Moyen","Grand"}){
+            TextView b=action(size,false,()->{
+                subjectiveSize=subjectiveSize.equals(size)?"":size;
+                updateSizeButtons();
+            });
+            b.setTag(size);
+            b.setTextSize(13);
+            LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(0,dp(49),1);
+            slp.setMargins(dp(2),0,dp(2),0);
+            sizes.addView(b,slp);
+            sizeButtons.add(b);
+        }
+        add(sizeBlock,text("Appréciation personnelle : aucune correspondance fiable en mg ou en g.",12,SOFT,false),5);
+        add(substanceOptions,text("MODE DE PRISE",12,ACCENT,true),9);
+        routeBlock=column();
+        add(substanceOptions,routeBlock,8);
+        customRoute=editText("Décris la méthode de prise",false);
+        add(substanceOptions,customRoute,7);
+        customRoute.setVisibility(View.GONE);
+        add(substanceOptions,text("Les unités et modes indiqués servent uniquement à tenir ton journal, pas à conseiller une dose ou une méthode.",12,SOFT,false),12);
 
         add(details,text("HEURE DE LA PRISE",13,ACCENT,true),10);
-        timeButton=action("🕒  Choisir l'heure",false,this::pickTime);
-        add(details,timeButton,11);
-        allEvening=new CheckBox(this);
-        allEvening.setText("Pendant toute la soirée");
-        allEvening.setTextColor(WHITE);
-        allEvening.setTextSize(16);
-        allEvening.setButtonTintList(ColorStateList.valueOf(ACCENT));
-        allEvening.setPadding(dp(2),dp(8),0,dp(8));
-        allEvening.setChecked(allNight);
-        allEvening.setOnCheckedChangeListener((button,checked)->{
-            allNight=checked;updateTime();
-        });
-        add(details,allEvening,3);
-        add(details,text("Coche cette case si tu ne te souviens pas de l'heure précise.",13,SOFT,false),18);
+        add(details,text("Choisis la précision dont tu te souviens.",13,SOFT,false),12);
+        LinearLayout modes=horizontal();add(details,modes,11);
+        exactMode=action("🕒 Exacte",false,()->setTimeMode("exact"));
+        rangeMode=action("↔ Entre",false,()->setTimeMode("between"));
+        wholeNightMode=action("🌙 Soirée",false,()->setTimeMode("all"));
+        for(TextView option:new TextView[]{exactMode,rangeMode,wholeNightMode}){
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(55),1);
+            lp.setMargins(dp(2),0,dp(2),0);option.setTextSize(13);modes.addView(option,lp);
+        }
+        timeButton=action("🕒 Heure exacte ou début",false,this::pickTime);add(details,timeButton,9);
+        timeEndButton=action("🕓 Fin de l'intervalle",false,this::pickEndTime);add(details,timeEndButton,10);
+        add(details,text("Exemple : entre 13 h et 14 h 30. Si l'heure de fin est plus petite, l'intervalle passe au lendemain.",13,SOFT,false),18);
+        updateTime();
 
         add(details,text("DATE",12,ACCENT,true),9);
         dateButton=action("📅  "+date,false,this::pickDate);
@@ -340,6 +423,10 @@ public final class ConsumptionActivity extends Activity {
         renderSelection();
     }
     private void select(Choice choice,boolean fromTap) {
+        boolean changed=selected==null || selected!=choice;
+        if(changed && "Ecstasy".equals(choice.name))count=0;
+        else if(changed && count==0)count=1;
+        if(changed){routeChoice="";subjectiveSize="";}
         selected=choice;
         if(!"Autre".equals(choice.name))customName="";
         renderSelection();
@@ -375,33 +462,180 @@ public final class ConsumptionActivity extends Activity {
         details.setVisibility(View.VISIBLE);
         String label="Autre".equals(selected.name)&&!customName.isEmpty()?customName:selected.name;
         heading.setText(selected.icon+"  "+label);
+        configureSubstanceOptions();
         refreshCounter();
         scroll.post(()->scroll.smoothScrollTo(0,details.getTop()));
     }
+
+    private boolean isDrug() {
+        return selected!=null && "Autres substances".equals(selected.category);
+    }
+    private String[] unitsFor(String substance) {
+        switch(substance){
+            case "MDMA":case "Kétamine":case "Cocaïne":case "Speed":
+                return new String[]{"mg","g","unité"};
+            case "LSD": return new String[]{"buvard(s)","goutte(s)","unité"};
+            case "Champignons":case "Cannabis": return new String[]{"g","mg","unité"};
+            case "GHB / GBL": return new String[]{"mL","unité"};
+            case "Poppers": return new String[]{"inhalation(s)","unité"};
+            default: return new String[]{"unité","mg","g","mL"};
+        }
+    }
+    private String[] routesFor(String substance) {
+        switch(substance) {
+            case "MDMA":case "Speed":case "Kétamine":
+                return new String[]{"Orale (para)","Nasale (trace)","Autre"};
+            case "Cocaïne": return new String[]{"Nasale (trace)","Autre"};
+            case "LSD": return new String[]{"Buvard oral","Gouttes orales","Autre"};
+            case "Ecstasy": return new String[]{"Orale","Autre"};
+            case "Cannabis": return new String[]{"Fumée","Vaporisée","Orale","Autre"};
+            case "Champignons": return new String[]{"Orale","Autre"};
+            case "Poppers": return new String[]{"Inhalée","Autre"};
+            case "GHB / GBL": return new String[]{"Orale","Autre"};
+            default: return new String[]{"Orale","Nasale","Inhalée","Autre"};
+        }
+    }
+    private void configureSubstanceOptions() {
+        if(substanceOptions==null)return;
+        if(!isDrug()){
+            substanceOptions.setVisibility(View.GONE);
+            return;
+        }
+        substanceOptions.setVisibility(View.VISIBLE);
+        measurementBlock.setVisibility(isEcstasy()?View.GONE:View.VISIBLE);
+        sizeBlock.setVisibility(isEcstasy()?View.GONE:View.VISIBLE);
+        if(entryId!=0 && subjectiveSize.isEmpty())
+            subjectiveSize=original.optString("subjectiveSize");
+        updateSizeButtons();
+        if(!isEcstasy()){
+            String[] units=unitsFor(selected.name);
+            ArrayAdapter<String> adapter=new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,units);
+            unitSelect.setAdapter(adapter);
+            String previousUnit=original.optString("measuredUnit",original.optString("unit"));
+            for(int i=0;i<units.length;i++) {
+                if(units[i].equals(previousUnit))unitSelect.setSelection(i);
+            }
+            String value=original.has("measuredAmount")?
+                original.optString("measuredAmount"):"";
+
+            measuredQty.setText(value);
+        }
+        routeBlock.removeAllViews();
+        routeButtons.clear();
+        String storedRoute=original.optString("route");
+        if(routeChoice.isEmpty() && !storedRoute.isEmpty())routeChoice=storedRoute;
+        String[] routes=routesFor(selected.name);
+        for(int i=0;i<routes.length;i+=2) {
+            LinearLayout row=horizontal();
+            add(routeBlock,row,8);
+            for(int j=i;j<Math.min(i+2,routes.length);j++){
+                String name=routes[j];
+                TextView option=action(name,false,()->{
+                    routeChoice=name;
+                    updateRouteButtons();
+                });
+                option.setTag(name);
+                option.setTextSize(13);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(49),1);
+                lp.setMargins(dp(2),0,dp(2),0);
+                row.addView(option,lp);
+                routeButtons.add(option);
+            }
+            if(i+1>=routes.length)row.addView(new View(this),new LinearLayout.LayoutParams(0,dp(1),1));
+        }
+        if(entryId!=0)customRoute.setText(original.optString("routeOther"));
+        updateRouteButtons();
+    }
+    private void updateSizeButtons() {
+        for(TextView b:sizeButtons){
+            boolean selectedSize=subjectiveSize.equals(b.getTag());
+            b.setBackground(shape(selectedSize?ACCENT:TILE,12,selectedSize));
+            b.setTextColor(selectedSize?BG:WHITE);
+        }
+    }
+    private void updateRouteButtons() {
+        for(TextView b:routeButtons) {
+            boolean active=routeChoice.equals(b.getTag());
+            b.setBackground(shape(active?ACCENT:TILE,12,active));
+            b.setTextColor(active?BG:WHITE);
+        }
+        customRoute.setVisibility("Autre".equals(routeChoice)?View.VISIBLE:View.GONE);
+    }
+
+    private boolean isEcstasy() {
+        return selected!=null && "Ecstasy".equalsIgnoreCase(selected.name);
+    }
+    private void addEcstasyPart(String part) {
+        if(count<1){
+            Toast.makeText(this,"Choisis d'abord un nombre avec +",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if("quart".equals(part))quarterCount+=count;
+        else if("demi".equals(part))halfCount+=count;
+        else wholeCount+=count;
+        lastPart=part;
+        count=0;
+        refreshCounter();
+    }
+    private void undoLastEcstasyPart() {
+        if("quart".equals(lastPart)&&quarterCount>0)quarterCount--;
+        else if("demi".equals(lastPart)&&halfCount>0)halfCount--;
+        else if("entier".equals(lastPart)&&wholeCount>0)wholeCount--;
+        else {
+            if(wholeCount>0)wholeCount--;
+            else if(halfCount>0)halfCount--;
+            else if(quarterCount>0)quarterCount--;
+        }
+        lastPart="";
+        refreshCounter();
+    }
+    private static String ecstasySummary(int whole,int half,int quarter) {
+        java.util.ArrayList<String> parts=new java.util.ArrayList<>();
+        if(whole>0)parts.add(whole+" entier"+(whole>1?"s":""));
+        if(half>0)parts.add(half+" demi");
+        if(quarter>0)parts.add(quarter+" quart"+(quarter>1?"s":""));
+        return parts.isEmpty()?"Aucun morceau ajouté":android.text.TextUtils.join(" + ",parts);
+    }
     private void refreshCounter(){
         quantityText.setText(String.valueOf(count));
-        if(selected!=null){
-            String unit=selected.unit;
-            measureText.setText(count+" "+unit+(count>1?"s":"")+" enregistré"+(count>1?"s":""));
+        if(selected==null)return;
+        if(isEcstasy()) {
+            if(ecstasyParts!=null)ecstasyParts.setVisibility(View.VISIBLE);
+            if(partsSummary!=null)partsSummary.setText(ecstasySummary(wholeCount,halfCount,quarterCount));
+            if(quarterBtn!=null)quarterBtn.setText("Quart"+(quarterCount>0?" · "+quarterCount:""));
+            if(halfBtn!=null)halfBtn.setText("Demi"+(halfCount>0?" · "+halfCount:""));
+            if(wholeBtn!=null)wholeBtn.setText("Entier"+(wholeCount>0?" · "+wholeCount:""));
+            measureText.setText("Choisis un nombre puis Quart, Demi ou Entier");
+        }else {
+            if(ecstasyParts!=null)ecstasyParts.setVisibility(View.GONE);
+            String label=isDrug()?"prise":selected.unit;
+            measureText.setText(count+" "+label+(count>1?"s":"")+" enregistré"+(count>1?"s":""));
         }
     }
+    private void setTimeMode(String mode) {timeMode=mode;allNight="all".equals(mode);updateTime();}
     private void updateTime() {
         if(timeButton==null)return;
-        if(allNight) {
-            timeButton.setText("🌙  Pendant toute la soirée");
-            timeButton.setAlpha(0.5f);
-            timeButton.setEnabled(false);
-        }else {
-            timeButton.setText(time.isEmpty()?"🕒  Choisir l'heure de la prise":"🕒  "+time+" · Modifier");
-            timeButton.setAlpha(1f);
-            timeButton.setEnabled(true);
-        }
+        boolean exact="exact".equals(timeMode),range="between".equals(timeMode);
+        exactMode.setBackground(shape(exact?ACCENT:TILE,12,exact));
+        rangeMode.setBackground(shape(range?ACCENT:TILE,12,range));
+        wholeNightMode.setBackground(shape(allNight?ACCENT:TILE,12,allNight));
+        exactMode.setTextColor(exact?BG:WHITE);
+        rangeMode.setTextColor(range?BG:WHITE);
+        wholeNightMode.setTextColor(allNight?BG:WHITE);
+        timeButton.setVisibility(allNight?View.GONE:View.VISIBLE);
+        timeEndButton.setVisibility(range?View.VISIBLE:View.GONE);
+        timeButton.setText(time.isEmpty()?(range?"🕒 Heure de début":"🕒 Choisir l'heure exacte"):"🕒 "+time+" · Modifier");
+        timeEndButton.setText(timeEnd.isEmpty()?"🕓 Heure de fin":"🕓 "+timeEnd+" · Modifier");
     }
-    private void pickTime() {
+    private void pickTime(){chooseTime(false);}
+    private void pickEndTime(){chooseTime(true);}
+    private void chooseTime(boolean ending) {
         LocalTime value;
-        try {value=LocalTime.parse(time);}catch(Exception e){value=LocalTime.now();}
+        try{value=LocalTime.parse(ending?timeEnd:time);}catch(Exception e){value=LocalTime.now();}
         new TimePickerDialog(this,(picker,hour,minute)->{
-            time=String.format(Locale.ROOT,"%02d:%02d",hour,minute);
+            String t=String.format(Locale.ROOT,"%02d:%02d",hour,minute);
+            if(ending)timeEnd=t;else time=t;
             updateTime();
         },value.getHour(),value.getMinute(),true).show();
     }
@@ -425,8 +659,25 @@ public final class ConsumptionActivity extends Activity {
             return;
         }
         if(!allNight && time.isEmpty()) {
-            Toast.makeText(this,"Choisis une heure ou coche « Pendant toute la soirée »",Toast.LENGTH_LONG).show();
+            Toast.makeText(this,"Choisis l'heure exacte ou le début",Toast.LENGTH_LONG).show();return;
+        }
+        if("between".equals(timeMode)&&timeEnd.isEmpty()){
+            Toast.makeText(this,"Choisis l'heure de fin",Toast.LENGTH_LONG).show();return;
+        }
+        if(isDrug() && "Autre".equals(routeChoice) &&
+            customRoute.getText().toString().trim().isEmpty()){
+            Toast.makeText(this,"Décris la méthode de prise",Toast.LENGTH_LONG).show();
             return;
+        }
+        if(isEcstasy()) {
+            if(quarterCount+halfCount+wholeCount==0) {
+                Toast.makeText(this,"Ajoute au moins un quart, un demi ou un entier",Toast.LENGTH_LONG).show();
+                return;
+            }
+            if(count>0) {
+                Toast.makeText(this,"Il reste "+count+" au compteur : choisis Quart, Demi ou Entier avant d'enregistrer",Toast.LENGTH_LONG).show();
+                return;
+            }
         }
         try{
             String costInput=costField.getText().toString().trim().replace(",",".");
@@ -438,10 +689,49 @@ public final class ConsumptionActivity extends Activity {
             entry.put("eventId",eventId);
             entry.put("category",selected.category);
             entry.put("name",name);
-            entry.put("quantity",count);
-            entry.put("unit",selected.unit);
+            if(isEcstasy()) {
+                JSONObject parts=new JSONObject();
+                parts.put("quart",quarterCount);
+                parts.put("demi",halfCount);
+                parts.put("entier",wholeCount);
+                entry.put("parts",parts);
+                entry.put("quantity",quarterCount+halfCount+wholeCount);
+                entry.put("unit","morceaux");
+            } else {
+                entry.remove("parts");
+                if(!isDrug()){
+                    entry.put("quantity",count);
+                    entry.put("unit",selected.unit);
+                }
+            }
+            if(isDrug()) {
+                entry.put("route",routeChoice);
+                entry.put("subjectiveSize",subjectiveSize);
+                entry.put("routeOther","Autre".equals(routeChoice)?
+                    customRoute.getText().toString().trim():"");
+                if(!isEcstasy()) {
+                    String typed=measuredQty.getText().toString().trim().replace(",",".");
+                    double amount=typed.isEmpty()?0:Double.parseDouble(typed);
+                    if(!Double.isFinite(amount)||amount<0||amount>100000)throw new Exception("Quantité invalide");
+                    entry.put("quantity",count);
+                    entry.put("unit","prise");
+                    entry.put("measuredAmount",typed);
+                    entry.put("measuredUnit",unitSelect.getSelectedItem().toString());
+                } else {
+                    entry.remove("measuredAmount");
+                entry.remove("measuredUnit");
+                entry.remove("subjectiveSize");
+                    entry.remove("measuredUnit");
+                }
+            } else {
+                entry.remove("route");
+                entry.remove("routeOther");
+                entry.remove("measuredAmount");
+            }
             entry.put("date",date);
             entry.put("time",allNight?"":time);
+            entry.put("timeMode",timeMode);
+            entry.put("timeEnd","between".equals(timeMode)?timeEnd:"");
             entry.put("allNight",allNight);
             entry.put("cost",cost);
             entry.put("notes",noteField.getText().toString().trim());

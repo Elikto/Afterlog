@@ -86,6 +86,7 @@ public final class ShotgunScheduledWorker extends Worker {
             List<JSONObject> missing=new ArrayList<>();
             for(JSONObject item:found) {
                 JSONObject existing=match(item);
+                if(TicketSelectionStore.isExcluded(ctx,item.optString("url")))continue;
                 if(existing==null || needsDetails(existing))missing.add(item);
             }
             // Cap par contrôle pour ménager Shotgun et conserver une exécution brève.

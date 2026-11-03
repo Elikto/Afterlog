@@ -37,7 +37,10 @@ import java.util.Set;
  * Une seule navigation à la fois, arrêt immédiat sur HTTP 429.
  */
 public final class ShotgunSyncService extends Service {
-    private static final String START="fr.afterlog.app.SYNC_START";
+    private static final String START="fr.afterlog.app.DISCOVER_PAST";
+    private static final String IMPORT_SELECTED="fr.afterlog.app.IMPORT_SELECTED";
+    private static final String RETRY_FAILED="fr.afterlog.app.RETRY_FAILED";
+    private static final String EXTRA_FAILED_URL="failed_url";
     private static final String STOP="fr.afterlog.app.SYNC_STOP";
     private static final String CHANNEL="afterlog_sync";
     private static final int NOTIF_ID=4104;
@@ -62,6 +65,23 @@ public final class ShotgunSyncService extends Service {
         if(Build.VERSION.SDK_INT>=26)ctx.startForegroundService(i);
         else ctx.startService(i);
     }
+    public static void importSelected(Context ctx) throws Exception {
+        JSONArray selected=TicketSelectionStore.chosen(ctx);
+        if(selected.length()==0)throw new IllegalStateException("Aucune soirée cochée");
+        TicketSelectionStore.commitExclusions(ctx);
+        Intent i=new Intent(ctx,ShotgunSyncService.class);
+        i.setAction(IMPORT_SELECTED);
+        if(Build.VERSION.SDK_INT>=26)ctx.startForegroundService(i);
+        else ctx.startService(i);
+    }
+    public static void retryFailed(Context ctx,String url) throws Exception {
+        if(url==null||!url.startsWith("https://"))throw new IllegalArgumentException("Lien absent");
+        Intent intent=new Intent(ctx,ShotgunSyncService.class);
+        intent.setAction(RETRY_FAILED);
+        intent.putExtra(EXTRA_FAILED_URL,url);
+        if(Build.VERSION.SDK_INT>=26)ctx.startForegroundService(intent);
+        else ctx.startService(intent);
+    }
     public static void cancel(Context ctx) {
         Intent i=new Intent(ctx,ShotgunSyncService.class);
         i.setAction(STOP);
@@ -82,13 +102,31 @@ public final class ShotgunSyncService extends Service {
             return START_NOT_STICKY;
         }
         if(active)return START_NOT_STICKY;
+        boolean retryFailed=RETRY_FAILED.equals(action);
+        boolean selectedImport=IMPORT_SELECTED.equals(action)||retryFailed;
         active=true;rateLimited=false;seenPast=false;clickedPast=false;triedMenu=false;
         gotTickets=false;readingPage=false;discoveryAttempts=0;processed=0;
         errors=0;nextIndex=0;navigationId=0;detailAttempts=0;
         startedAt=System.currentTimeMillis();
+        if(IMPORT_SELECTED.equals(action))SyncFailureStore.clear(this);
         String url=intent==null?HOME:intent.getStringExtra(EXTRA_URL);
         if(!trusted(url))url=HOME;
-        status("Recherche des billets passés…","Connexion Shotgun ouverte sur ton téléphone");
+        if(selectedImport) {
+            JSONArray picked=retryFailed?SyncFailureStore.list(this):TicketSelectionStore.chosen(this);
+            for(int n=0;n<picked.length() && queue.size()<MAX_EVENTS;n++) {
+                JSONObject item=picked.optJSONObject(n);
+                if(item==null)continue;
+                if(retryFailed&&!item.optString("url").equals(intent.getStringExtra(EXTRA_FAILED_URL)))continue;
+                if(trusted(item.optString("url")))queue.add(item);
+            }
+            if(queue.isEmpty()) {
+                active=false;stopSelf();return START_NOT_STICKY;
+            }
+            gotTickets=true;
+        }
+        status(selectedImport?"Synchronisation des soirées sélectionnées…":
+            "Recherche des billets passés…",selectedImport?
+            "Détails des événements choisis":"Recherche automatique dans Mes billets → Passés");
         if(Build.VERSION.SDK_INT>=29)
             startForeground(NOTIF_ID,notification("Recherche des billets passés…"),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
@@ -123,12 +161,13 @@ public final class ShotgunSyncService extends Service {
                 @Override public void onReceivedError(WebView v,WebResourceRequest req,
                         WebResourceError error){
                     if(active&&req.isForMainFrame()){
-                        if(gotTickets){errors++;advance();}
+                        if(gotTickets){failCurrent("Page Shotgun inaccessible");}
                         else finish(SyncState.ERROR,"Impossible d'ouvrir Shotgun.");
                     }
                 }
             });
-            open(url);
+            if(selectedImport) next();
+            else open(url);
         }catch(Exception e) {
             finish(SyncState.ERROR,"Navigateur Android indisponible : "+e.getMessage());
         }
@@ -172,7 +211,7 @@ public final class ShotgunSyncService extends Service {
         handler.postDelayed(()->{
             if(active && id==navigationId && !readingPage) {
                 if(!gotTickets) inspectPage();
-                else {errors++;advance();}
+                else {failCurrent("Le chargement de la page a expiré");}
             }
         },27000);
     }
@@ -188,7 +227,7 @@ public final class ShotgunSyncService extends Service {
                     String url=browser.getUrl();
                     if(!eventUrl(url)) {
                         // Ticket page : suivre seulement l'action Voir l'événement.
-                        if(++detailAttempts>4){errors++;advance();return;}
+                        if(++detailAttempts>4){failCurrent("Lien « Voir l'événement » introuvable");return;}
                         browser.evaluateJavascript(ShotgunBatchImporter.FOLLOW_EVENT_JS,follow->{
                             if(!active||nav!=navigationId)return;
                             try {
@@ -198,8 +237,8 @@ public final class ShotgunSyncService extends Service {
                                     open(link);
                                 } else if("clicked".equals(outcome.optString("kind"))) {
                                     handler.postDelayed(()->inspectPage(),1800);
-                                } else {errors++;advance();}
-                            }catch(Exception e){errors++;advance();}
+                                } else {failCurrent("Lien vers l'événement introuvable");}
+                            }catch(Exception e){failCurrent("Impossible d'extraire les détails");}
                         });
                         return;
                     }
@@ -220,8 +259,9 @@ public final class ShotgunSyncService extends Service {
                     if(extracted.optString("date").isEmpty())
                         extracted.put("date",previous.optString("date"));
                     saveEventPreservingUserData(extracted);
+                    SyncFailureStore.remove(this,queue.get(nextIndex).optString("url"));
                     processed++;advance();
-                }catch(Exception e){errors++;advance();}
+                }catch(Exception e){failCurrent("Extraction indisponible ou en erreur");}
             });
         } else {
             browser.evaluateJavascript(DISCOVER_JS,raw->{
@@ -243,7 +283,6 @@ public final class ShotgunSyncService extends Service {
                         }
                     }
                     if("past".equals(action)) {
-                        enqueueDiscovered(state.optJSONArray("events"));
                         if(clickedPast) {
                             // Le DOM n'a pas changé : ne pas cliquer indéfiniment.
                             discoveryAttempts++;
@@ -262,9 +301,15 @@ public final class ShotgunSyncService extends Service {
                                 "Aucun lien d’événement accessible parmi les billets en cours, à venir ou passés.");
                             return;
                         }
-                        gotTickets=true;
-                        status("Billets trouvés : "+queue.size(),"Récupération des détails");
-                        next();
+                        JSONArray discovered=new JSONArray();
+                        for(JSONObject ticket:queue) discovered.put(ticket);
+                        try {
+                            TicketSelectionStore.saveFound(this,discovered);
+                            finish(SyncState.SELECTION,
+                                queue.size()+" soirée(s) trouvée(s) · sélectionne celles à importer.");
+                        }catch(Exception e) {
+                            finish(SyncState.ERROR,"Impossible de préparer la liste des billets.");
+                        }
                         return;
                     }
                     if("menu".equals(action)||"wait".equals(action)) {
@@ -293,7 +338,7 @@ public final class ShotgunSyncService extends Service {
         }
     }
     private void retryDetails(int nav) {
-        if(++detailAttempts>2){errors++;advance();return;}
+        if(++detailAttempts>2){failCurrent("Détails incomplets ou indisponibles");return;}
         handler.postDelayed(()->{
             if(active&&nav==navigationId)inspectPage();
         },2100);
@@ -314,6 +359,12 @@ public final class ShotgunSyncService extends Service {
             if(active)open(item.optString("url"));
         },1800);
     }
+    private void failCurrent(String reason) {
+        if(!active)return;
+        if(nextIndex>=0&&nextIndex<queue.size())
+            SyncFailureStore.add(this,queue.get(nextIndex),reason);
+        errors++;advance();
+    }
     private void advance() {
         if(!active)return;
         nextIndex++;
@@ -325,7 +376,7 @@ public final class ShotgunSyncService extends Service {
         } else next();
     }
     private void errorOrAdvance(String message) {
-        if(gotTickets){errors++;advance();}
+        if(gotTickets){failCurrent(message);}
         else finish(SyncState.BLOCKED,message);
     }
     private JSONObject findExisting(JSONObject incoming) {
@@ -353,6 +404,8 @@ public final class ShotgunSyncService extends Service {
             if(!newValue.isEmpty()&&existing.optString(key).trim().isEmpty())
                 existing.put(key,newValue);
         }
+        if(existing.optJSONArray("artistProfiles")==null && incoming.optJSONArray("artistProfiles")!=null)
+            existing.put("artistProfiles",incoming.getJSONArray("artistProfiles"));
         store.saveEvent(existing);
     }
     private static String clean(String value) {
@@ -458,7 +511,10 @@ public final class ShotgunSyncService extends Service {
         if(past && !selected && !inPast && !window.__afterlogPastClicked) {
           window.__afterlogPastClicked=true;
           past.click();
-          return JSON.stringify({action:'past',events});
+          return JSON.stringify({action:'past'});
+        }
+        if(!inPast && !selected && !window.__afterlogPastClicked) {
+          return JSON.stringify({action:'wait'});
         }
         return JSON.stringify({action:'ready',events});
       })();

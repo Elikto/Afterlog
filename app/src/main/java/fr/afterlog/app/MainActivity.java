@@ -22,6 +22,8 @@ import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ProgressBar;
+import android.widget.CheckBox;
+import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
 import org.json.JSONObject;
@@ -66,7 +68,8 @@ public final class MainActivity extends Activity {
             syncHandler.postDelayed(this,1500);
         }
     };
-    private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53, CONSUMPTION_REQUEST = 54;
+    private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53, CONSUMPTION_REQUEST = 54,
+        EVENT_EDITOR_REQUEST=55,EVENT_IMAGES_REQUEST=56;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -120,8 +123,30 @@ public final class MainActivity extends Activity {
         LinearLayout outer = column(); outer.setBackgroundColor(BG);
         outer.setPadding(dp(16), dp(14), dp(16), 0);
         setContentView(outer);
-        if (back != null) add(outer, button("← Retour", false, back), 12);
-        add(outer, text(title, 26, Color.WHITE, true), 6);
+        if(back==null){
+            LinearLayout bar=new LinearLayout(this);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.CENTER_VERTICAL);
+            bar.setPadding(0,dp(2),0,dp(6));
+            TextView update=text("↻ MAJ",12,ACCENT,true);
+            update.setGravity(Gravity.CENTER);
+            update.setPadding(dp(10),dp(12),dp(10),dp(12));
+            update.setContentDescription("Rechercher une mise à jour");
+            update.setOnClickListener(v->updater.check());
+            bar.addView(update,new LinearLayout.LayoutParams(dp(64),dp(44)));
+            TextView brand=text("AfterLog",26,Color.WHITE,true);
+            brand.setGravity(Gravity.CENTER);
+            bar.addView(brand,new LinearLayout.LayoutParams(0,dp(48),1));
+            TextView gear=text("⚙",28,Color.WHITE,true);
+            gear.setGravity(Gravity.CENTER);
+            gear.setContentDescription("Paramètres et sauvegarde");
+            gear.setOnClickListener(v->showSettings());
+            bar.addView(gear,new LinearLayout.LayoutParams(dp(55),dp(48)));
+            add(outer,bar,6);
+        }else{
+            add(outer, button("← Retour", false, back), 12);
+            add(outer, text(title, 24, Color.WHITE, true), 6);
+        }
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setVerticalScrollBarEnabled(false);
@@ -140,11 +165,112 @@ public final class MainActivity extends Activity {
     private String dateNow() { return LocalDate.now().toString(); }
     private String timeNow() { return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")); }
 
+    private void renderTicketSelection(LinearLayout panel) {
+        org.json.JSONArray found=TicketSelectionStore.list(this);
+        add(panel,text("🎟️  Tes billets passés",20,Color.WHITE,true),9);
+        add(panel,text(found.length()+" événement(s) détecté(s) sur Shotgun.\n"
+            +"Ils sont tous cochés par défaut. Décoche simplement ceux que tu veux ignorer.",14,SOFT,false),15);
+        TextView selectionCount=text(TicketSelectionStore.selectedCount(this)+
+            " / "+found.length()+" sélectionné(s)",14,ACCENT,true);
+        add(panel,selectionCount,12);
+
+        LinearLayout controls=new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams ctrlLayout=new LinearLayout.LayoutParams(-1,-2);
+        ctrlLayout.bottomMargin=dp(17);
+        panel.addView(controls,ctrlLayout);
+
+        TextView selectAll=button("✓ Tout cocher",false,()->{
+            TicketSelectionStore.markAll(this,true);
+            syncLastSignature="";
+            renderSyncProgress();
+        });
+        controls.addView(selectAll,new LinearLayout.LayoutParams(0,-2,1));
+        TextView selectNone=button("Tout décocher",false,()->{
+            TicketSelectionStore.markAll(this,false);
+            syncLastSignature="";
+            renderSyncProgress();
+        });
+        LinearLayout.LayoutParams noneLp=new LinearLayout.LayoutParams(0,-2,1);
+        noneLp.leftMargin=dp(8);
+        controls.addView(selectNone,noneLp);
+
+        TextView launch=button("Synchroniser",true,()->{
+            int n=TicketSelectionStore.selectedCount(this);
+            if(n<1){
+                message("Coche au moins une soirée à importer.");
+                return;
+            }
+            try {
+                AutoSyncScheduler.enable(this);
+                ShotgunSyncService.importSelected(this);
+                SyncState.save(this,SyncState.RUNNING,"Préparation de la synchronisation",
+                    0,n,-1,"Téléchargement des informations des soirées sélectionnées");
+                syncLastSignature="";
+                renderSyncProgress();
+            }catch(Exception ex) {
+                message("Synchronisation impossible : "+ex.getMessage());
+            }
+        });
+
+        for(int i=0;i<found.length();i++){
+            JSONObject event=found.optJSONObject(i);
+            if(event==null)continue;
+            final int index=i;
+            LinearLayout card=column();
+            card.setPadding(dp(11),dp(12),dp(11),dp(12));
+            card.setBackground(rounded(PANEL,15));
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);
+            cp.bottomMargin=dp(10);
+            panel.addView(card,cp);
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            card.addView(row,new LinearLayout.LayoutParams(-1,-2));
+            String poster=event.optString("poster");
+            if(poster.startsWith("https://")){
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setBackground(rounded(Color.rgb(45,44,66),8));
+                LinearLayout.LayoutParams imgLp=new LinearLayout.LayoutParams(dp(56),dp(74));
+                imgLp.rightMargin=dp(11);
+                row.addView(image,imgLp);
+                loadImage(image,poster);
+            }
+            LinearLayout info=column();
+            row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView title=text(event.optString("title","Soirée"),15,Color.WHITE,true);
+            title.setMaxLines(3);
+            add(info,title,6);
+            String date=event.optString("date");
+            if(!date.isEmpty())add(info,text(prettyDate(date),12,SOFT,false),0);
+            CheckBox checked=new CheckBox(this);
+            checked.setButtonTintList(ColorStateList.valueOf(ACCENT));
+            checked.setChecked(event.optBoolean("selected",true));
+            checked.setContentDescription("Importer "+event.optString("title"));
+            row.addView(checked,new LinearLayout.LayoutParams(dp(46),dp(52)));
+            checked.setOnCheckedChangeListener((button,isChecked)->{
+                TicketSelectionStore.mark(this,index,isChecked);
+                int n=TicketSelectionStore.selectedCount(this);
+                selectionCount.setText(n+" / "+found.length()+" sélectionné(s)");
+                launch.setText("Synchroniser les "+n+" soirée(s)");
+                launch.setAlpha(n>0?1f:0.55f);
+            });
+            row.setOnClickListener(v->checked.setChecked(!checked.isChecked()));
+        }
+        launch.setText("Synchroniser les "+TicketSelectionStore.selectedCount(this)+" soirée(s)");
+        add(panel,launch,13);
+        add(panel,text("La synchronisation continuera sur l'accueil. Les cases décochées ne seront pas importées lors de cette sélection.",12,SOFT,false),0);
+    }
+
     private void renderSyncProgress() {
         if(syncPanel==null)return;
         JSONObject state=SyncState.read(this);
         String mode=state.optString("state",SyncState.IDLE);
-        if(SyncState.IDLE.equals(mode)) {
+        if(SyncState.IDLE.equals(mode) ||
+          (SyncState.DONE.equals(mode) && SyncFailureStore.list(this).length()==0 &&
+           !state.optString("phase").toLowerCase(Locale.ROOT).contains("partiel") &&
+           !state.optString("detail").toLowerCase(Locale.ROOT).contains("non récupéré"))) {
             syncPanel.removeAllViews();
             syncPanel.setVisibility(View.GONE);
             return;
@@ -156,6 +282,11 @@ public final class MainActivity extends Activity {
         syncLastSignature=signature;
         syncPanel.removeAllViews();
         LinearLayout panel=card();
+        if(SyncState.SELECTION.equals(mode)) {
+            renderTicketSelection(panel);
+            add(syncPanel,panel,18);
+            return;
+        }
         String heading=SyncState.RUNNING.equals(mode)?"Synchronisation Shotgun":
             SyncState.DONE.equals(mode)?"Synchronisation terminée":
             SyncState.BLOCKED.equals(mode)?"Synchronisation à reprendre":
@@ -191,6 +322,8 @@ public final class MainActivity extends Activity {
             add(panel,button("Arrêter la synchronisation",false,()->ShotgunSyncService.cancel(this)),0);
         else if(!SyncState.DONE.equals(mode))
             add(panel,button("Reconnecter Shotgun",false,this::connectShotgun),0);
+        if(!SyncState.RUNNING.equals(mode) && !SyncState.SELECTION.equals(mode))
+            renderFailedEvents(panel);
         add(syncPanel,panel,18);
         if(!SyncState.RUNNING.equals(mode)) {
             long stamp=state.optLong("updatedAt");
@@ -207,43 +340,65 @@ public final class MainActivity extends Activity {
     }
     private void showHome() {
         store=new AppStore(this);
-        screen("AfterLog", null);
+        screen("AfterLog",null);
         syncPanel=column();
         syncLastSignature="";
         add(page,syncPanel,8);
         renderSyncProgress();
-        subtitle("Ton journal personnel de soirées. Données conservées sur ton téléphone.");
-        add(page, button("＋  Ajouter une soirée", true, () -> editEvent(new JSONObject())),10);
-        add(page, button("🔐  Connexion Shotgun · Mes billets", true, this::connectShotgun),10);
-        add(page, button("↗  Importer un lien Shotgun", false, this::importShotgun),10);
-        add(page, button("Statistiques", false, this::showStats),10);
-        add(page, button("↻  Rechercher une mise à jour", false, () -> updater.check()),10);
-        add(page, button("Réglages et sauvegarde", false, this::showSettings),24);
-        List<JSONObject> events = store.events();
-        add(page,text("MES SOIRÉES  •  "+events.size(),15,ACCENT,true),13);
-        if(events.isEmpty()) {
-            LinearLayout c=card();
-            add(c,text("Aucune soirée enregistrée",18,Color.WHITE,true),8);
-            add(c,text("Ajoute une soirée manuellement ou colle son lien Shotgun.",14,SOFT,false),0);
-            add(page,c,12);
+
+        LinearLayout actions=new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        add(page,actions,12);
+        TextView addEvent=button("＋ Soirée",true,()->editEvent(new JSONObject()));
+        actions.addView(addEvent,new LinearLayout.LayoutParams(0,-2,1));
+        TextView sync=button("🎟 Shotgun",false,this::connectShotgun);
+        LinearLayout.LayoutParams syncParams=new LinearLayout.LayoutParams(0,-2,1);
+        syncParams.leftMargin=dp(8);
+        actions.addView(sync,syncParams);
+
+        LinearLayout shortcuts=new LinearLayout(this);
+        shortcuts.setOrientation(LinearLayout.HORIZONTAL);
+        add(page,shortcuts,18);
+        TextView rdr=button("♡ RDR",false,()->startActivity(new Intent(this,RdrActivity.class)));
+        shortcuts.addView(rdr,new LinearLayout.LayoutParams(0,-2,1));
+        TextView stats=button("Statistiques",false,this::showStats);
+        LinearLayout.LayoutParams statsParams=new LinearLayout.LayoutParams(0,-2,1);
+        statsParams.leftMargin=dp(8);shortcuts.addView(stats,statsParams);
+
+        List<JSONObject> events=store.events();
+        add(page,text("MES SOIRÉES   ·   "+events.size(),15,ACCENT,true),11);
+        if(events.isEmpty()){
+            LinearLayout empty=card();
+            add(empty,text("Aucune soirée pour l'instant",17,Color.WHITE,true),7);
+            add(empty,text("Ajoute une soirée ou connecte Shotgun pour rechercher tes billets.",13,SOFT,false),0);
+            add(page,empty,13);
         }
         for(JSONObject e:events) {
-            LinearLayout c=card();
+            LinearLayout card=card();
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            add(card,row,0);
             String url=e.optString("poster");
-            if(!url.isEmpty()) {
-                ImageView cover=new ImageView(this);
-                cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                cover.setBackground(rounded(Color.rgb(40,40,60),12));
-                LinearLayout.LayoutParams imageLp=new LinearLayout.LayoutParams(-1,dp(155));
-                imageLp.bottomMargin=dp(12); c.addView(cover,imageLp);
-                loadImage(cover,url);
+            if(!url.isEmpty()){
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setBackground(rounded(Color.rgb(42,44,64),10));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(73),dp(92));
+                lp.rightMargin=dp(12);row.addView(image,lp);loadImage(image,url);
             }
-            add(c,text(e.optString("title","Soirée"),19,Color.WHITE,true),7);
-            add(c,text(e.optString("date")+"   "+e.optString("start"),14,ACCENT,false),6);
-            add(c,text((e.optString("venue")+" · "+e.optString("city")).replaceAll("^ · | · $",""),14,SOFT,false),7);
-            add(c,text("Voir la soirée et mes consommations ›",13,Color.WHITE,true),0);
-            c.setOnClickListener(v -> showEvent(e.optLong("id")));
-            add(page,c,12);
+            LinearLayout details=column();
+            row.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+            TextView title=text(e.optString("title","Événement"),17,Color.WHITE,true);
+            title.setMaxLines(2);add(details,title,7);
+            add(details,text(e.optString("date")+"  "+e.optString("start"),13,ACCENT,false),5);
+            String venue=e.optString("venue");
+            if(venue.isEmpty())venue=e.optString("city");
+            if(!venue.isEmpty())add(details,text(venue,13,SOFT,false),5);
+            add(details,text("Ouvrir  ›",12,SOFT,true),0);
+            row.setOnClickListener(v->showEvent(e.optLong("id")));
+            card.setOnClickListener(v->showEvent(e.optLong("id")));
+            add(page,card,10);
         }
     }
 
@@ -252,6 +407,7 @@ public final class MainActivity extends Activity {
         if(event==null){showHome();return;}
         currentEventId=id;
         screen("Événement",this::showHome);
+        renderJournalFirst(id);
         // Structure proche de la fiche Shotgun : grande affiche, titre, date et lieu,
         // à propos, programmation, ambiance musicale et localisation.
         String poster=event.optString("poster");
@@ -266,6 +422,7 @@ public final class MainActivity extends Activity {
             loadImage(image,poster);
         }
         add(page,text(event.optString("title","Soirée"),25,Color.WHITE,true),9);
+        renderEventPhotos(event);
         if(!event.optString("organizer").isEmpty())
             add(page,text("Par "+event.optString("organizer"),14,SOFT,false),14);
 
@@ -284,7 +441,6 @@ public final class MainActivity extends Activity {
             (event.optString("city").isEmpty()?"":" · "+event.optString("city")));
         add(page,summary,17);
 
-        add(page,button("＋  Ajouter une consommation",true,()->editEntry(new JSONObject(),id)),10);
         add(page,button("Modifier les informations",false,()->editEvent(event)),24);
 
         String description=event.optString("description");
@@ -296,7 +452,7 @@ public final class MainActivity extends Activity {
         }
         if(!event.optString("artists").isEmpty()) {
             add(page,text("Line-up",21,Color.WHITE,true),9);
-            addChips(event.optString("artists"),"🎧");
+            renderArtistProfiles(event);
         }
         if(!event.optString("genres").isEmpty()) {
             add(page,text("Vibe · Styles musicaux",21,Color.WHITE,true),9);
@@ -319,30 +475,6 @@ public final class MainActivity extends Activity {
         if(link.startsWith("https://"))add(page,button("Voir la fiche officielle sur Shotgun",false,()->
             startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(link)))),18);
 
-        add(page,text("Mon journal de soirée",22,Color.WHITE,true),5);
-        add(page,text("Consommations et notes personnelles · visibles uniquement dans AfterLog",13,SOFT,false),14);
-        List<JSONObject> entries=store.entries(id);
-        if(entries.isEmpty()) {
-            LinearLayout empty=card();
-            add(empty,text("Aucune consommation enregistrée",15,SOFT,false),0);
-            add(page,empty,12);
-        }
-        for(JSONObject entry:entries) {
-            LinearLayout c=card();
-            add(c,text(ConsumptionActivity.iconFor(entry.optString("category"),entry.optString("name"))+
-                "  "+entry.optString("name","Consommation"),18,Color.WHITE,true),6);
-            add(c,text(entry.optString("category")+" · "+
-                entry.optString("quantity","1")+" "+entry.optString("unit"),14,ACCENT,false),6);
-            add(c,text(entry.optString("date")+" · "+
-                (entry.optBoolean("allNight",false)?"Pendant toute la soirée":entry.optString("time")),13,SOFT,false),6);
-            if(entry.optDouble("cost",0)!=0)
-                add(c,text(String.format(Locale.FRANCE,"%.2f €",entry.optDouble("cost")),14,SOFT,false),6);
-            if(!entry.optString("notes").isEmpty())
-                add(c,text(entry.optString("notes"),14,SOFT,false),7);
-            add(c,text("Modifier ›",13,Color.WHITE,true),0);
-            c.setOnClickListener(v->editEntry(entry,id));
-            add(page,c,10);
-        }
         if(!event.optString("notes").isEmpty()) {
             add(page,text("Mes notes",19,Color.WHITE,true),9);
             LinearLayout personal=card();
@@ -356,6 +488,175 @@ public final class MainActivity extends Activity {
             .setPositiveButton("Supprimer",(d,w)->{store.deleteEvent(id);showHome();})
             .show()),0);
     }
+    private void renderJournalFirst(long id) {
+        add(page,text("Mon journal de soirée",22,Color.WHITE,true),6);
+        add(page,text("Tes consommations · enregistrées uniquement sur ton téléphone",13,SOFT,false),12);
+        add(page,button("＋ Ajouter une consommation",true,()->editEntry(new JSONObject(),id)),14);
+        List<JSONObject> entries=store.entries(id);
+        if(entries.isEmpty()){
+            LinearLayout empty=card();
+            add(empty,text("Aucune consommation enregistrée pour cette soirée.",14,SOFT,false),0);
+            add(page,empty,15);
+        }
+        for(JSONObject entry:entries){
+            LinearLayout c=card();
+            add(c,text(ConsumptionActivity.iconFor(entry.optString("category"),entry.optString("name"))+
+                "  "+entry.optString("name","Consommation"),18,Color.WHITE,true),7);
+            JSONObject parts=entry.optJSONObject("parts");
+            String countLabel="";
+            if(parts!=null){
+                ArrayList<String> labels=new ArrayList<>();
+                int whole=parts.optInt("entier"),half=parts.optInt("demi"),quarter=parts.optInt("quart");
+                if(whole>0)labels.add(whole+" entier"+(whole>1?"s":""));
+                if(half>0)labels.add(half+" demi");
+                if(quarter>0)labels.add(quarter+" quart"+(quarter>1?"s":""));
+                countLabel=android.text.TextUtils.join(" + ",labels);
+            }
+            if(countLabel.isEmpty())countLabel=entry.optString("quantity","1")+" "+entry.optString("unit");
+            String route=entry.optString("route");
+            if(route.contains("(para)"))countLabel+=" · para";
+            else if(route.contains("(trace)"))countLabel+=" · trace";
+            add(c,text(countLabel,15,ACCENT,true),6);
+            String measured=entry.optString("measuredAmount");
+            if(!measured.isEmpty())add(c,text("Quantité déclarée : "+measured+" "+
+                entry.optString("measuredUnit"),13,SOFT,false),5);
+            String size=entry.optString("subjectiveSize");
+            if(!size.isEmpty())add(c,text("Taille apparente : "+size,13,SOFT,false),5);
+            String timing=entry.optString("timeMode",entry.optBoolean("allNight")?"all":"exact");
+            String when=timing.equals("all")?"Pendant toute la soirée":
+                timing.equals("between")?"Entre "+entry.optString("time")+" et "+entry.optString("timeEnd"):
+                "Heure exacte : "+entry.optString("time");
+            add(c,text(entry.optString("date")+" · "+when,13,SOFT,false),6);
+            if(!route.isEmpty())add(c,text("Mode : "+("Autre".equals(route)?
+                entry.optString("routeOther","Autre"):route),13,SOFT,false),5);
+            if(entry.optDouble("cost",0)>0)
+                add(c,text(String.format(Locale.FRANCE,"%.2f €",entry.optDouble("cost")),14,SOFT,false),5);
+            if(!entry.optString("notes").isEmpty())add(c,text(entry.optString("notes"),14,SOFT,false),7);
+            add(c,text("Modifier ›",13,Color.WHITE,true),0);
+            c.setOnClickListener(v->editEntry(entry,id));
+            add(page,c,10);
+        }
+        add(page,text("Informations de l'événement",21,Color.WHITE,true),12);
+    }
+
+    private void renderArtistProfiles(JSONObject event) {
+        JSONArray profiles=event.optJSONArray("artistProfiles");
+        if(profiles==null||profiles.length()==0){
+            addChips(event.optString("artists"),"🎧");
+            return;
+        }
+        for(int i=0;i<profiles.length();i++){
+            JSONObject profile=profiles.optJSONObject(i);
+            if(profile==null)continue;
+            String name=profile.optString("name").trim();
+            if(name.isEmpty())continue;
+            LinearLayout card=card();
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            add(card,row,0);
+            String photo=profile.optString("photo");
+            if(photo.startsWith("https://")){
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setBackground(rounded(Color.rgb(35,38,53),12));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(64),dp(64));
+                lp.rightMargin=dp(13);
+                row.addView(image,lp);loadImage(image,photo);
+            }
+            LinearLayout info=column();
+            row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            add(info,text(name,17,Color.WHITE,true),5);
+            String spotify=profile.optString("spotify");
+            boolean verified=spotify.matches("^https://open\\.spotify\\.com/artist/[A-Za-z0-9]+.*");
+            String target=verified?spotify:"https://open.spotify.com/search/"+Uri.encode(name);
+            add(info,text(verified?"Ouvrir l'artiste sur Spotify ↗":
+                "Rechercher l'artiste sur Spotify ↗",13,ACCENT,false),0);
+            card.setOnClickListener(v->{
+                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target)));}
+                catch(Exception e){message("Spotify n'a pas pu être ouvert.");}
+            });
+            add(page,card,10);
+        }
+    }
+
+    private void renderFailedEvents(LinearLayout panel) {
+        JSONArray failures=SyncFailureStore.list(this);
+        if(failures.length()==0)return;
+        add(panel,text("Soirées non récupérées · "+failures.length(),18,Color.WHITE,true),8);
+        add(panel,text("Voici les soirées que Shotgun n'a pas permis de compléter.",13,SOFT,false),12);
+        for(int i=0;i<failures.length();i++){
+            JSONObject item=failures.optJSONObject(i);
+            if(item==null)continue;
+            LinearLayout c=card();
+            add(c,text(item.optString("title","Événement"),16,Color.WHITE,true),6);
+            if(!item.optString("date").isEmpty())
+                add(c,text(item.optString("date"),13,SOFT,false),5);
+            add(c,text("Échec : "+item.optString("reason","Informations indisponibles"),13,SOFT,false),9);
+            String url=item.optString("url");
+            add(c,button("Réessayer cette soirée",false,()->{
+                try{
+                    ShotgunSyncService.retryFailed(this,url);
+                    SyncState.save(this,SyncState.RUNNING,"Nouvelle tentative",
+                        0,1,-1,item.optString("title"));
+                    syncLastSignature="";
+                    renderSyncProgress();
+                }catch(Exception ex){message("Impossible de relancer : "+ex.getMessage());}
+            }),8);
+            add(c,button("Ajouter manuellement",false,()->{
+                JSONObject draft=new JSONObject();
+                try{
+                    draft.put("title",item.optString("title"));
+                    draft.put("date",item.optString("date"));
+                    draft.put("poster",item.optString("poster"));
+                    draft.put("url",item.optString("url"));
+                    draft.put("origin","Shotgun (manuel)");
+                }catch(Exception ignored){}
+                editEvent(draft);
+            }),8);
+            if(url.startsWith("https://"))add(c,button("Ouvrir sur Shotgun",false,()->
+                startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)))),0);
+            add(panel,c,10);
+        }
+    }
+
+    private void renderEventPhotos(JSONObject event) {
+        add(page,button("📸  Ajouter des photos à cette soirée",false,()->{
+            currentEventId=event.optLong("id");
+            Intent picker=new Intent(Intent.ACTION_GET_CONTENT);
+            picker.setType("image/*");
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+            startActivityForResult(Intent.createChooser(picker,"Photos de la soirée"),EVENT_IMAGES_REQUEST);
+        }),13);
+        JSONArray items=EventPhotos.gallery(event);
+        if(items.length()==0)return;
+        add(page,text("Mes photos · "+items.length(),18,Color.WHITE,true),10);
+        for(int start=0;start<items.length();start+=3){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            add(page,row,8);
+            for(int j=0;j<3;j++){
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(105),1);
+                lp.setMargins(dp(3),0,dp(3),0);
+                if(start+j>=items.length()){row.addView(new View(this),lp);continue;}
+                String name=items.optString(start+j);
+                ImageView photo=new ImageView(this);
+                photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                photo.setBackground(rounded(PANEL,12));
+                android.graphics.Bitmap bitmap=EventPhotos.preview(this,name,260);
+                if(bitmap!=null)photo.setImageBitmap(bitmap);
+                row.addView(photo,lp);
+                photo.setOnClickListener(v->new AlertDialog.Builder(this)
+                    .setTitle("Photo de la soirée")
+                    .setMessage("Tu peux agrandir ou retirer cette photo dans « Modifier les informations ».")
+                    .setPositiveButton("Modifier la soirée",(d,w)->editEvent(event))
+                    .setNegativeButton("Fermer",null).show());
+            }
+        }
+        add(page,new View(this),13);
+    }
+
     private String prettyDate(String date) {
         try {
             return java.time.LocalDate.parse(date)
@@ -403,36 +704,9 @@ public final class MainActivity extends Activity {
         return input;
     }
     private void editEvent(JSONObject original) {
-        long id=original.optLong("id");
-        screen(id==0?"Nouvelle soirée":"Modifier la soirée",()->{
-            if(id==0)showHome();else showEvent(id);
-        });
-        LinkedHashMap<String,EditText> fields=new LinkedHashMap<>();
-        String[][] definitions={
-            {"title","Nom de l'événement"},{"date","Date (AAAA-MM-JJ)"},
-            {"start","Heure de début (HH:mm)"},{"end","Heure de fin (HH:mm)"},
-            {"venue","Lieu"},{"city","Ville"},{"address","Adresse"},
-            {"artists","Artistes / line-up"},{"organizer","Organisateur"},
-            {"genres","Genres musicaux"},{"poster","Lien de l'affiche"},
-            {"url","Lien Shotgun"},{"description","Description"},
-            {"notes","Mes notes personnelles"}
-        };
-        for(String[] def:definitions) {
-            boolean multi=def[0].equals("description")||def[0].equals("notes");
-            String defaultValue=def[0].equals("date") && id==0 ? dateNow() : "";
-            fields.put(def[0],field(page,def[1],original.optString(def[0],defaultValue),multi));
-        }
-        add(page,button("Enregistrer la soirée",true,()->{
-            try {
-                JSONObject e=new JSONObject(original.toString());
-                for(Map.Entry<String,EditText> item:fields.entrySet())
-                    e.put(item.getKey(),item.getValue().getText().toString().trim());
-                if(e.optString("title").isEmpty()){message("Indique un nom");return;}
-                if(e.optString("origin").isEmpty())e.put("origin","Manuel");
-                JSONObject saved=store.saveEvent(e);
-                showEvent(saved.getLong("id"));
-            } catch(Exception ex){message("Enregistrement impossible : "+ex.getMessage());}
-        }),0);
+        Intent intent=new Intent(this,EventEditorActivity.class);
+        intent.putExtra(EventEditorActivity.EXTRA_EVENT,original.toString());
+        startActivityForResult(intent,EVENT_EDITOR_REQUEST);
     }
 
     private void editEntry(JSONObject original,long eventId) {
@@ -574,6 +848,11 @@ public final class MainActivity extends Activity {
                 changed=true;
             }
         }
+        if(existing.optJSONArray("artistProfiles")==null &&
+            incoming.optJSONArray("artistProfiles")!=null) {
+            existing.put("artistProfiles",incoming.getJSONArray("artistProfiles"));
+            changed=true;
+        }
         return changed;
     }
     private String normalizedEventUrl(String url) {
@@ -604,6 +883,7 @@ public final class MainActivity extends Activity {
         screen("Confidentialité et sauvegarde",this::showHome);
         subtitle("Les consommations sont stockées localement sur cet appareil. Aucun compte Shotgun ou Gmail n'est nécessaire.");
         add(page,button("↻ Rechercher une mise à jour",false,()->updater.check()),10);
+        add(page,button("Importer une soirée par lien Shotgun",false,this::importShotgun),10);
         add(page,button("Exporter toutes mes données (JSON)",true,()->{
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -617,13 +897,47 @@ public final class MainActivity extends Activity {
             intent.setType("application/json");
             startActivityForResult(intent,IMPORT);
         }),14);
-        subtitle("Attention : la sauvegarde JSON exportée contient ton journal en clair. Garde-la dans un emplacement privé. L'import remplace toutes les données actuelles.");
-        subtitle("Connecte-toi à Shotgun dans le navigateur intégré. Ouvre « Mes billets → Passés », puis importe les liens affichés. Une synchronisation complète automatique n’est pas encore disponible.");
+        subtitle("Attention : la sauvegarde JSON actuelle n'inclut pas les fichiers des photos personnelles. Conserve les photos originales sur ton téléphone. Le journal JSON n'est pas chiffré.");
+        subtitle("Après connexion à Shotgun, AfterLog recherche « Mes billets → Passés » et affiche les événements à cocher avant de synchroniser. La disponibilité dépend du site et de ta session.");
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==EVENT_EDITOR_REQUEST) {
+            if(resultCode==RESULT_OK && data!=null) {
+                long id=data.getLongExtra(EventEditorActivity.EXTRA_SAVED_ID,0);
+                store=new AppStore(this);
+                if(id>0)showEvent(id);else showHome();
+            }else if(currentEventId>0)showEvent(currentEventId);
+            else showHome();
+            return;
+        }
+        if(requestCode==EVENT_IMAGES_REQUEST){
+            if(resultCode==RESULT_OK && data!=null){
+                JSONObject current=store.event(currentEventId);
+                if(current!=null){
+                    int added=0,errors=0;
+                    int length=data.getClipData()==null?1:data.getClipData().getItemCount();
+                    for(int i=0;i<length&&i<40;i++){
+                        Uri uri=data.getClipData()==null?data.getData():data.getClipData().getItemAt(i).getUri();
+                        try{
+                            if(EventPhotos.gallery(current).length()>=40)break;
+                            EventPhotos.append(current,EventPhotos.importUri(this,uri));
+                            added++;
+                        }catch(Exception ex){errors++;}
+                    }
+                    store.saveEvent(current);
+                    message(added+" photo(s) ajoutée(s)"+(errors>0?" · "+errors+" ignorée(s)":""));
+                    showEvent(currentEventId);
+                }
+            }
+            return;
+        }
         if(requestCode==CONSUMPTION_REQUEST){
             if(resultCode==RESULT_OK)showEvent(currentEventId);
+            return;
+        }
+        if(requestCode==SHOTGUN_REQUEST && resultCode==RESULT_OK && data==null){
+            showHome();
             return;
         }
         if(resultCode!=RESULT_OK || data==null)return;

@@ -43,6 +43,15 @@ public final class ShotgunBrowserActivity extends Activity {
     private ShotgunBatchImporter batch;
     private boolean autoSyncMode;
     private boolean syncTriggered;
+    private final android.os.Handler authHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private int authChecks;
+    private final Runnable authPoll=new Runnable(){
+        @Override public void run() {
+            if(!autoSyncMode || syncTriggered || isFinishing() || web==null || authChecks++>120)return;
+            detectLoginAndSync();
+            authHandler.postDelayed(this,2500);
+        }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -79,7 +88,7 @@ public final class ShotgunBrowserActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(actions);
         button(actions,"Importer cet événement",this::importCurrent,1);
-        button(actions,"Synchroniser mon compte",()->launchSync(web.getUrl()),1);
+        button(actions,"Connexion terminée · Continuer",()->launchSync(web.getUrl()),1);
 
         web = new WebView(this);
         batch = new ShotgunBatchImporter(this,web, message -> status.setText(message), this::finishWithEvents);
@@ -138,7 +147,10 @@ public final class ShotgunBrowserActivity extends Activity {
         button(footer,"Déconnecter Shotgun",this::confirmLogout,2);
 
         autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
-        if(autoSyncMode)status.setText("Connecte-toi à Shotgun. La synchronisation démarrera automatiquement lorsque ta session sera reconnue.");
+        if(autoSyncMode) {
+            status.setText("Connecte-toi sur Shotgun. AfterLog cherchera ensuite tes billets passés.");
+            authHandler.postDelayed(authPoll,2300);
+        }
         String initial=getIntent().getStringExtra(EXTRA_URL);
         if(initial!=null && trusted(Uri.parse(initial))) web.loadUrl(initial);
         else web.loadUrl(SHOTGUN_LOGIN);
@@ -212,7 +224,7 @@ public final class ShotgunBrowserActivity extends Activity {
             try {
                 JSONObject state=new JSONObject(decoded(raw));
                 if(!state.optBoolean("ok")){
-                    status.setText("Connecte-toi à Shotgun. Si la connexion n'est pas détectée, utilise « Synchroniser ».");
+                    status.setText("Connecte-toi à Shotgun. Si la connexion n’est pas détectée, utilise « Connexion terminée ».");
                     return;
                 }
                 launchSync(state.optString("url",address));
@@ -223,7 +235,8 @@ public final class ShotgunBrowserActivity extends Activity {
         if(syncTriggered)return;
         syncTriggered=true;
         try {
-            AutoSyncScheduler.enable(this);
+            // Suspendre la recherche périodique jusqu'au choix des billets à importer.
+            AutoSyncScheduler.disable(this);
             ShotgunSyncService.start(this,url);
             setResult(RESULT_OK);
             finish();
@@ -269,6 +282,7 @@ public final class ShotgunBrowserActivity extends Activity {
         else super.onBackPressed();
     }
     @Override protected void onDestroy() {
+        authHandler.removeCallbacksAndMessages(null);
         if(batch!=null)batch.cancelSilently();
         if(web!=null){
             ViewGroup parent=(ViewGroup)web.getParent();
@@ -371,6 +385,38 @@ public final class ShotgunBrowserActivity extends Activity {
           if(!result.genres)result.genres=linked(/\\/genre|\\/music\\//i,20);
           if(!result.artists)result.artists=linked(/\\/artist/i,45);
           if(!result.organizer)result.organizer=linked(/\\/organi[sz]er/i,10);
+          const profiles=[];
+          const seenArtists=new Set();
+          const addArtist=(name,photo,spotify)=>{
+            name=typeof name==='string'?name.trim():'';
+            if(!name||seenArtists.has(name.toLowerCase())||profiles.length>=45)return;
+            if(photo && !/^https:\\/\\//.test(photo))photo='';
+            if(spotify && !/^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]+/.test(spotify))spotify='';
+            seenArtists.add(name.toLowerCase());
+            profiles.push({name,photo:photo||'',spotify:spotify||''});
+          };
+          if(node){
+            const perf=Array.isArray(node.performer)?node.performer:[node.performer];
+            for(const person of perf){
+              if(!person || typeof person!=='object')continue;
+              const photo=typeof person.image==='string'?person.image:
+                Array.isArray(person.image)?person.image[0]:
+                person.image&&typeof person.image==='object'?person.image.url:'';
+              const same=Array.isArray(person.sameAs)?person.sameAs:[person.sameAs];
+              const spotify=same.find(u=>typeof u==='string'&&
+                /^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]+/.test(u))||'';
+              addArtist(person.name,photo,spotify);
+            }
+          }
+          for(const a of document.querySelectorAll('main a[href*="/artist"],article a[href*="/artist"]')){
+            if(profiles.length>=45)break;
+            const name=(a.querySelector('h2,h3,h4')?.textContent ||a.textContent ||
+              a.querySelector('img')?.alt||'').trim().replace(/\\s+/g,' ');
+            const img=a.querySelector('img');
+            const photo=img?.currentSrc||img?.src||'';
+            addArtist(name,photo,'');
+          }
+          if(profiles.length)result.artistProfiles=profiles;
           return JSON.stringify(result);
         })();
         """;
