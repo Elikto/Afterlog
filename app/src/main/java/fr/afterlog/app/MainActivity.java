@@ -61,6 +61,31 @@ public final class MainActivity extends Activity {
     private ShotgunArtistAutoRefresh artistAutoRefresh;
     private boolean homeScreen=false;
     private boolean eventScreen=false;
+    // Sélection persistante uniquement pendant l'affichage d'une même soirée.
+    private long gallerySelectionEventId=0;
+    private boolean gallerySelectionMode=false;
+    private final java.util.LinkedHashSet<String> gallerySelected=new java.util.LinkedHashSet<>();
+    private final java.util.ArrayList<GalleryMedia> galleryMedia=new java.util.ArrayList<>();
+    private final java.util.LinkedHashMap<String,GalleryThumb> galleryThumbs=
+        new java.util.LinkedHashMap<>();
+    private LinearLayout gallerySelectRow,galleryActions;
+    private TextView galleryToggle,gallerySelectAll,galleryCount,galleryHint;
+    private TextView galleryDelete,galleryShare,galleryStory;
+    private static final class GalleryMedia {
+        final boolean video;
+        final String name,key;
+        GalleryMedia(boolean video,String name){
+            this.video=video;
+            this.name=name;
+            this.key=(video?"video:":"photo:")+name;
+        }
+    }
+    private static final class GalleryThumb {
+        final FrameLayout frame;
+        final TextView check;
+        GalleryThumb(FrameLayout frame,TextView check){this.frame=frame;this.check=check;}
+    }
+
     private long renderedEventRevision=-1L;
     private long displayedEventsRevision=-1L;
     private final Handler syncHandler=new Handler(Looper.getMainLooper());
@@ -1045,15 +1070,43 @@ public final class MainActivity extends Activity {
         currentEventId=id;
         startActivityForResult(MediaPicker.photosAndVideos(),EVENT_MEDIA_REQUEST);
     }
+    private TextView galleryAction(String label,boolean primary,Runnable action){
+        TextView control=text(label,13,primary?BG:Color.WHITE,true);
+        control.setGravity(Gravity.CENTER);
+        control.setMinHeight(dp(45));
+        control.setPadding(dp(8),dp(10),dp(8),dp(10));
+        control.setBackground(rounded(primary?ACCENT:PANEL,13));
+        control.setOnClickListener(v->action.run());
+        return control;
+    }
     private void renderEventPhotos(JSONObject event) {
-        long eventId=event.optLong("id");
-        JSONArray photos=EventPhotos.gallery(event);
-        JSONArray videos=EventVideos.list(event);
-        int total=photos.length()+videos.length();
+        final long eventId=event.optLong("id");
+        JSONArray photos=EventPhotos.gallery(event),videos=EventVideos.list(event);
+        if(gallerySelectionEventId!=eventId){
+            gallerySelectionEventId=eventId;
+            gallerySelectionMode=false;
+            gallerySelected.clear();
+        }
+        galleryMedia.clear();
+        galleryThumbs.clear();
+        for(int i=0;i<photos.length();i++){
+            String name=photos.optString(i);
+            if(EventPhotos.file(this,name)!=null)galleryMedia.add(new GalleryMedia(false,name));
+        }
+        for(int i=0;i<videos.length();i++){
+            String name=videos.optString(i);
+            if(EventVideos.file(this,name)!=null)galleryMedia.add(new GalleryMedia(true,name));
+        }
+        java.util.HashSet<String> present=new java.util.HashSet<>();
+        for(GalleryMedia item:galleryMedia)present.add(item.key);
+        gallerySelected.retainAll(present);
+        final int total=galleryMedia.size();
+        if(total==0){gallerySelectionMode=false;gallerySelected.clear();}
+
         LinearLayout galleryHeader=new LinearLayout(this);
         galleryHeader.setOrientation(LinearLayout.HORIZONTAL);
         galleryHeader.setGravity(Gravity.CENTER_VERTICAL);
-        add(page,galleryHeader,12);
+        add(page,galleryHeader,10);
         TextView title=text("Ma galerie"+(total>0?" · "+total:""),20,Color.WHITE,true);
         galleryHeader.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
         TextView addMedia=button("＋ Médias",false,()->pickMedia(eventId));
@@ -1063,44 +1116,221 @@ public final class MainActivity extends Activity {
             add(page,text("Ajoute ici les photos et vidéos de ta soirée.",13,SOFT,false),12);
             return;
         }
+
+        gallerySelectRow=new LinearLayout(this);
+        gallerySelectRow.setOrientation(LinearLayout.HORIZONTAL);
+        gallerySelectRow.setGravity(Gravity.CENTER_VERTICAL);
+        add(page,gallerySelectRow,9);
+        galleryToggle=galleryAction("✓ Sélectionner",false,()->{
+            gallerySelectionMode=!gallerySelectionMode;
+            if(!gallerySelectionMode)gallerySelected.clear();
+            refreshGallerySelection();
+        });
+        gallerySelectRow.addView(galleryToggle,
+            new LinearLayout.LayoutParams(0,dp(44),1));
+        galleryCount=text("",13,ACCENT,true);
+        galleryCount.setGravity(Gravity.CENTER);
+        gallerySelectRow.addView(galleryCount,
+            new LinearLayout.LayoutParams(0,dp(44),.88f));
+        gallerySelectAll=galleryAction("Tout",false,()->{
+            if(gallerySelected.size()==galleryMedia.size())gallerySelected.clear();
+            else for(GalleryMedia item:galleryMedia)gallerySelected.add(item.key);
+            refreshGallerySelection();
+        });
+        gallerySelectRow.addView(gallerySelectAll,
+            new LinearLayout.LayoutParams(0,dp(44),.62f));
+
+        galleryActions=new LinearLayout(this);
+        galleryActions.setOrientation(LinearLayout.HORIZONTAL);
+        galleryActions.setGravity(Gravity.CENTER_VERTICAL);
+        add(page,galleryActions,11);
+        galleryDelete=galleryAction("Supprimer",false,()->confirmDeleteGallery(eventId));
+        galleryShare=galleryAction("Partager",false,()->shareGallery(eventId,false));
+        galleryStory=galleryAction("Story Instagram",true,()->shareGallery(eventId,true));
+        for(TextView action:new TextView[]{galleryDelete,galleryShare,galleryStory}){
+            LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(0,dp(48),1);
+            layout.setMargins(dp(3),0,dp(3),0);
+            galleryActions.addView(action,layout);
+        }
+        galleryStory.setTextSize(12);
+
         for(int offset=0;offset<total;offset+=3){
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             add(page,row,8);
             for(int slot=0;slot<3;slot++){
-                int index=offset+slot;
+                final int index=offset+slot;
                 LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(0,dp(108),1f);
                 layout.setMargins(dp(3),0,dp(3),0);
                 if(index>=total){row.addView(new View(this),layout);continue;}
-                boolean video=index>=photos.length();
-                String filename=video?videos.optString(index-photos.length()):photos.optString(index);
+                GalleryMedia media=galleryMedia.get(index);
                 FrameLayout thumb=new FrameLayout(this);
                 thumb.setBackground(rounded(Color.rgb(35,34,54),15));
                 thumb.setClipToOutline(true);
                 row.addView(thumb,layout);
                 ImageView image=new ImageView(this);
                 image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                Bitmap picture=video?
-                    EventVideos.thumbnail(this,filename):EventPhotos.preview(this,filename,360);
+                Bitmap picture=media.video?
+                    EventVideos.thumbnail(this,media.name):
+                    EventPhotos.preview(this,media.name,360);
                 if(picture!=null)image.setImageBitmap(picture);
                 thumb.addView(image,new FrameLayout.LayoutParams(-1,-1));
-                if(video){
+                if(media.video){
                     TextView play=text("▶",26,Color.WHITE,true);
                     play.setGravity(Gravity.CENTER);
                     GradientDrawable circle=new GradientDrawable();
                     circle.setColor(Color.argb(204,26,24,42));
                     circle.setShape(GradientDrawable.OVAL);
                     play.setBackground(circle);
-                    FrameLayout.LayoutParams playLayout=new FrameLayout.LayoutParams(
-                        dp(48),dp(48),Gravity.CENTER);
-                    thumb.addView(play,playLayout);
+                    thumb.addView(play,new FrameLayout.LayoutParams(
+                        dp(48),dp(48),Gravity.CENTER));
                 }
-                thumb.setContentDescription((video?"Ouvrir la vidéo ":"Ouvrir la photo ")+(index+1));
-                thumb.setOnClickListener(v->startGallery(eventId,index));
+                TextView check=text("✓",17,BG,true);
+                check.setGravity(Gravity.CENTER);
+                FrameLayout.LayoutParams checkLp=new FrameLayout.LayoutParams(
+                    dp(31),dp(31),Gravity.TOP|Gravity.RIGHT);
+                checkLp.setMargins(0,dp(6),dp(6),0);
+                thumb.addView(check,checkLp);
+                galleryThumbs.put(media.key,new GalleryThumb(thumb,check));
+                thumb.setContentDescription((media.video?"Vidéo ":"Photo ")+(index+1)
+                    +". Appui long pour sélectionner.");
+                thumb.setOnLongClickListener(v->{
+                    if(!gallerySelectionMode){
+                        gallerySelectionMode=true;
+                        gallerySelected.clear();
+                    }
+                    gallerySelected.add(media.key);
+                    refreshGallerySelection();
+                    return true;
+                });
+                thumb.setOnClickListener(v->{
+                    if(gallerySelectionMode){
+                        if(!gallerySelected.add(media.key))gallerySelected.remove(media.key);
+                        refreshGallerySelection();
+                    }else startGallery(eventId,index);
+                });
             }
         }
-        add(page,text("Touche un média pour ouvrir la galerie plein écran.",12,SOFT,false),15);
+        galleryHint=text("",12,SOFT,false);
+        add(page,galleryHint,15);
+        refreshGallerySelection();
     }
+
+    private void refreshGallerySelection(){
+        if(gallerySelectRow==null||galleryToggle==null)return;
+        int count=gallerySelected.size();
+        galleryToggle.setText(gallerySelectionMode?"✕ Annuler":"✓ Sélectionner");
+        galleryCount.setText(gallerySelectionMode?
+            count+" / "+galleryMedia.size()+" choisi(s)":"");
+        gallerySelectAll.setVisibility(gallerySelectionMode?View.VISIBLE:View.GONE);
+        gallerySelectAll.setText(count==galleryMedia.size()?"Aucun":"Tout");
+        galleryActions.setVisibility(gallerySelectionMode?View.VISIBLE:View.GONE);
+        for(TextView action:new TextView[]{galleryDelete,galleryShare,galleryStory}){
+            action.setEnabled(count>0);
+            action.setAlpha(count>0?1f:.4f);
+        }
+        galleryHint.setText(gallerySelectionMode?
+            "Sélectionne les photos et vidéos, puis choisis une action.":
+            "Touche un média pour l'ouvrir · appui long pour sélectionner.");
+        for(GalleryMedia media:galleryMedia){
+            GalleryThumb tile=galleryThumbs.get(media.key);
+            if(tile==null)continue;
+            boolean selected=gallerySelected.contains(media.key);
+            tile.check.setVisibility(gallerySelectionMode?View.VISIBLE:View.GONE);
+            tile.check.setText(selected?"✓":"");
+            GradientDrawable badge=new GradientDrawable();
+            badge.setShape(GradientDrawable.OVAL);
+            badge.setColor(selected?ACCENT:Color.argb(210,16,15,28));
+            badge.setStroke(dp(2),selected?Color.WHITE:ACCENT);
+            tile.check.setBackground(badge);
+            GradientDrawable outline=new GradientDrawable();
+            outline.setColor(selected?Color.argb(55,186,166,255):Color.TRANSPARENT);
+            outline.setCornerRadius(dp(15));
+            if(selected)outline.setStroke(dp(3),ACCENT);
+            tile.frame.setForeground(selected?outline:null);
+            tile.frame.setContentDescription((media.video?"Vidéo ":"Photo ")+
+                (selected?" sélectionnée":" non sélectionnée"));
+        }
+    }
+
+    private void confirmDeleteGallery(long eventId){
+        if(gallerySelected.isEmpty())return;
+        final int count=gallerySelected.size();
+        NeonDialog.builder(this)
+            .setTitle(count==1?"Supprimer ce média ?":"Supprimer "+count+" médias ?")
+            .setMessage("La sélection sera retirée de cette soirée et supprimée du stockage de NØCTIS. Les originaux présents dans la galerie du téléphone ne seront pas supprimés.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Supprimer",(dialog,which)->deleteGallerySelection(eventId))
+            .show();
+    }
+
+    private void deleteGallerySelection(long eventId){
+        if(gallerySelectionEventId!=eventId||gallerySelected.isEmpty())return;
+        try{
+            AppStore latest=new AppStore(this);
+            JSONObject event=latest.event(eventId);
+            if(event==null)throw new IllegalStateException("Soirée introuvable");
+            JSONArray keepPhotos=new JSONArray(),keepVideos=new JSONArray();
+            java.util.ArrayList<java.io.File> files=new java.util.ArrayList<>();
+            int removed=0;
+            for(String name:toGalleryNames(EventPhotos.gallery(event))){
+                if(gallerySelected.contains("photo:"+name)){
+                    java.io.File file=EventPhotos.file(this,name);
+                    if(file!=null)files.add(file);
+                    removed++;
+                }else keepPhotos.put(name);
+            }
+            for(String name:toGalleryNames(EventVideos.list(event))){
+                if(gallerySelected.contains("video:"+name)){
+                    java.io.File file=EventVideos.file(this,name);
+                    if(file!=null)files.add(file);
+                    removed++;
+                }else keepVideos.put(name);
+            }
+            if(removed==0){message("Ces médias ne sont plus dans la soirée.");return;}
+            event.put("photos",keepPhotos);
+            event.put("videos",keepVideos);
+            latest.saveEvent(event);
+            // La sauvegarde est effectuée avant de retirer les copies privées.
+            for(java.io.File file:files)if(file.exists())file.delete();
+            gallerySelected.clear();
+            gallerySelectionMode=false;
+            store=new AppStore(this);
+            showEvent(eventId);
+            message(removed+" média(s) supprimé(s).");
+        }catch(Exception error){
+            message("Suppression impossible : "+error.getMessage());
+        }
+    }
+    private java.util.ArrayList<String> toGalleryNames(JSONArray items){
+        java.util.ArrayList<String> names=new java.util.ArrayList<>();
+        for(int i=0;i<items.length();i++)names.add(items.optString(i));
+        return names;
+    }
+
+    private void shareGallery(long eventId,boolean instagram){
+        if(gallerySelectionEventId!=eventId||gallerySelected.isEmpty())return;
+        JSONObject current=new AppStore(this).event(eventId);
+        if(current==null){message("Soirée introuvable.");return;}
+        java.util.HashSet<String> photos=new java.util.HashSet<>(
+            toGalleryNames(EventPhotos.gallery(current)));
+        java.util.HashSet<String> videos=new java.util.HashSet<>(
+            toGalleryNames(EventVideos.list(current)));
+        java.util.ArrayList<java.io.File> files=new java.util.ArrayList<>();
+        java.util.ArrayList<Boolean> kinds=new java.util.ArrayList<>();
+        for(GalleryMedia media:galleryMedia){
+            if(!gallerySelected.contains(media.key))continue;
+            if(media.video?!videos.contains(media.name):!photos.contains(media.name))continue;
+            java.io.File file=media.video?
+                EventVideos.file(this,media.name):EventPhotos.file(this,media.name);
+            if(file==null||!file.isFile())continue;
+            files.add(file);
+            kinds.add(media.video);
+        }
+        if(files.isEmpty()){message("Aucun média sélectionné n'est disponible.");return;}
+        EventGalleryActivity.shareMediaFiles(this,files,kinds,instagram);
+    }
+
     private String prettyDate(String date) {
         try {
             return java.time.LocalDate.parse(date)
