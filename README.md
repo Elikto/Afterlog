@@ -1,3 +1,17 @@
+# NØCTARIA v0.18.0 — Nouveau nom, même journal
+
+**NØCTIS devient NØCTARIA.** Le logo néon, la galerie multimédia, les
+souvenirs de soirées et la recherche de profils Spotify sont conservés.
+Le nom apparaît sur l'écran d'accueil, les fenêtres, les notifications
+et l'icône Android. L'identifiant `fr.afterlog.app`, la signature Android,
+les données locales et l'URL historique de mise à jour `AfterLog.apk`
+restent inchangés, pour permettre la mise à jour de l'application installée.
+
+La nouvelle release comporte `NOCTARIA-v0.18.0.apk` ainsi que des alias de
+compatibilité pour les anciennes versions.
+
+---
+
 ## NØCTIS v0.17.1 — Sélection des médias dans la fiche événement
 
 - Le bouton **Sélectionner** et l'**appui long** sur une vignette permettent d'activer la sélection directement dans « Ma galerie », sans passer par le lecteur plein écran.
@@ -108,7 +122,7 @@ Avant cette configuration, aucune release stable n'est annoncée au téléphone.
 
 **Version 0.11.0 (bêta expérimentale)**
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.17.1/NOCTIS-v0.17.1.apk)
+[![Télécharger NØCTARIA](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-N%C3%98CTARIA%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.17.1/NOCTIS-v0.17.1.apk)
 
 ## Mise à jour 0.11.0 — Galerie et Suivi
 
