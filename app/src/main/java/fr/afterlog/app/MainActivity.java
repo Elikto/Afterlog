@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
             if(!syncActiveView)return;
             if(homeScreen && displayedEventsRevision!=AppStore.revision(MainActivity.this)){
                 // Nouveaux événements enregistrés par le service : rafraîchir la
-                // liste immédiatement, sans relancer ni redémarrer NØCTIS.
+                // liste immédiatement, sans relancer ni redémarrer NØCTARIA.
                 showHome();
             } else if(eventScreen && currentEventId>0 &&
                 renderedEventRevision!=AppStore.revision(MainActivity.this)){
@@ -184,10 +184,10 @@ public final class MainActivity extends Activity {
             branding.setGravity(Gravity.CENTER);
             ImageView logo=new ImageView(this);
             logo.setImageResource(R.drawable.ic_afterlog_foreground);
-            logo.setContentDescription("Logo NØCTIS");
+            logo.setContentDescription("Logo NØCTARIA");
             branding.addView(logo,new LinearLayout.LayoutParams(dp(40),dp(40)));
-            TextView brand=text("NØCTIS",26,Color.WHITE,true);
-            brand.getPaint().setShader(new android.graphics.LinearGradient(0,0,dp(125),0,
+            TextView brand=text("NØCTARIA",26,Color.WHITE,true);
+            brand.getPaint().setShader(new android.graphics.LinearGradient(0,0,dp(160),0,
                 new int[]{Color.rgb(255,72,187),Color.rgb(203,177,255),Color.rgb(0,226,235)},
                 null,android.graphics.Shader.TileMode.CLAMP));
             brand.setGravity(Gravity.CENTER_VERTICAL);
@@ -446,7 +446,7 @@ public final class MainActivity extends Activity {
     private void showHome() {
         store=new AppStore(this);
         displayedEventsRevision=AppStore.revision(this);
-        screen("NØCTIS",null);
+        screen("NØCTARIA",null);
         syncPanel=column();
         syncLastSignature="";
         add(page,syncPanel,8);
@@ -1273,7 +1273,7 @@ public final class MainActivity extends Activity {
         final int count=gallerySelected.size();
         NeonDialog.builder(this)
             .setTitle(count==1?"Supprimer ce média ?":"Supprimer "+count+" médias ?")
-            .setMessage("La sélection sera retirée de cette soirée et supprimée du stockage de NØCTIS. Les originaux présents dans la galerie du téléphone ne seront pas supprimés.")
+            .setMessage("La sélection sera retirée de cette soirée et supprimée du stockage de NØCTARIA. Les originaux présents dans la galerie du téléphone ne seront pas supprimés.")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Supprimer",(dialog,which)->deleteGallerySelection(eventId))
             .show();
@@ -1580,7 +1580,7 @@ public final class MainActivity extends Activity {
             SpotifyArtistBackfillWorker.refreshAll(this);
             NeonDialog.builder(this)
                 .setTitle("Recherche Spotify relancée")
-                .setMessage("NØCTIS parcourt tous les événements enregistrés, y compris les anciens. Les comptes et photos confirmés seront ajoutés progressivement et conservés. Les homonymes non fiables resteront à associer manuellement.")
+                .setMessage("NØCTARIA parcourt tous les événements enregistrés, y compris les anciens. Les comptes et photos confirmés seront ajoutés progressivement et conservés. Les homonymes non fiables resteront à associer manuellement.")
                 .setPositiveButton("Compris",null).show();
         }),13);
         add(page,button("Exporter toutes mes données (JSON)",true,()->{
@@ -1597,7 +1597,7 @@ public final class MainActivity extends Activity {
             startActivityForResult(intent,IMPORT);
         }),14);
         subtitle("Attention : la sauvegarde JSON actuelle n'inclut pas les fichiers des photos personnelles. Conserve les photos originales sur ton téléphone. Le journal JSON n'est pas chiffré.");
-        subtitle("Après connexion à Shotgun, NØCTIS recherche « Mes billets → Passés » et affiche les événements à cocher avant de synchroniser. La disponibilité dépend du site et de ta session.");
+        subtitle("Après connexion à Shotgun, NØCTARIA recherche « Mes billets → Passés » et affiche les événements à cocher avant de synchroniser. La disponibilité dépend du site et de ta session.");
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
@@ -1637,7 +1637,7 @@ public final class MainActivity extends Activity {
             }else if(data.getData()!=null)sources.add(data.getData());
             if(sources.isEmpty())return;
             long target=currentEventId;
-            message("Importation de "+sources.size()+" média(s) dans NØCTIS…");
+            message("Importation de "+sources.size()+" média(s) dans NØCTARIA…");
             new Thread(()->{
                 int added=0,errors=0;
                 String failure="";
@@ -1678,7 +1678,7 @@ public final class MainActivity extends Activity {
                          imported>0?" · utilise « Sélectionner » pour partager plusieurs médias.":""));
 
                 });
-            },"NØCTIS-media-import").start();
+            },"NØCTARIA-media-import").start();
             return;
         }
         if(requestCode==EVENT_VIDEOS_REQUEST){
@@ -1799,7 +1799,7 @@ public final class MainActivity extends Activity {
                 }
             }catch(Exception ignored){}
             finally {if(connection!=null)connection.disconnect();}
-        },"NØCTIS-photo").start();
+        },"NØCTARIA-photo").start();
     }
 
 }
