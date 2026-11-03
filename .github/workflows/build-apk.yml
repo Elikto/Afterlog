@@ -145,8 +145,11 @@ jobs:
           set -euo pipefail
           LATEST="$(git ls-remote origin refs/heads/main | cut -f1)"
           if [[ "$LATEST" != "$GITHUB_SHA" ]]; then
-            echo "::notice::Une version plus récente est déjà sur main, publication ignorée."
-            exit 0
+            git fetch --quiet origin "$LATEST" --depth=1
+            if ! git diff --quiet "$GITHUB_SHA" "$LATEST" -- . ':(exclude)README.md'; then
+              echo "::notice::Une version de code plus récente est déjà sur main, publication ignorée."
+              exit 0
+            fi
           fi
           APK="NOCTIS-v${VERSION}.apk"
           if [[ "$PERSISTENT" == "true" ]]; then
