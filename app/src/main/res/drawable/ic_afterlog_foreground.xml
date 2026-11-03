@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Minimal neon Afterlog mascot derived from the full festival wordmark. -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF159C"
+        android:strokeWidth="3.2" android:strokeLineCap="round"
+        android:pathData="M19,52 C19,30 35,17 54,17"/>
+    <path android:fillColor="#00000000" android:strokeColor="#00E9F0"
+        android:strokeWidth="3.2" android:strokeLineCap="round"
+        android:pathData="M54,17 C73,17 89,30 89,52"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FF49CC"
+        android:strokeWidth="4.4" android:strokeLineCap="round"
+        android:pathData="M31,51 C31,25 77,25 77,51"/>
+    <path android:fillColor="#2B1637" android:strokeColor="#FF37C4"
+        android:strokeWidth="2.4"
+        android:pathData="M26,46 C23,46 22,49 22,54 L22,64 C22,70 25,72 31,72 L34,72 L34,46 Z"/>
+    <path android:fillColor="#0A2931" android:strokeColor="#08E1ED"
+        android:strokeWidth="2.4"
+        android:pathData="M82,46 C85,46 86,49 86,54 L86,64 C86,70 83,72 77,72 L74,72 L74,46 Z"/>
+    <path android:fillColor="#00000000" android:strokeColor="#E9BBFF"
+        android:strokeWidth="2.8"
+        android:pathData="M72,60 A18,18 0,1 1,36 60 A18,18 0,1 1,72 60"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FF48C4"
+        android:strokeWidth="2.8" android:strokeLineCap="round"
+        android:pathData="M42,51 L49,58 M49,51 L42,58"/>
+    <path android:fillColor="#00000000" android:strokeColor="#00EDF3"
+        android:strokeWidth="2.8" android:strokeLineCap="round"
+        android:pathData="M59,51 L66,58 M66,51 L59,58"/>
+    <path android:fillColor="#00000000" android:strokeColor="#F7EAFD"
+        android:strokeWidth="2.7" android:strokeLineCap="round"
+        android:pathData="M44,66 C51,73 57,74 65,66"/>
+    <path android:fillColor="#FF29AD" android:pathData="M36,83 L40,83 L40,89 L36,89 Z M43,78 L47,78 L47,89 L43,89 Z M50,81 L54,81 L54,89 L50,89 Z"/>
+    <path android:fillColor="#00E5EE" android:pathData="M57,75 L61,75 L61,89 L57,89 Z M64,81 L68,81 L68,89 L64,89 Z M71,84 L75,84 L75,89 L71,89 Z"/>
+</vector>
