@@ -79,7 +79,8 @@ final class EntryDetailsDialog {
         LinearLayout.LayoutParams titleLp=new LinearLayout.LayoutParams(0,-2,1);
         titleLp.leftMargin=dp(12);
         header.addView(title,titleLp);
-        TextView summary=text(quantity,18,ACCENT,true);
+        TextView summary=text(quantity,18,ConsumptionPalette.forEntry(
+            entry.optString("category"),entry.optString("name")),true);
         add(panel,summary,17);
 
         ScrollView scroll=new ScrollView(activity);
