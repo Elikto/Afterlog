@@ -133,6 +133,11 @@ final class SpotifyArtistFinder {
                 }
             }
         }catch(Exception ignored){}
+        if(verified.isEmpty()){
+            // Second independent public source: Wikidata's Spotify artist ID
+            // (P1902), validated against Spotify's actual artist name.
+            verified=WikidataSpotifyFinder.find(artistName);
+        }
         cache.edit().putString(cacheKey,verified).putLong(cacheKey+"_at",now).apply();
         return verified;
     }
