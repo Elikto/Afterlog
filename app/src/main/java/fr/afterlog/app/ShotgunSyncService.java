@@ -184,7 +184,7 @@ public final class ShotgunSyncService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder=Build.VERSION.SDK_INT>=26?
             new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        return builder.setContentTitle("AfterLog · Shotgun")
+        return builder.setContentTitle("NØCTIS · Shotgun")
             .setContentText(message)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pi)
