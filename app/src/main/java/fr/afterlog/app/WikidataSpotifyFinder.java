@@ -79,7 +79,7 @@ final class WikidataSpotifyFinder {
             connection.setConnectTimeout(6500);
             connection.setReadTimeout(8000);
             connection.setRequestProperty("User-Agent",
-                "NOCTIS/0.17.2 (https://github.com/Elikto/Afterlog; artist lookup)");
+                "NOCTARIA/0.18.0 (https://github.com/Elikto/Afterlog; artist lookup)");
             connection.setRequestProperty("Accept","application/json");
             if(connection.getResponseCode()!=200)
                 throw new Exception("Wikidata momentanément indisponible");
