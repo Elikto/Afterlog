@@ -74,7 +74,7 @@ final class ShotgunBatchImporter {
                 if(pending.isEmpty()) {missingLinks();return;}
                 new AlertDialog.Builder(host)
                     .setTitle("Compléter "+pending.size()+" soirée(s)")
-                    .setMessage("AfterLog va ouvrir chaque fiche Shotgun, suivre « Voir l'événement » si nécessaire, puis collecter les informations publiques (affiche, dates, lieu, description, artistes).\n\nLes pages seront ouvertes une par une. Garde AfterLog au premier plan. Les billets et QR codes ne seront pas enregistrés.")
+                    .setMessage("NØCTIS va ouvrir chaque fiche Shotgun, suivre « Voir l'événement » si nécessaire, puis collecter les informations publiques (affiche, dates, lieu, description, artistes).\n\nLes pages seront ouvertes une par une. Garde NØCTIS au premier plan. Les billets et QR codes ne seront pas enregistrés.")
                     .setNegativeButton("Annuler",null)
                     .setPositiveButton("Démarrer",(d,w)->start())
                     .show();
