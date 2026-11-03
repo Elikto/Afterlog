@@ -20,6 +20,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import org.json.JSONArray;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import org.json.JSONObject;
@@ -96,6 +97,10 @@ public final class ConsumptionActivity extends Activity {
     private LinearLayout sizeBlock;
     private final List<TextView> sizeButtons=new ArrayList<>();
     private final List<TextView> routeButtons=new ArrayList<>();
+    private JSONArray portions=new JSONArray();
+    private int editingPortionIndex=-1;
+    private LinearLayout portionsPanel,portionsList;
+    private TextView portionAction;
     private LinearLayout ecstasyParts;
     private TextView partsSummary,quarterBtn,halfBtn,wholeBtn;
     private TextView exactMode,rangeMode,wholeNightMode,timeEndButton;
@@ -112,6 +117,15 @@ public final class ConsumptionActivity extends Activity {
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams layout=getWindow().getAttributes();
+        layout.width=Math.max(dp(290),getResources().getDisplayMetrics().widthPixels-dp(18));
+        layout.height=(int)(getResources().getDisplayMetrics().heightPixels*.85f);
+        layout.gravity=Gravity.CENTER;
+        layout.dimAmount=.63f;
+        getWindow().setAttributes(layout);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -134,12 +148,18 @@ public final class ConsumptionActivity extends Activity {
         timeMode=original.optString("timeMode",allNight?"all":"exact");
         if(!timeMode.equals("exact")&&!timeMode.equals("between")&&!timeMode.equals("all"))timeMode="exact";
         timeEnd=original.optString("timeEnd","");
+        JSONArray oldPortions=original.optJSONArray("portions");
+        if(oldPortions!=null) {
+            try{portions=new JSONArray(oldPortions.toString());}catch(Exception ignored){}
+        }
         JSONObject parts=original.optJSONObject("parts");
         if(parts!=null){
             quarterCount=Math.max(0,parts.optInt("quart",0));
             halfCount=Math.max(0,parts.optInt("demi",0));
             wholeCount=Math.max(0,parts.optInt("entier",0));
         }
+        if(portions.length()>0 && !original.optString("name").equalsIgnoreCase("Ecstasy"))
+            count=0;
         build(event);
         if(entryId!=0)restoreSelection();
         else if(substanceOptions!=null)substanceOptions.setVisibility(View.GONE);
@@ -186,7 +206,7 @@ public final class ConsumptionActivity extends Activity {
     }
     private void build(JSONObject event) {
         LinearLayout root=column();
-        root.setBackgroundColor(BG);
+        root.setBackground(shape(BG,20,false));
         setContentView(root);
 
         LinearLayout top=horizontal();
@@ -229,7 +249,7 @@ public final class ConsumptionActivity extends Activity {
         LinearLayout counter=horizontal();
         add(details,counter,8);
 
-        TextView minus=action("−",false,()->{if(count>(isEcstasy()?0:1)){count--;refreshCounter();}});
+        TextView minus=action("−",false,()->{if(count>(isDrug()?0:1)){count--;refreshCounter();}});
         minus.setTextSize(24);
         counter.addView(minus,new LinearLayout.LayoutParams(dp(63),dp(58)));
         quantityText=text("1",30,WHITE,true);
@@ -301,7 +321,15 @@ public final class ConsumptionActivity extends Activity {
         customRoute=editText("Décris la méthode de prise",false);
         add(substanceOptions,customRoute,7);
         customRoute.setVisibility(View.GONE);
-        add(substanceOptions,text("Les unités et modes indiqués servent uniquement à tenir ton journal, pas à conseiller une dose ou une méthode.",12,SOFT,false),12);
+        add(substanceOptions,text("Les modes proposés décrivent des pratiques documentées, jamais une recommandation de consommation. Les tailles sont subjectives.",12,SOFT,false),12);
+        portionsPanel=column();
+        add(substanceOptions,portionsPanel,14);
+        add(portionsPanel,text("MES PRISES (TAILLE + MODE)",12,ACCENT,true),9);
+        portionAction=action("✓ Ajouter cette prise",true,this::commitPortion);
+        add(portionsPanel,portionAction,9);
+        portionsList=column();
+        add(portionsPanel,portionsList,8);
+        add(portionsPanel,text("Exemple : 2 petits para, puis 1 grand para. Touche une ligne pour la corriger.",12,SOFT,false),0);
 
         add(details,text("HEURE DE LA PRISE",13,ACCENT,true),10);
         add(details,text("Choisis la précision dont tu te souviens.",13,SOFT,false),12);
@@ -433,7 +461,14 @@ public final class ConsumptionActivity extends Activity {
             editingPart="";
         }
         else if(changed && count==0)count=1;
-        if(changed){routeChoice="";subjectiveSize="";}
+        if(changed){
+            routeChoice="";subjectiveSize="";
+            // Préserver les portions existantes lors de l'ouverture en modification.
+            if(selected!=null || entryId==0){
+                portions=new JSONArray();
+                editingPortionIndex=-1;
+            }
+        }
         selected=choice;
         if(!"Autre".equals(choice.name))customName="";
         renderSelection();
@@ -490,8 +525,11 @@ public final class ConsumptionActivity extends Activity {
     }
     private String[] routesFor(String substance) {
         switch(substance) {
-            case "MDMA":case "Speed":case "Kétamine":
+            case "MDMA":case "Speed":
                 return new String[]{"Orale (para)","Nasale (trace)","Autre"};
+            case "Kétamine":
+                // Source : Drogues Info Service, Kétamine — surtout consommée en sniff.
+                return new String[]{"Nasale (trace)","Autre"};
             case "Cocaïne": return new String[]{"Nasale (trace)","Autre"};
             case "LSD": return new String[]{"Buvard oral","Gouttes orales","Autre"};
             case "Ecstasy": return new String[]{"Orale","Autre"};
@@ -511,6 +549,7 @@ public final class ConsumptionActivity extends Activity {
         substanceOptions.setVisibility(View.VISIBLE);
         measurementBlock.setVisibility(isEcstasy()?View.GONE:View.VISIBLE);
         sizeBlock.setVisibility(isEcstasy()?View.GONE:View.VISIBLE);
+        if(portionsPanel!=null)portionsPanel.setVisibility(isEcstasy()?View.GONE:View.VISIBLE);
         if(entryId!=0 && subjectiveSize.isEmpty())
             subjectiveSize=original.optString("subjectiveSize");
         updateSizeButtons();
@@ -553,7 +592,94 @@ public final class ConsumptionActivity extends Activity {
         }
         if(entryId!=0)customRoute.setText(original.optString("routeOther"));
         updateRouteButtons();
+        renderPortions();
     }
+    private void renderPortions() {
+        if(portionsList==null)return;
+        portionsList.removeAllViews();
+        if(!isDrug()||isEcstasy())return;
+        if(portionAction!=null)portionAction.setText(editingPortionIndex<0?
+            "✓ Ajouter cette prise":"✓ OK · Modifier cette prise");
+        if(portions.length()==0) {
+            add(portionsList,text("Aucune prise détaillée enregistrée.",12,SOFT,false),7);
+            return;
+        }
+        for(int i=0;i<portions.length();i++){
+            final int index=i;
+            JSONObject p=portions.optJSONObject(i);
+            if(p==null)continue;
+            String label=p.optInt("count",1)+" "+
+                p.optString("size","prise(s)").toLowerCase(Locale.FRANCE)+" · "+
+                p.optString("route","Non précisé");
+            String amount=p.optString("measuredAmount");
+            if(!amount.isEmpty())
+                label+=" · "+amount+" "+p.optString("measuredUnit");
+            add(portionsList,action(label+"   ✎",false,()->loadPortion(index)),7);
+        }
+    }
+    private void loadPortion(int index) {
+        JSONObject p=portions.optJSONObject(index);
+        if(p==null)return;
+        editingPortionIndex=index;
+        count=p.optInt("count",1);
+        subjectiveSize=p.optString("size");
+        routeChoice=p.optString("route");
+        if(measuredQty!=null)measuredQty.setText(p.optString("measuredAmount"));
+        if(unitSelect!=null){
+            String want=p.optString("measuredUnit");
+            for(int i=0;i<unitSelect.getCount();i++)
+                if(want.equals(String.valueOf(unitSelect.getItemAtPosition(i)))){
+                    unitSelect.setSelection(i);break;
+                }
+        }
+        if(customRoute!=null)customRoute.setText(p.optString("routeOther"));
+        updateSizeButtons();
+        updateRouteButtons();
+        refreshCounter();
+        renderPortions();
+    }
+    private void commitPortion() {
+        if(!isDrug()||isEcstasy())return;
+        if(count<1 && editingPortionIndex<0){
+            Toast.makeText(this,"Choisis au moins une prise avec +",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if("Autre".equals(routeChoice) && customRoute.getText().toString().trim().isEmpty()){
+            Toast.makeText(this,"Décris le mode de prise personnalisé",Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            String amount=measuredQty.getText().toString().trim().replace(",",".");
+            if(!amount.isEmpty()){
+                double value=Double.parseDouble(amount);
+                if(!Double.isFinite(value)||value<0||value>100000)throw new IllegalArgumentException();
+            }
+            JSONObject item=new JSONObject();
+            item.put("count",count);
+            item.put("size",subjectiveSize);
+            item.put("route",routeChoice);
+            item.put("routeOther","Autre".equals(routeChoice)?
+                customRoute.getText().toString().trim():"");
+            item.put("measuredAmount",amount);
+            item.put("measuredUnit",unitSelect.getSelectedItem().toString());
+            JSONArray next=new JSONArray();
+            for(int i=0;i<portions.length();i++){
+                if(i==editingPortionIndex) {
+                    if(count>0)next.put(item); // zéro permet de retirer une prise
+                } else next.put(portions.getJSONObject(i));
+            }
+            if(editingPortionIndex<0)next.put(item);
+            portions=next;
+            editingPortionIndex=-1;
+            count=0;
+            if(measuredQty!=null)measuredQty.setText("");
+            refreshCounter();
+            renderPortions();
+        }catch(Exception error){
+            Toast.makeText(this,"La quantité mesurée doit être un nombre positif.",Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void updateSizeButtons() {
         for(TextView b:sizeButtons){
             boolean selectedSize=subjectiveSize.equals(b.getTag());
@@ -712,9 +838,17 @@ public final class ConsumptionActivity extends Activity {
         if("between".equals(timeMode)&&timeEnd.isEmpty()){
             Toast.makeText(this,"Choisis l'heure de fin",Toast.LENGTH_LONG).show();return;
         }
-        if(isDrug() && "Autre".equals(routeChoice) &&
+        if(isDrug() && !isEcstasy() && portions.length()==0 &&
+            "Autre".equals(routeChoice) &&
             customRoute.getText().toString().trim().isEmpty()){
             Toast.makeText(this,"Décris la méthode de prise",Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(isDrug() && !isEcstasy() && portions.length()>0 &&
+            (count>0 || editingPortionIndex>=0)){
+            Toast.makeText(this,
+                "Valide d'abord la prise avec ✓ OK, ou mets le compteur à zéro.",
+                Toast.LENGTH_LONG).show();
             return;
         }
         if(isEcstasy()) {
@@ -758,23 +892,42 @@ public final class ConsumptionActivity extends Activity {
                 entry.put("routeOther","Autre".equals(routeChoice)?
                     customRoute.getText().toString().trim():"");
                 if(!isEcstasy()) {
-                    String typed=measuredQty.getText().toString().trim().replace(",",".");
-                    double amount=typed.isEmpty()?0:Double.parseDouble(typed);
-                    if(!Double.isFinite(amount)||amount<0||amount>100000)throw new Exception("Quantité invalide");
-                    entry.put("quantity",count);
+                    if(portions.length()==0 && count>0){
+                        // Compatibilité : une seule prise peut être enregistrée directement
+                        // sans devoir obligatoirement toucher ✓ Ajouter.
+                        JSONObject first=new JSONObject();
+                        first.put("count",count);
+                        first.put("size",subjectiveSize);
+                        first.put("route",routeChoice);
+                        first.put("routeOther",customRoute.getText().toString().trim());
+                        first.put("measuredAmount",measuredQty.getText().toString().trim().replace(",","."));
+                        first.put("measuredUnit",unitSelect.getSelectedItem().toString());
+                        portions.put(first);
+                    }
+                    int total=0;
+                    for(int i=0;i<portions.length();i++) {
+                        JSONObject p=portions.optJSONObject(i);
+                        if(p!=null)total+=p.optInt("count",0);
+                    }
+                    if(total<1)throw new Exception("Ajoute au moins une prise");
+                    entry.put("portions",portions);
+                    entry.put("quantity",total);
                     entry.put("unit","prise");
-                    entry.put("measuredAmount",typed);
-                    entry.put("measuredUnit",unitSelect.getSelectedItem().toString());
-                } else {
                     entry.remove("measuredAmount");
-                entry.remove("measuredUnit");
-                entry.remove("subjectiveSize");
                     entry.remove("measuredUnit");
+                }else{
+                    entry.remove("portions");
+                    entry.remove("measuredAmount");
+                    entry.remove("measuredUnit");
+                    entry.remove("subjectiveSize");
                 }
-            } else {
+            }else{
                 entry.remove("route");
                 entry.remove("routeOther");
+                entry.remove("portions");
                 entry.remove("measuredAmount");
+                entry.remove("measuredUnit");
+                entry.remove("subjectiveSize");
             }
             entry.put("date",date);
             entry.put("time",allNight?"":time);

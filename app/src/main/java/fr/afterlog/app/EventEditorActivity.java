@@ -33,13 +33,15 @@ import java.util.Map;
 public final class EventEditorActivity extends Activity {
     static final String EXTRA_EVENT="event_json", EXTRA_SAVED_ID="saved_id";
     private static final int PICK_IMAGES=704;
+    private static final int PICK_VIDEOS=705;
     private static final int BG=Color.rgb(12,14,24),CARD=Color.rgb(25,28,44);
     private static final int TILE=Color.rgb(38,41,64),ACCENT=Color.rgb(186,166,255);
     private static final int WHITE=Color.WHITE,SOFT=Color.rgb(185,190,205);
     private JSONObject event=new JSONObject();
     private AppStore store;
     private final LinkedHashMap<String,EditText> inputs=new LinkedHashMap<>();
-    private LinearLayout images,details,extra;
+    private LinearLayout images,videoItems,details,extra;
+    private TextView videoCount;
     private TextView dateButton,startButton,endButton,photoCount;
     private boolean advanced=false;
 
@@ -132,6 +134,12 @@ public final class EventEditorActivity extends Activity {
         add(gallery,button("＋ Ajouter des photos",true,this::pickImages),13);
         images=column();add(gallery,images,0);
         showImages();
+        LinearLayout videoGallery=group("🎬 Vidéos de la soirée",
+            "Ajoute tes vidéos, lis-les directement dans AfterLog.",content);
+        videoCount=text("",13,ACCENT,true);add(videoGallery,videoCount,10);
+        add(videoGallery,button("＋ Ajouter des vidéos",true,this::pickVideos),12);
+        videoItems=column();add(videoGallery,videoItems,0);
+        showVideos();
 
         LinearLayout where=group("📍 Où ça se passe ?","Lieu et localisation",content);
         field(where,"venue","Nom du lieu","Salle, festival, club…",false);
@@ -188,6 +196,13 @@ public final class EventEditorActivity extends Activity {
             refreshDate();
         },time.getHour(),time.getMinute(),true).show();
     }
+    private void pickVideos() {
+        Intent intent=new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("video/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        startActivityForResult(Intent.createChooser(intent,"Choisir des vidéos"),PICK_VIDEOS);
+    }
     private void pickImages() {
         Intent intent=new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("image/*");
@@ -197,7 +212,27 @@ public final class EventEditorActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
-        if(request!=PICK_IMAGES || result!=RESULT_OK || data==null)return;
+        if(result!=RESULT_OK || data==null)return;
+        if(request==PICK_VIDEOS) {
+            int added=0,errors=0;
+            String lastError="";
+            int count=data.getClipData()==null?1:data.getClipData().getItemCount();
+            for(int i=0;i<count && i<12;i++){
+                Uri uri=data.getClipData()==null?data.getData():
+                    data.getClipData().getItemAt(i).getUri();
+                try{
+                    if(EventVideos.list(event).length()>=EventVideos.MAX_COUNT)break;
+                    EventVideos.append(event,EventVideos.importVideo(this,uri));
+                    added++;
+                }catch(Exception e){errors++;lastError=e.getMessage();}
+            }
+            showVideos();
+            Toast.makeText(this,added+" vidéo(s) ajoutée(s)"+
+                (errors>0?" · "+errors+" erreur(s) : "+lastError:""),
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(request!=PICK_IMAGES)return;
         int added=0,errors=0;
         int n=data.getClipData()==null ? 1 : data.getClipData().getItemCount();
         for(int i=0;i<n && i<40;i++){
@@ -241,6 +276,37 @@ public final class EventEditorActivity extends Activity {
                         catch(Exception ignored){}
                     }).show()),0);
             }
+        }
+    }
+    private void showVideos() {
+        if(videoItems==null)return;
+        videoItems.removeAllViews();
+        JSONArray videos=EventVideos.list(event);
+        videoCount.setText(videos.length()+" / "+EventVideos.MAX_COUNT+" vidéos · 200 Mo max chacune");
+        for(int index=0;index<videos.length();index++){
+            int position=index;
+            String video=videos.optString(index);
+            LinearLayout item=column();
+            item.setBackground(background(TILE,12));
+            item.setPadding(dp(10),dp(11),dp(10),dp(11));
+            add(videoItems,item,10);
+            android.graphics.Bitmap preview=EventVideos.thumbnail(this,video);
+            if(preview!=null) {
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setImageBitmap(preview);
+                item.addView(image,new LinearLayout.LayoutParams(-1,dp(135)));
+            }
+            add(item,button("▶ Lire la vidéo "+(index+1),false,
+                ()->EventVideos.play(this,video)),7);
+            add(item,button("Retirer la vidéo",false,()->new AlertDialog.Builder(this)
+                .setTitle("Supprimer cette vidéo ?")
+                .setMessage("Elle sera supprimée du stockage d'AfterLog.")
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Supprimer",(d,w)->{
+                    try{EventVideos.remove(this,event,position);showVideos();}
+                    catch(Exception ex){Toast.makeText(this,ex.getMessage(),Toast.LENGTH_LONG).show();}
+                }).show()),0);
         }
     }
     private void save() {

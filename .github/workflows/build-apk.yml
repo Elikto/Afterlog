@@ -36,10 +36,44 @@ jobs:
           VERSION="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
           test -n "$VERSION" || { echo "Version Android introuvable"; exit 1; }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Vérifier la signature Android permanente
+        id: signing
+        env:
+          AFTERLOG_KEYSTORE_BASE64: ${{ secrets.AFTERLOG_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AFTERLOG_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AFTERLOG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AFTERLOG_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -n "$AFTERLOG_KEYSTORE_BASE64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            printf '%s' "$AFTERLOG_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/afterlog-release.jks"
+            echo "persistent=true" >> "$GITHUB_OUTPUT"
+            echo "Signature permanente disponible."
+          else
+            echo "persistent=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signature permanente absente : APK debug de test uniquement. Les installations existantes peuvent refuser la mise à jour."
+          fi
       - name: Construire l'APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        shell: bash
+        env:
+          AFTERLOG_KEYSTORE_PASSWORD: ${{ secrets.AFTERLOG_KEYSTORE_PASSWORD }}
+          AFTERLOG_KEY_ALIAS: ${{ secrets.AFTERLOG_KEY_ALIAS }}
+          AFTERLOG_KEY_PASSWORD: ${{ secrets.AFTERLOG_KEY_PASSWORD }}
+        run: |
+          if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
+            export AFTERLOG_KEYSTORE_FILE="$RUNNER_TEMP/afterlog-release.jks"
+            gradle --no-daemon --stacktrace :app:assembleRelease
+          else
+            gradle --no-daemon --stacktrace :app:assembleDebug
+          fi
       - name: Préparer le téléchargement
-        run: cp app/build/outputs/apk/debug/app-debug.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
+        shell: bash
+        run: |
+          if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
+            cp app/build/outputs/apk/release/app-release.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
+          fi
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
@@ -53,18 +87,28 @@ jobs:
           VERSION: ${{ steps.appversion.outputs.version }}
         shell: bash
         run: |
-          TAG="v${VERSION}-debug"
+          TAG="v${VERSION}"
+          NOTE="Version AfterLog Android. Mise à jour en place uniquement si la signature est identique à celle de l'application installée."
+          MODE="stable"
+          if [[ "${{ steps.signing.outputs.persistent }}" != "true" ]]; then
+            TAG="v${VERSION}-debug"
+            NOTE="Version de test : signature temporaire, réinstallation potentiellement nécessaire. Sauvegarder les données avant de désinstaller."
+            MODE="debug"
+          fi
           APK="AfterLog-v${VERSION}.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
+          elif [[ "$MODE" == "debug" ]]; then
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "$NOTE" --prerelease
           else
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "Version Android de test. Données enregistrées localement. Avant une désinstallation, exporter une sauvegarde JSON ; les APK debug peuvent être signés avec des clés différentes." --prerelease
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION}" --notes "$NOTE"
           fi
       - name: Garder le bouton de téléchargement du README à jour
         if: success()
         continue-on-error: true
         env:
           VERSION: ${{ steps.appversion.outputs.version }}
+          SIGNED: ${{ steps.signing.outputs.persistent }}
         shell: bash
         run: |
           python3 - <<'PY'
@@ -75,13 +119,14 @@ jobs:
           version = os.environ["VERSION"]
           readme = pathlib.Path("README.md")
           current = readme.read_text(encoding="utf-8")
+          suffix = "" if os.environ.get("SIGNED") == "true" else "-debug"
           new_url = (
               f"https://github.com/Elikto/Afterlog/releases/download/"
-              f"v{version}-debug/AfterLog-v{version}.apk"
+              f"v{version}{suffix}/AfterLog-v{version}.apk"
           )
           current = re.sub(
               r"https://github\.com/Elikto/Afterlog/releases/download/"
-              r"v\d+\.\d+\.\d+-debug/AfterLog-v\d+\.\d+\.\d+\.apk",
+              r"v\d+\.\d+\.\d+(?:-debug)?/AfterLog-v\d+\.\d+\.\d+\.apk",
               new_url,
               current,
           )

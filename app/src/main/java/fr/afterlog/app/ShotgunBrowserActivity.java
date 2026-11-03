@@ -45,6 +45,7 @@ public final class ShotgunBrowserActivity extends Activity {
     private boolean syncTriggered;
     private ShotgunTicketDiscovery discovery;
     private boolean discovering;
+    private boolean autoExtractEvent,autoExtractStarted;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
@@ -109,6 +110,12 @@ public final class ShotgunBrowserActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view,String url) {
                 if(batch!=null && batch.isActive()) batch.onPageFinished(url);
+                else if(autoExtractEvent && !autoExtractStarted && isEventUrl(url)) {
+                    autoExtractStarted=true;
+                    status.setText("Extraction des informations et portraits d'artistes…");
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                        .postDelayed(this::importCurrent,2200);
+                }
                 else if(discovery!=null && discovering)discovery.pageFinished();
                 else status.setText("Shotgun connecté : ouvre Mes billets → Passés si nécessaire.");
 
@@ -138,6 +145,7 @@ public final class ShotgunBrowserActivity extends Activity {
         },2);
         button(footer,"Déconnecter Shotgun",this::confirmLogout,2);
 
+        autoExtractEvent=getIntent().getBooleanExtra("afterlog_auto_extract",false);
         autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
         String initial=getIntent().getStringExtra(EXTRA_URL);
         if(initial!=null && trusted(Uri.parse(initial)))web.loadUrl(initial);
@@ -407,6 +415,60 @@ public final class ShotgunBrowserActivity extends Activity {
           for(const name of (result.artists||'').split(',')){
             upsertArtist(name,'','','');
           }
+          // Shotgun peut afficher le line-up en cartes non cliquables :
+          // retrouver les portraits dans les <img>, <picture> et lazy-loads
+          // voisins des noms, sans les confondre avec l'affiche de l'événement.
+          const normalizeArtist=s=>(s||'').normalize('NFD')
+            .replace(/[\\u0300-\\u036f]/g,'').toLowerCase()
+            .replace(/[^a-z0-9]+/g,' ').trim();
+          const wanted=profiles.map(p=>p.name).filter(Boolean);
+          const extractImage=img=>{
+            if(!img)return '';
+            let src=img.currentSrc||img.src||img.getAttribute('data-src')||
+              img.getAttribute('data-lazy-src')||'';
+            if(!/^https:\\/\\//i.test(src)){
+              const srcset=img.getAttribute('srcset')||
+                img.closest('picture')?.querySelector('source[srcset]')?.getAttribute('srcset')||'';
+              const first=srcset.split(',')[0]?.trim().split(/\\s+/)[0]||'';
+              if(/^https:\\/\\//i.test(first))src=first;
+            }
+            return /^https:\\/\\//i.test(src)?src:'';
+          };
+          const portraits=[...document.querySelectorAll(
+            'main img,article img,[data-testid*="artist"] img,[class*="lineup"] img')];
+          for(const artistName of wanted) {
+            if(!artistName)continue;
+            const expected=normalizeArtist(artistName);
+            const current=seenArtists.get(artistName.toLocaleLowerCase());
+            if(current?.photo)continue;
+            for(const img of portraits) {
+              const source=extractImage(img);
+              if(!source)continue;
+              const alt=normalizeArtist(img.getAttribute('alt'));
+              let matched=alt===expected;
+              let related=img.parentElement;
+              let element=null;
+              for(let d=0;d<5 && related && !matched;d++,related=related.parentElement){
+                const label=(related.querySelector('h3,h4,[class*="name"],[data-testid*="name"]')
+                  ?.textContent||related.textContent||'').trim();
+                const normalized=normalizeArtist(label);
+                if(normalized===expected || (normalized.startsWith(expected+' ')&&
+                    normalized.length<expected.length+22)) {
+                  if(related.querySelectorAll('img').length<=4 &&
+                      label.length<120){matched=true;element=related;}
+                }
+              }
+              if(!matched)continue;
+              const card=element||img.closest('a,article,li')||img.parentElement;
+              const spotifyLink=card?.querySelector('a[href*="open.spotify.com/artist/"]')?.href||'';
+              const pageLink=card?.closest('a[href*="/artist"]')?.href||
+                card?.querySelector('a[href*="/artist"]')?.href||'';
+              upsertArtist(artistName,source,spotifyLink,pageLink);
+              break;
+            }
+          }
+          // Préserver les profils sans portrait : il s'agit d'une information
+          // manquante, et non d'une image supposée de l'artiste.
           if(profiles.length)result.artistProfiles=profiles;
           return JSON.stringify(result);
         })();

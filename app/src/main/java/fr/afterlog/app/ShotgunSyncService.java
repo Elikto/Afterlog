@@ -446,8 +446,18 @@ public final class ShotgunSyncService extends Service {
         if(rateLimited || SyncState.BLOCKED.equals(state) && message.contains("429"))
             getSharedPreferences("afterlog_auto_sync",MODE_PRIVATE).edit()
                 .putLong("blockedUntil",System.currentTimeMillis()+6*60*60*1000L).apply();
-        SyncState.save(this,state,message,processed,queue.size(),0,
-            message+(errors>0?" ("+errors+" fiches non récupérées)":""));
+        if(SyncState.DONE.equals(state)){
+            // Un ancien échec d'un billet volontairement décoché n'est plus un échec.
+            SyncFailureStore.discardStale(this);
+            int remaining=SyncFailureStore.actionableCount(this);
+            String summary=remaining==0 ? "Synchronisation terminée" :
+                "Synchronisation partielle : "+remaining+" soirée(s) cochée(s) non récupérée(s)";
+            SyncState.save(this,SyncState.DONE,summary,
+                processed,queue.size(),0,remaining==0?
+                "Toutes les soirées choisies sont traitées.":summary);
+        } else {
+            SyncState.save(this,state,message,processed,queue.size(),0,message);
+        }
         handler.removeCallbacksAndMessages(null);
         if(browser!=null){browser.stopLoading();browser.destroy();browser=null;}
         stopForeground(STOP_FOREGROUND_REMOVE);

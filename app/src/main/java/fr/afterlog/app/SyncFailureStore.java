@@ -28,6 +28,34 @@ final class SyncFailureStore {
             return new JSONArray(p.getString(KEY,"[]"));
         }catch(Exception e){return new JSONArray();}
     }
+    /**
+     * Echecs concernant uniquement les soirées cochées du dernier import.
+     * Une ancienne erreur d'une soirée décochée ne doit plus apparaître.
+     */
+    static JSONArray actionable(Context ctx) {
+        JSONArray selected=TicketSelectionStore.chosen(ctx);
+        JSONArray failures=list(ctx), active=new JSONArray();
+        for(int i=0;i<failures.length();i++) {
+            JSONObject fail=failures.optJSONObject(i);
+            if(fail==null)continue;
+            String url=TicketSelectionStore.canonical(fail.optString("url"));
+            for(int j=0;j<selected.length();j++) {
+                JSONObject selectedEvent=selected.optJSONObject(j);
+                if(selectedEvent==null)continue;
+                String expected=TicketSelectionStore.canonical(selectedEvent.optString("url"));
+                if(!url.isEmpty() && url.equals(expected)) {
+                    active.put(fail);break;
+                }
+            }
+        }
+        return active;
+    }
+    static int actionableCount(Context ctx){return actionable(ctx).length();}
+    static void discardStale(Context ctx) {
+        JSONArray current=actionable(ctx);
+        ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+            .edit().putString(KEY,current.toString()).apply();
+    }
     static void add(Context ctx,JSONObject source,String reason) {
         if(source==null)return;
         try {

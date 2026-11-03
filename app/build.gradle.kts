@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
 }
+val persistentKeystore = System.getenv("AFTERLOG_KEYSTORE_FILE")
 android {
     namespace = "fr.afterlog.app"
     compileSdk = 36
@@ -8,8 +9,25 @@ android {
         applicationId = "fr.afterlog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "0.10.0"
+    }
+    signingConfigs {
+        if (!persistentKeystore.isNullOrBlank()) {
+            create("afterlogPersistent") {
+                storeFile = file(persistentKeystore)
+                storePassword = System.getenv("AFTERLOG_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("AFTERLOG_KEY_ALIAS")
+                keyPassword = System.getenv("AFTERLOG_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (!persistentKeystore.isNullOrBlank())
+                signingConfig = signingConfigs.getByName("afterlogPersistent")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

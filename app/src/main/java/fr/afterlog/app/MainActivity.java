@@ -78,7 +78,8 @@ public final class MainActivity extends Activity {
         }
     };
     private static final int EXPORT = 51, IMPORT = 52, SHOTGUN_REQUEST = 53, CONSUMPTION_REQUEST = 54,
-        EVENT_EDITOR_REQUEST=55,EVENT_IMAGES_REQUEST=56;
+        EVENT_EDITOR_REQUEST=55,EVENT_IMAGES_REQUEST=56,EVENT_VIDEOS_REQUEST=57,
+        SHOTGUN_EVENT_REFRESH=58;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -303,28 +304,21 @@ public final class MainActivity extends Activity {
         }
         return true;
     }
-    private int visibleFailureCount(){
-        JSONArray failures=SyncFailureStore.list(this);
-        int count=0;
-        for(int i=0;i<failures.length();i++){
-            JSONObject issue=failures.optJSONObject(i);
-            if(issue!=null && !TicketSelectionStore.isExcluded(this,issue.optString("url")))
-                count++;
-        }
-        return count;
+    private int visibleFailureCount() {
+        return SyncFailureStore.actionableCount(this);
     }
     private void renderSyncProgress() {
         if(syncPanel==null)return;
         JSONObject state=SyncState.read(this);
         String mode=state.optString("state",SyncState.IDLE);
+        // Seules les erreurs concernant les billets cochés sont pertinentes.
+        // Ne pas réafficher un ancien compteur de "fiche non récupérée".
         if(SyncState.IDLE.equals(mode) ||
-          (SyncState.DONE.equals(mode) &&
-              (allSelectedEventsPresent() ||
-               (visibleFailureCount()==0 &&
-                !state.optString("phase").toLowerCase(Locale.ROOT).contains("partiel") &&
-                !state.optString("detail").toLowerCase(Locale.ROOT).contains("non récupéré"))))) {
+            (SyncState.DONE.equals(mode) &&
+             (allSelectedEventsPresent() || visibleFailureCount()==0))) {
             syncPanel.removeAllViews();
             syncPanel.setVisibility(View.GONE);
+            syncLastSignature="";
             return;
         }
         syncPanel.setVisibility(View.VISIBLE);
@@ -555,55 +549,137 @@ public final class MainActivity extends Activity {
             .setPositiveButton("Supprimer",(d,w)->{store.deleteEvent(id);showHome();})
             .show()),0);
     }
-    private void renderJournalFirst(long id) {
-        add(page,text("Mon journal de soirée",22,Color.WHITE,true),6);
-        add(page,text("Tes consommations · enregistrées uniquement sur ton téléphone",13,SOFT,false),12);
-        add(page,button("＋ Ajouter une consommation",true,()->editEntry(new JSONObject(),id)),14);
-        List<JSONObject> entries=store.entries(id);
-        if(entries.isEmpty()){
-            LinearLayout empty=card();
-            add(empty,text("Aucune consommation enregistrée pour cette soirée.",14,SOFT,false),0);
-            add(page,empty,15);
+    private String primaryQuantity(JSONObject entry) {
+        JSONObject parts=entry.optJSONObject("parts");
+        if(parts!=null){
+            ArrayList<String> fragments=new ArrayList<>();
+            int whole=parts.optInt("entier"),half=parts.optInt("demi"),quarter=parts.optInt("quart");
+            if(whole>0)fragments.add(whole+" entier"+(whole>1?"s":""));
+            if(half>0)fragments.add(half+" demi");
+            if(quarter>0)fragments.add(quarter+" quart"+(quarter>1?"s":""));
+            if(!fragments.isEmpty())return android.text.TextUtils.join(" + ",fragments);
         }
-        for(JSONObject entry:entries){
-            LinearLayout c=card();
-            add(c,text(ConsumptionActivity.iconFor(entry.optString("category"),entry.optString("name"))+
-                "  "+entry.optString("name","Consommation"),18,Color.WHITE,true),7);
-            JSONObject parts=entry.optJSONObject("parts");
-            String countLabel="";
-            if(parts!=null){
-                ArrayList<String> labels=new ArrayList<>();
-                int whole=parts.optInt("entier"),half=parts.optInt("demi"),quarter=parts.optInt("quart");
-                if(whole>0)labels.add(whole+" entier"+(whole>1?"s":""));
-                if(half>0)labels.add(half+" demi");
-                if(quarter>0)labels.add(quarter+" quart"+(quarter>1?"s":""));
-                countLabel=android.text.TextUtils.join(" + ",labels);
+        JSONArray portions=entry.optJSONArray("portions");
+        if(portions!=null&&portions.length()>0){
+            ArrayList<String> fragments=new ArrayList<>();
+            for(int i=0;i<portions.length();i++){
+                JSONObject p=portions.optJSONObject(i);
+                if(p==null)continue;
+                String size=p.optString("size");
+                String route=p.optString("route");
+                int count=p.optInt("count",1);
+                String label=count+" "+(size.isEmpty()?"prise"+(count>1?"s":""):size.toLowerCase(Locale.FRANCE));
+                if(!route.isEmpty())label+=" · "+route;
+                String amount=p.optString("measuredAmount");
+                if(!amount.isEmpty())label+=" ("+amount+" "+p.optString("measuredUnit")+")";
+                fragments.add(label);
             }
-            if(countLabel.isEmpty())countLabel=entry.optString("quantity","1")+" "+entry.optString("unit");
-            String route=entry.optString("route");
-            if(route.contains("(para)"))countLabel+=" · para";
-            else if(route.contains("(trace)"))countLabel+=" · trace";
-            add(c,text(countLabel,15,ACCENT,true),6);
-            String measured=entry.optString("measuredAmount");
-            if(!measured.isEmpty())add(c,text("Quantité déclarée : "+measured+" "+
-                entry.optString("measuredUnit"),13,SOFT,false),5);
-            String size=entry.optString("subjectiveSize");
-            if(!size.isEmpty())add(c,text("Taille apparente : "+size,13,SOFT,false),5);
-            String timing=entry.optString("timeMode",entry.optBoolean("allNight")?"all":"exact");
-            String when=timing.equals("all")?"Pendant toute la soirée":
-                timing.equals("between")?"Entre "+entry.optString("time")+" et "+entry.optString("timeEnd"):
-                "Heure exacte : "+entry.optString("time");
-            add(c,text(entry.optString("date")+" · "+when,13,SOFT,false),6);
-            if(!route.isEmpty())add(c,text("Mode : "+("Autre".equals(route)?
-                entry.optString("routeOther","Autre"):route),13,SOFT,false),5);
-            if(entry.optDouble("cost",0)>0)
-                add(c,text(String.format(Locale.FRANCE,"%.2f €",entry.optDouble("cost")),14,SOFT,false),5);
-            if(!entry.optString("notes").isEmpty())add(c,text(entry.optString("notes"),14,SOFT,false),7);
-            add(c,text("Modifier ›",13,Color.WHITE,true),0);
-            c.setOnClickListener(v->editEntry(entry,id));
-            add(page,c,10);
+            if(!fragments.isEmpty())return android.text.TextUtils.join(" + ",fragments);
         }
-        add(page,text("Informations de l'événement",21,Color.WHITE,true),12);
+        String label=entry.optString("quantity","1")+" "+entry.optString("unit","prise");
+        String route=entry.optString("route");
+        if(!route.isEmpty())label+=" · "+("Autre".equals(route)?
+            entry.optString("routeOther",route):route);
+        String size=entry.optString("subjectiveSize");
+        if(!size.isEmpty())label+=" · "+size.toLowerCase(Locale.FRANCE);
+        String amount=entry.optString("measuredAmount");
+        if(!amount.isEmpty())label+=" · "+amount+" "+entry.optString("measuredUnit");
+        return label;
+    }
+    private String timeDescription(JSONObject entry) {
+        String timing=entry.optString("timeMode",entry.optBoolean("allNight")?"all":"exact");
+        if("all".equals(timing)||entry.optBoolean("allNight"))return "";
+        if("between".equals(timing))
+            return entry.optString("time")+" – "+entry.optString("timeEnd");
+        return entry.optString("time");
+    }
+    private void renderJournalFirst(long id) {
+        List<JSONObject> entries=store.entries(id);
+        LinearLayout bar=new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        add(page,bar,12);
+        TextView heading=text("Mon journal de soirée",20,Color.WHITE,true);
+        bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        if(!entries.isEmpty()) {
+            TextView addOne=button("＋",true,()->editEntry(new JSONObject(),id));
+            addOne.setContentDescription("Ajouter une consommation");
+            addOne.setTextSize(25);
+            bar.addView(addOne,new LinearLayout.LayoutParams(dp(56),dp(52)));
+        } else {
+            // Pour la première saisie, laisser un appel à l'action explicite.
+            add(page,button("＋ Ajouter une consommation",true,
+                ()->editEntry(new JSONObject(),id)),13);
+            LinearLayout empty=card();
+            add(empty,text("Aucune consommation enregistrée.",14,SOFT,false),0);
+            add(page,empty,13);
+        }
+        for(int index=0;index<entries.size();index+=2){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.TOP);
+            add(page,row,10);
+            for(int slot=0;slot<2;slot++){
+                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1);
+                cell.setMargins(dp(3),0,dp(3),0);
+                int n=index+slot;
+                if(n>=entries.size()) {row.addView(new View(this),cell);continue;}
+                JSONObject entry=entries.get(n);
+                LinearLayout bubble=column();
+                bubble.setPadding(dp(13),dp(13),dp(11),dp(13));
+                bubble.setBackground(rounded(PANEL,17));
+                row.addView(bubble,cell);
+                String icon=ConsumptionActivity.iconFor(
+                    entry.optString("category"),entry.optString("name"));
+                add(bubble,text(icon+" "+entry.optString("name","Consommation"),
+                    16,Color.WHITE,true),7);
+                add(bubble,text(primaryQuantity(entry),13,ACCENT,true),6);
+                String time=timeDescription(entry);
+                if(!time.isEmpty())
+                    add(bubble,text("🕒 "+time,12,SOFT,false),6);
+                add(bubble,text("Voir les détails ›",12,SOFT,false),0);
+                bubble.setContentDescription("Détails : "+entry.optString("name")+
+                    " · "+primaryQuantity(entry));
+                bubble.setOnClickListener(v->showEntryDetails(entry,id));
+            }
+        }
+        add(page,text("Informations de l'événement",21,Color.WHITE,true),13);
+    }
+    private void showEntryDetails(JSONObject entry,long eventId){
+        LinearLayout content=column();
+        content.setPadding(dp(18),dp(13),dp(18),dp(6));
+        add(content,text(ConsumptionActivity.iconFor(entry.optString("category"),
+            entry.optString("name"))+"  "+entry.optString("name"),
+            20,Color.WHITE,true),13);
+        add(content,text(primaryQuantity(entry),16,ACCENT,true),12);
+        add(content,text("Date : "+entry.optString("date"),14,SOFT,false),9);
+        String time=timeDescription(entry);
+        if(!time.isEmpty())add(content,text("Heure : "+time,14,SOFT,false),8);
+        String route=entry.optString("route");
+        if(!route.isEmpty() && (entry.optJSONArray("portions")==null ||
+            entry.optJSONArray("portions").length()==0))
+            add(content,text("Mode : "+("Autre".equals(route)?
+                entry.optString("routeOther"):route),14,SOFT,false),8);
+        if(entry.optDouble("cost",0)>0)
+            add(content,text(String.format(Locale.FRANCE,"Prix : %.2f €",
+                entry.optDouble("cost")),14,SOFT,false),8);
+        if(!entry.optString("notes").isEmpty())
+            add(content,text("Notes : "+entry.optString("notes"),14,SOFT,false),8);
+        AlertDialog popup=new AlertDialog.Builder(this)
+            .setTitle("Détails de la prise")
+            .setView(content)
+            .setPositiveButton("Modifier",(d,w)->editEntry(entry,eventId))
+            .setNeutralButton("Supprimer",(d,w)->new AlertDialog.Builder(this)
+                .setTitle("Supprimer cette prise ?")
+                .setMessage("Cette suppression est définitive.")
+                .setNegativeButton("Annuler",null)
+                .setPositiveButton("Supprimer",(a,b)->{
+                    store.deleteEntry(entry.optLong("id"));
+                    showEvent(eventId);
+                }).show())
+            .setNegativeButton("Fermer",null)
+            .create();
+        popup.show();
     }
 
     private void renderArtistProfiles(JSONObject event) {
@@ -689,28 +765,44 @@ public final class MainActivity extends Activity {
                 });
                 // Seul un lien artiste explicitement publié par Shotgun peut être
                 // validé. Vérifier nom officiel ET correspondance des portraits.
-                if(SpotifyArtistVerifier.isArtistUrl(candidate) && photo.startsWith("https://")){
+                if(photo.startsWith("https://")){
+                    destination.setText("Recherche du profil…");
                     new Thread(()->{
-                        boolean verified=SpotifyArtistVerifier.verify(candidate,name,photo);
-                        if(verified)runOnUiThread(()->{
+                        String verifiedLink=SpotifyArtistFinder.resolve(
+                            getApplicationContext(),name,photo,candidate);
+                        runOnUiThread(()->{
                             if(isFinishing())return;
-                            target[0]=candidate;
-                            spotifyMark.setVerified(true);
-                            spotifyMark.setContentDescription("Spotify vérifié : "+name);
-                            destination.setText("Profil Spotify");
-                            destination.setTextColor(Color.rgb(30,215,96));
-                            tile.setContentDescription(name+" · Profil Spotify vérifié");
+                            boolean matched=SpotifyArtistVerifier.isArtistUrl(verifiedLink);
+                            if(matched) {
+                                target[0]=verifiedLink;
+                                spotifyMark.setVerified(true);
+                                spotifyMark.setContentDescription("Spotify vérifié : "+name);
+                                destination.setText("Profil Spotify");
+                                destination.setTextColor(Color.rgb(30,215,96));
+                                tile.setContentDescription(name+" · Profil Spotify vérifié");
+                            } else {
+                                destination.setText("Recherche Spotify");
+                            }
                         });
                     },"AfterLog-spotify-check").start();
                 }
             }
+        }
+        String eventUrl=event.optString("url");
+        if(eventUrl.startsWith("https://shotgun.live/")){
+            add(page,button("↻ Actualiser les portraits depuis Shotgun",false,()->{
+                Intent browser=new Intent(this,ShotgunBrowserActivity.class);
+                browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,eventUrl);
+                browser.putExtra("afterlog_auto_extract",true);
+                startActivityForResult(browser,SHOTGUN_EVENT_REFRESH);
+            }),13);
         }
         add(page,text("Icône verte : profil Spotify vérifié avec le nom et la photo. Icône violette : recherche Spotify (correspondance non confirmée).",
             12,SOFT,false),12);
     }
 
     private void renderFailedEvents(LinearLayout panel) {
-        JSONArray failures=SyncFailureStore.list(this);
+        JSONArray failures=SyncFailureStore.actionable(this);
         if(failures.length()==0)return;
         add(panel,text("Soirées non récupérées · "+failures.length(),18,Color.WHITE,true),8);
         add(panel,text("Voici les soirées que Shotgun n'a pas permis de compléter.",13,SOFT,false),12);
@@ -750,40 +842,79 @@ public final class MainActivity extends Activity {
     }
 
     private void renderEventPhotos(JSONObject event) {
-        add(page,button("📸  Ajouter des photos à cette soirée",false,()->{
-            currentEventId=event.optLong("id");
+        long id=event.optLong("id");
+        LinearLayout buttons=new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        add(page,buttons,14);
+        TextView photos=button("＋ Photo",false,()->{
+            currentEventId=id;
             Intent picker=new Intent(Intent.ACTION_GET_CONTENT);
-            picker.setType("image/*");
-            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("image/*");picker.addCategory(Intent.CATEGORY_OPENABLE);
             picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
             startActivityForResult(Intent.createChooser(picker,"Photos de la soirée"),EVENT_IMAGES_REQUEST);
-        }),13);
+        });
+        buttons.addView(photos,new LinearLayout.LayoutParams(0,-2,1));
+        TextView videos=button("＋ Vidéo",false,()->{
+            currentEventId=id;
+            Intent picker=new Intent(Intent.ACTION_GET_CONTENT);
+            picker.setType("video/*");picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+            startActivityForResult(Intent.createChooser(picker,"Vidéos de la soirée"),EVENT_VIDEOS_REQUEST);
+        });
+        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,-2,1);
+        second.leftMargin=dp(8);buttons.addView(videos,second);
+
         JSONArray items=EventPhotos.gallery(event);
-        if(items.length()==0)return;
-        add(page,text("Mes photos · "+items.length(),18,Color.WHITE,true),10);
-        for(int start=0;start<items.length();start+=3){
-            LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            add(page,row,8);
-            for(int j=0;j<3;j++){
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(105),1);
-                lp.setMargins(dp(3),0,dp(3),0);
-                if(start+j>=items.length()){row.addView(new View(this),lp);continue;}
-                String name=items.optString(start+j);
-                ImageView photo=new ImageView(this);
-                photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                photo.setBackground(rounded(PANEL,12));
-                android.graphics.Bitmap bitmap=EventPhotos.preview(this,name,260);
-                if(bitmap!=null)photo.setImageBitmap(bitmap);
-                row.addView(photo,lp);
-                photo.setOnClickListener(v->new AlertDialog.Builder(this)
-                    .setTitle("Photo de la soirée")
-                    .setMessage("Tu peux agrandir ou retirer cette photo dans « Modifier les informations ».")
-                    .setPositiveButton("Modifier la soirée",(d,w)->editEvent(event))
-                    .setNegativeButton("Fermer",null).show());
+        if(items.length()>0){
+            add(page,text("Mes photos · "+items.length(),18,Color.WHITE,true),9);
+            for(int start=0;start<items.length();start+=3){
+                LinearLayout row=new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                add(page,row,9);
+                for(int j=0;j<3;j++){
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(104),1);
+                    lp.setMargins(dp(3),0,dp(3),0);
+                    if(start+j>=items.length()){row.addView(new View(this),lp);continue;}
+                    String name=items.optString(start+j);
+                    ImageView photo=new ImageView(this);
+                    photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    photo.setBackground(rounded(PANEL,12));
+                    android.graphics.Bitmap bitmap=EventPhotos.preview(this,name,260);
+                    if(bitmap!=null)photo.setImageBitmap(bitmap);
+                    row.addView(photo,lp);
+                    photo.setOnClickListener(v->{
+                        android.graphics.Bitmap large=EventPhotos.preview(this,name,1300);
+                        if(large==null){message("Cette photo est introuvable.");return;}
+                        ImageView view=new ImageView(this);
+                        view.setImageBitmap(large);view.setAdjustViewBounds(true);
+                        view.setPadding(dp(6),dp(6),dp(6),dp(6));
+                        new AlertDialog.Builder(this).setView(view)
+                            .setPositiveButton("Fermer",null).show();
+                    });
+                }
             }
         }
-        add(page,new View(this),13);
+        JSONArray clips=EventVideos.list(event);
+        if(clips.length()>0){
+            add(page,text("Mes vidéos · "+clips.length(),18,Color.WHITE,true),9);
+            for(int i=0;i<clips.length();i++){
+                final int position=i;
+                String name=clips.optString(i);
+                LinearLayout card=card();
+                android.graphics.Bitmap thumb=EventVideos.thumbnail(this,name);
+                if(thumb!=null){
+                    ImageView image=new ImageView(this);
+                    image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    image.setImageBitmap(thumb);
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(160));
+                    lp.bottomMargin=dp(10);card.addView(image,lp);
+                    image.setOnClickListener(v->EventVideos.play(this,name));
+                }
+                add(card,button("▶ Lire la vidéo "+(i+1),false,
+                    ()->EventVideos.play(this,name)),0);
+                add(page,card,10);
+            }
+        }
     }
 
     private String prettyDate(String date) {
@@ -1027,6 +1158,23 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==SHOTGUN_EVENT_REFRESH){
+            if(resultCode==RESULT_OK && data!=null){
+                try{
+                    JSONArray found=new JSONArray(data.getStringExtra(ShotgunBrowserActivity.EXTRA_EVENTS));
+                    JSONObject current=store.event(currentEventId);
+                    if(current!=null && found.length()>0){
+                        JSONObject incoming=found.optJSONObject(0);
+                        if(incoming!=null && mergeShotgunFields(current,incoming)){
+                            store.saveEvent(current);
+                            message("Fiche et artistes complétés depuis Shotgun.");
+                        }else message("Aucune photo supplémentaire détectée sur Shotgun.");
+                    }
+                }catch(Exception error){message("Extraction Shotgun incomplète.");}
+            }
+            showEvent(currentEventId);
+            return;
+        }
         if(requestCode==EVENT_EDITOR_REQUEST) {
             if(resultCode==RESULT_OK && data!=null) {
                 long id=data.getLongExtra(EventEditorActivity.EXTRA_SAVED_ID,0);
@@ -1034,6 +1182,30 @@ public final class MainActivity extends Activity {
                 if(id>0)showEvent(id);else showHome();
             }else if(currentEventId>0)showEvent(currentEventId);
             else showHome();
+            return;
+        }
+        if(requestCode==EVENT_VIDEOS_REQUEST){
+            if(resultCode==RESULT_OK && data!=null){
+                JSONObject current=store.event(currentEventId);
+                if(current!=null){
+                    int added=0,errors=0;
+                    String errorText="";
+                    int length=data.getClipData()==null?1:data.getClipData().getItemCount();
+                    for(int i=0;i<length&&i<12;i++){
+                        Uri uri=data.getClipData()==null?data.getData():
+                            data.getClipData().getItemAt(i).getUri();
+                        try{
+                            if(EventVideos.list(current).length()>=EventVideos.MAX_COUNT)break;
+                            EventVideos.append(current,EventVideos.importVideo(this,uri));
+                            added++;
+                        }catch(Exception ex){errors++;errorText=ex.getMessage();}
+                    }
+                    store.saveEvent(current);
+                    message(added+" vidéo(s) ajoutée(s)"+
+                        (errors>0?" · "+errors+" erreur(s) : "+errorText:""));
+                    showEvent(currentEventId);
+                }
+            }
             return;
         }
         if(requestCode==EVENT_IMAGES_REQUEST){

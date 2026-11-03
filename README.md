@@ -1,6 +1,6 @@
 # AfterLog — Application Android
 
-## Nouveautés de la version 0.9.0
+## Nouveautés de la version 0.10.0
 
 - **Soirées visibles sans redémarrer :** l'accueil repère chaque nouvel événement enregistré par Shotgun et rafraîchit automatiquement ses cartes pendant la synchronisation.
 - **Événements décochés :** ils ne comptent pas comme échecs. Dès que toutes les soirées choisies sont présentes, le bandeau de fin de synchronisation disparaît. Les vrais problèmes d'import restent consultables.
@@ -18,9 +18,31 @@
 **À tester :** le parcours Shotgun dépend de l'interface du site et n'est pas une intégration officielle garantie. Les APK bêta utilisent encore des certificats de signature temporaires : sauvegarde ton journal JSON avant toute éventuelle réinstallation.
 
 
-**Version 0.9.0 (bêta expérimentale)**
+**Version 0.10.0 (bêta expérimentale)**
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.9.0-debug/AfterLog-v0.9.0.apk)
+[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.10.0-debug/AfterLog-v0.10.0.apk)
+
+## Nouveautés v0.10.0 — Journal compact, vidéos et synchronisation
+
+- **Synchronisation Shotgun :** seuls les échecs des soirées réellement cochées restent visibles. Les billets décochés volontairement ne maintiennent plus le bandeau « fiche non récupérée ».
+- **Journal de soirée :** petites bulles avec substance, quantité, taille, mode et heure éventuelle ; rien n'est affiché pour l'heure quand « Toute la soirée » est sélectionné. Un petit bouton ＋ remplace le texte d'ajout lorsqu'il existe déjà des prises.
+- **Détails :** toucher une bulle ouvre les renseignements, le bouton Modifier et le bouton Supprimer avec confirmation.
+- **Saisie :** fenêtre de consommation superposée à la soirée, plutôt qu'une nouvelle page plein écran.
+- **Comptage :** différentes prises d'une même substance peuvent être cumulées par taille et mode (ex. 2 petits para et 1 grand para), avec quantité mesurée toujours facultative. Pas de dosage inventé à partir de la taille.
+- **Modes de prise :** révisés d'après Drogues Info Service, notamment pour la kétamine (voie nasale prédominante) ; le champ « Autre » reste disponible.
+- **Galerie :** photos agrandissables et vidéos personnelles importées, consultables et lisibles dans AfterLog (jusqu'à 12 vidéos de 200 Mo par soirée, selon formats Android).
+- **Artistes :** tentative élargie d'extraction des portraits Shotgun et recherche prudente d'un profil Spotify via MusicBrainz. Une comparaison du nom et de la photo est nécessaire avant d'afficher un lien direct. Sinon l'icône violette ouvre une recherche.
+
+**Limite importante :** ni l'extraction Shotgun ni la recherche Spotify n'ont pu être validées directement sur ton compte. Certaines photos ou correspondances peuvent encore manquer.
+
+### Mises à jour en place : signature Android permanente
+
+Le bouton MAJ sait déjà vérifier GitHub, télécharger l'APK et ouvrir l'installation Android. Pour qu'une nouvelle version s'installe **par-dessus une ancienne**, Android exige la **même clé de signature**. Le workflow GitHub accepte désormais quatre secrets de signature (AFTERLOG_KEYSTORE_BASE64, AFTERLOG_KEYSTORE_PASSWORD, AFTERLOG_KEY_ALIAS, AFTERLOG_KEY_PASSWORD), mais **ces secrets ne sont pas encore configurés**.
+
+Tant que la configuration n'est pas achevée, les APK de test sont signés avec une clé debug temporaire. Une installation à signature différente nécessite une migration unique avant de permettre les mises à jour futures en place. Ne jamais publier la clé privée dans un dépôt public.
+
+**Sauvegarde :** l'export JSON ne comprend pas encore les fichiers photo et vidéo. Conserve leurs originaux séparément avant toute désinstallation.
+
 
 ## Une page d'accueil plus simple
 - Un petit bouton **↻ MAJ** à gauche du titre.
