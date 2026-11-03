@@ -1,6 +1,7 @@
 package fr.afterlog.app;
 
 import android.app.Activity;
+import android.content.ClipData;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -31,10 +32,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class AppUpdater {
-    private static final String API="https://api.github.com/repos/Elikto/Afterlog/releases?per_page=25";
+    private static final String STABLE_METADATA=
+        "https://github.com/Elikto/Afterlog/releases/download/apk-latest/update.json";
     private static final String ASSET_PREFIX="https://github.com/Elikto/Afterlog/releases/download/";
     private static final String MIME="application/vnd.android.package-archive";
-    private static final int MAX_BYTES=50*1024*1024;
+    private static final int MAX_BYTES=150*1024*1024;
     private final Activity activity;
     private File pendingApk;
     private boolean waitingForPermission;
@@ -61,6 +63,18 @@ final class AppUpdater {
                         .setTitle("AfterLog est à jour")
                         .setMessage("Tu utilises déjà la dernière version disponible sur GitHub.")
                         .setPositiveButton("OK",null).show());
+                    return;
+                }
+                final String signer=release.optString("signerSha256");
+                if(!signer.isEmpty() && !signer.equals(installedSignerSha256())){
+                    ui(()->new AlertDialog.Builder(activity)
+                        .setTitle("Migration de signature nécessaire")
+                        .setMessage("AfterLog utilise maintenant une clé permanente comme CyberQuiz, mais cette installation utilise une ancienne clé de test. Android ne permet pas de la remplacer directement.\n\nN'efface pas cette application sans avoir sauvegardé tes consommations et tes médias. Cette transition est nécessaire une seule fois ; ensuite, le bouton MAJ fonctionnera sur les prochaines versions.")
+                        .setNegativeButton("Fermer",null)
+                        .setPositiveButton("Paramètres et sauvegarde",(d,w)->{
+                            if(activity instanceof MainActivity)
+                                ((MainActivity)activity).openBackupSettings();
+                        }).show());
                     return;
                 }
                 final String tag=release.getString("tag_name");
@@ -101,27 +115,58 @@ final class AppUpdater {
     }
 
     private JSONObject latestRelease() throws Exception {
+        // Même mécanisme que CyberQuiz : update.json stable, avec version,
+        // somme SHA-256 et identité de signature du paquet.
         HttpURLConnection conn=null;
         try {
-            conn=(HttpURLConnection)new URL(API).openConnection();
+            URL url=new URL(STABLE_METADATA+"?ts="+System.currentTimeMillis());
+            conn=(HttpURLConnection)url.openConnection();
             conn.setConnectTimeout(12000);conn.setReadTimeout(15000);
-            conn.setRequestProperty("Accept","application/vnd.github+json");
+            conn.setUseCaches(false);
+            conn.setRequestProperty("Accept","application/json");
+            conn.setRequestProperty("Cache-Control","no-cache");
             conn.setRequestProperty("User-Agent","AfterLog-Android-updater");
             int status=conn.getResponseCode();
+            if(status==404)
+                throw new Exception("La distribution AfterLog avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
             if(status!=200)throw new Exception("GitHub HTTP "+status);
-            byte[] response;
-            try(InputStream in=conn.getInputStream()) {response=readLimited(in,1_500_000);}
-            JSONArray list=new JSONArray(new String(response,java.nio.charset.StandardCharsets.UTF_8));
-            long installed=semver(installedVersion());
-            long highest=installed;
-            JSONObject best=null;
-            for(int i=0;i<list.length();i++) {
-                JSONObject item=list.optJSONObject(i);
-                if(item==null||item.optBoolean("draft"))continue;
-                long number=semver(item.optString("tag_name"));
-                if(number>highest){highest=number;best=item;}
+            JSONObject json;
+            try(InputStream in=conn.getInputStream()) {
+                json=new JSONObject(new String(readLimited(in,40000),
+                    java.nio.charset.StandardCharsets.UTF_8));
             }
-            return best;
+            if(!json.optBoolean("updateReady",false))
+                throw new Exception("La mise à jour stable n'est pas encore publiée.");
+            if(!activity.getPackageName().equals(json.optString("packageName")))
+                throw new Exception("L'identité Android indiquée est incorrecte.");
+            String version=json.optString("versionName");
+            int code=json.optInt("versionCode");
+            if(code<1 || !version.matches("\\d+\\.\\d+\\.\\d+"))
+                throw new Exception("Numéro de version de mise à jour invalide.");
+            String asset=json.optString("apkUrl");
+            if(!asset.equals("https://github.com/Elikto/Afterlog/releases/download/apk-latest/AfterLog.apk"))
+                throw new Exception("La source de l'APK stable est incorrecte.");
+            String sha=json.optString("sha256").toLowerCase(Locale.ROOT);
+            String signer=json.optString("signerSha256").toLowerCase(Locale.ROOT);
+            if(!sha.matches("[a-f0-9]{64}") || !signer.matches("[a-f0-9]{64}"))
+                throw new Exception("Empreintes de la mise à jour manquantes.");
+            int size=json.optInt("size");
+            if(size<10000 || size>MAX_BYTES)
+                throw new Exception("Taille de la mise à jour incorrecte.");
+            PackageInfo installed=activity.getPackageManager().getPackageInfo(
+                activity.getPackageName(),0);
+            if(code<=installed.versionCode)return null;
+            JSONObject apk=new JSONObject();
+            apk.put("name","AfterLog-v"+version+".apk");
+            apk.put("browser_download_url",asset);
+            apk.put("digest","sha256:"+sha);
+            apk.put("size",size);
+            JSONObject release=new JSONObject();
+            release.put("tag_name","v"+version);
+            release.put("body","Version stable signée pour les mises à jour AfterLog sans réinstallation.");
+            release.put("signerSha256",signer);
+            release.put("assets",new JSONArray().put(apk));
+            return release;
         }finally {if(conn!=null)conn.disconnect();}
     }
     private String installedVersion() {
@@ -226,15 +271,17 @@ final class AppUpdater {
     private String validate(File apk) {
         PackageManager pm=activity.getPackageManager();
         try {
-            PackageInfo candidate=pm.getPackageArchiveInfo(apk.getAbsolutePath(),PackageManager.GET_SIGNATURES);
-            PackageInfo current=pm.getPackageInfo(activity.getPackageName(),PackageManager.GET_SIGNATURES);
+            int flags=Build.VERSION.SDK_INT>=28 ?
+                PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
+            PackageInfo candidate=pm.getPackageArchiveInfo(apk.getAbsolutePath(),flags);
+            PackageInfo current=pm.getPackageInfo(activity.getPackageName(),flags);
             if(candidate==null)return "APK illisible.";
             if(!activity.getPackageName().equals(candidate.packageName))
                 return "Cet APK n'appartient pas à AfterLog.";
             if(candidate.versionCode<=current.versionCode)
                 return "La version téléchargée n'est pas plus récente.";
-            Signature[] ours=current.signatures;
-            Signature[] theirs=candidate.signatures;
+            Signature[] ours=signatures(current);
+            Signature[] theirs=signatures(candidate);
             if(ours==null || theirs==null || ours.length==0 || theirs.length==0 ||
                !Arrays.equals(ours,theirs)) {
                 return "Signature Android différente. Cette version ne peut pas remplacer directement l'application installée. "
@@ -245,6 +292,29 @@ final class AppUpdater {
         }catch(Exception e){return "Impossible de vérifier cet APK : "+e.getMessage();}
     }
 
+    @SuppressWarnings("deprecation")
+    private static Signature[] signatures(PackageInfo info){
+        if(info==null)return null;
+        if(Build.VERSION.SDK_INT>=28 && info.signingInfo!=null){
+            return info.signingInfo.hasMultipleSigners()?
+                info.signingInfo.getApkContentsSigners():
+                info.signingInfo.getSigningCertificateHistory();
+        }
+        return info.signatures;
+    }
+    private String installedSignerSha256() {
+        try {
+            PackageManager pm=activity.getPackageManager();
+            int flags=Build.VERSION.SDK_INT>=28 ?
+                PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
+            Signature[] current=signatures(pm.getPackageInfo(activity.getPackageName(),flags));
+            if(current==null || current.length==0)return "";
+            byte[] digest=MessageDigest.getInstance("SHA-256").digest(current[0].toByteArray());
+            StringBuilder result=new StringBuilder();
+            for(byte item:digest)result.append(String.format(Locale.ROOT,"%02x",item&255));
+            return result.toString();
+        }catch(Exception e){return "";}
+    }
     private void installOrAskPermission(){
         if(pendingApk==null||!pendingApk.isFile()){showStatus("APK introuvable");return;}
         if(Build.VERSION.SDK_INT>=26&&!activity.getPackageManager().canRequestPackageInstalls()){
@@ -263,8 +333,11 @@ final class AppUpdater {
         try {
             Intent intent=new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(UpdateFileProvider.uri(activity.getPackageName()),MIME);
-            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(ClipData.newUri(activity.getContentResolver(),
+                "Mise à jour AfterLog",UpdateFileProvider.uri(activity.getPackageName())));
+            if(intent.resolveActivity(activity.getPackageManager())==null)
+                throw new Exception("Installateur Android introuvable");
             activity.startActivity(intent);
         }catch(Exception e){showStatus("Impossible d'ouvrir l'installation Android : "+e.getMessage());}
     }

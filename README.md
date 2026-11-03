@@ -1,6 +1,15 @@
 # AfterLog — Application Android
 
-## Nouveautés de la version 0.11.0
+## Mise à jour 0.12.0 : bouton MAJ et signature permanente
+
+Le système de mise à jour reprend le circuit **CyberQuiz** : une release stable fixe `apk-latest`, un fichier de métadonnées `update.json` avec SHA-256, et une clé de signature permanente.
+
+**Important :** la clé privée n'est pas publiée. Elle doit être placée **une seule fois** dans le secret GitHub Actions `AFTERLOG_SIGNING_BUNDLE` pour activer les mises à jour installables. [Configuration et consignes de migration](SIGNING_SETUP.md).
+
+Avant cette configuration, aucune release stable n'est annoncée au téléphone. Android refusera toujours une mise à jour sur une ancienne installation signée avec une clé différente. Les consommations et les médias doivent être préservés avant une éventuelle migration.
+
+
+## Nouveautés de la version 0.12.0
 
 - **Soirées visibles sans redémarrer :** l'accueil repère chaque nouvel événement enregistré par Shotgun et rafraîchit automatiquement ses cartes pendant la synchronisation.
 - **Événements décochés :** ils ne comptent pas comme échecs. Dès que toutes les soirées choisies sont présentes, le bandeau de fin de synchronisation disparaît. Les vrais problèmes d'import restent consultables.

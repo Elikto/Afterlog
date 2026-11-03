@@ -36,44 +36,90 @@ jobs:
           VERSION="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
           test -n "$VERSION" || { echo "Version Android introuvable"; exit 1; }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Vérifier la signature Android permanente
+      - name: Préparer la clé Android permanente
         id: signing
         env:
-          AFTERLOG_KEYSTORE_BASE64: ${{ secrets.AFTERLOG_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.AFTERLOG_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.AFTERLOG_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.AFTERLOG_KEY_PASSWORD }}
+          AFTERLOG_SIGNING_BUNDLE: ${{ secrets.AFTERLOG_SIGNING_BUNDLE }}
+          LEGACY_KEYSTORE: ${{ secrets.AFTERLOG_KEYSTORE_BASE64 }}
+          LEGACY_PASSWORD: ${{ secrets.AFTERLOG_KEYSTORE_PASSWORD }}
+          LEGACY_ALIAS: ${{ secrets.AFTERLOG_KEY_ALIAS }}
+          LEGACY_KEY_PASSWORD: ${{ secrets.AFTERLOG_KEY_PASSWORD }}
         shell: bash
         run: |
-          if [[ -n "$AFTERLOG_KEYSTORE_BASE64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
-            printf '%s' "$AFTERLOG_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/afterlog-release.jks"
+          set -euo pipefail
+          if [[ -n "$AFTERLOG_SIGNING_BUNDLE" ]]; then
+            python3 - <<'PY'
+          import base64, json, os, pathlib, re
+          config=json.loads(base64.b64decode(os.environ["AFTERLOG_SIGNING_BUNDLE"],validate=True))
+          payload=base64.b64decode(config["keystore_base64"],validate=True)
+          if not 512<len(payload)<100000:
+              raise ValueError("Clé Android non valide")
+          name=config["alias"]; pw=config["store_password"]; keypw=config["key_password"]
+          if not re.fullmatch(r"[a-zA-Z0-9_-]{6,128}",name):
+              raise ValueError("Alias invalide")
+          if any(not re.fullmatch(r"[a-zA-Z0-9_-]{20,128}",value) for value in (pw,keypw)):
+              raise ValueError("Mot de passe invalide")
+          path=pathlib.Path(os.environ["RUNNER_TEMP"])/"afterlog-release.p12"
+          path.write_bytes(payload); path.chmod(0o600)
+          for secret in (pw,keypw): print("::add-mask::"+secret)
+          with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as output:
+              output.write("AFTERLOG_KEYSTORE_FILE="+str(path)+"\n")
+              output.write("AFTERLOG_KEYSTORE_PASSWORD="+pw+"\n")
+              output.write("AFTERLOG_KEY_ALIAS="+name+"\n")
+              output.write("AFTERLOG_KEY_PASSWORD="+keypw+"\n")
+          PY
             echo "persistent=true" >> "$GITHUB_OUTPUT"
-            echo "Signature permanente disponible."
+          elif [[ -n "$LEGACY_KEYSTORE" && -n "$LEGACY_PASSWORD" && -n "$LEGACY_ALIAS" && -n "$LEGACY_KEY_PASSWORD" ]]; then
+            printf '%s' "$LEGACY_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/afterlog-release.jks"
+            chmod 600 "$RUNNER_TEMP/afterlog-release.jks"
+            echo "AFTERLOG_KEYSTORE_FILE=$RUNNER_TEMP/afterlog-release.jks" >> "$GITHUB_ENV"
+            echo "AFTERLOG_KEYSTORE_PASSWORD=$LEGACY_PASSWORD" >> "$GITHUB_ENV"
+            echo "AFTERLOG_KEY_ALIAS=$LEGACY_ALIAS" >> "$GITHUB_ENV"
+            echo "AFTERLOG_KEY_PASSWORD=$LEGACY_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "persistent=true" >> "$GITHUB_OUTPUT"
           else
             echo "persistent=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Signature permanente absente : APK debug de test uniquement. Les installations existantes peuvent refuser la mise à jour."
+            echo "::warning::Clé de signature absente : APK de test seulement. Mise à jour en place impossible entre clés différentes."
           fi
       - name: Construire l'APK
         shell: bash
-        env:
-          AFTERLOG_KEYSTORE_PASSWORD: ${{ secrets.AFTERLOG_KEYSTORE_PASSWORD }}
-          AFTERLOG_KEY_ALIAS: ${{ secrets.AFTERLOG_KEY_ALIAS }}
-          AFTERLOG_KEY_PASSWORD: ${{ secrets.AFTERLOG_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
-            export AFTERLOG_KEYSTORE_FILE="$RUNNER_TEMP/afterlog-release.jks"
             gradle --no-daemon --stacktrace :app:assembleRelease
+            test -f app/build/outputs/apk/release/app-release.apk
           else
             gradle --no-daemon --stacktrace :app:assembleDebug
           fi
-      - name: Préparer le téléchargement
+      - name: Préparer et vérifier l'APK
+        id: verified
         shell: bash
+        env:
+          VERSION: ${{ steps.appversion.outputs.version }}
         run: |
+          set -euo pipefail
+          VERSION_CODE="$(sed -nE 's/.*versionCode = ([0-9]+).*/\1/p' app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION_CODE"
           if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
-            cp app/build/outputs/apk/release/app-release.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
+            SOURCE=app/build/outputs/apk/release/app-release.apk
           else
-            cp app/build/outputs/apk/debug/app-debug.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
+            SOURCE=app/build/outputs/apk/debug/app-debug.apk
           fi
+          cp "$SOURCE" "AfterLog-v${VERSION}.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "AfterLog-v${VERSION}.apk" > "$RUNNER_TEMP/signing-report.txt"
+          SIGNER="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/signing-report.txt" | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          test -n "$SIGNER"
+          if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
+            EXPECTED="0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
+            if [[ "$SIGNER" != "$EXPECTED" ]]; then
+              echo "::error::Le certificat Android ne correspond pas à la clé permanente AfterLog."
+              exit 1
+            fi
+          fi
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "signer=$SIGNER" >> "$GITHUB_OUTPUT"
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
@@ -82,29 +128,61 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publier l'APK dans GitHub Releases
+        if: steps.signing.outputs.persistent == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.appversion.outputs.version }}
+          VERSION_CODE: ${{ steps.verified.outputs.version_code }}
+          SIGNER: ${{ steps.verified.outputs.signer }}
+          PERSISTENT: ${{ steps.signing.outputs.persistent }}
         shell: bash
         run: |
-          TAG="v${VERSION}"
-          NOTE="Version AfterLog Android. Mise à jour en place uniquement si la signature est identique à celle de l'application installée."
-          MODE="stable"
-          if [[ "${{ steps.signing.outputs.persistent }}" != "true" ]]; then
-            TAG="v${VERSION}-debug"
-            NOTE="Version de test : signature temporaire, réinstallation potentiellement nécessaire. Sauvegarder les données avant de désinstaller."
-            MODE="debug"
-          fi
+          set -euo pipefail
           APK="AfterLog-v${VERSION}.apk"
+          if [[ "$PERSISTENT" == "true" ]]; then
+            TAG="v${VERSION}"
+            NOTE="APK AfterLog signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
+            test "$SIGNER" = "0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
+          else
+            TAG="v${VERSION}-debug"
+            NOTE="Version bêta signée temporairement. Les mises à jour en place ne fonctionnent pas lorsque les clés changent."
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
-          elif [[ "$MODE" == "debug" ]]; then
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "$NOTE" --prerelease
-          else
+          elif [[ "$PERSISTENT" == "true" ]]; then
             gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION}" --notes "$NOTE"
+          else
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "$NOTE" --prerelease
+          fi
+          if [[ "$PERSISTENT" == "true" ]]; then
+            cp "$APK" AfterLog.apk
+            export APK_SHA256="$(sha256sum AfterLog.apk | awk '{print $1}')"
+            export APK_SIZE="$(stat -c%s AfterLog.apk)"
+            python3 - <<'PY'
+          import json,os
+          data={
+              "updateReady":True,
+              "packageName":"fr.afterlog.app",
+              "versionName":os.environ["VERSION"],
+              "versionCode":int(os.environ["VERSION_CODE"]),
+              "apkUrl":"https://github.com/Elikto/Afterlog/releases/download/apk-latest/AfterLog.apk",
+              "sha256":os.environ["APK_SHA256"],
+              "signerSha256":os.environ["SIGNER"],
+              "size":int(os.environ["APK_SIZE"])
+          }
+          with open("update.json","w",encoding="utf-8") as fp:
+              json.dump(data,fp,ensure_ascii=False,indent=2)
+          PY
+            if gh release view apk-latest >/dev/null 2>&1; then
+              gh release upload apk-latest AfterLog.apk update.json --clobber
+              gh release edit apk-latest --title "AfterLog — dernière version stable" --notes "$NOTE"
+            else
+              gh release create apk-latest AfterLog.apk update.json --target "$GITHUB_SHA" \
+                --title "AfterLog — dernière version stable" --notes "$NOTE"
+            fi
           fi
       - name: Garder le bouton de téléchargement du README à jour
-        if: success()
+        if: steps.signing.outputs.persistent == 'true'
         continue-on-error: true
         env:
           VERSION: ${{ steps.appversion.outputs.version }}

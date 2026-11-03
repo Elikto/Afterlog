@@ -1187,6 +1187,9 @@ public final class MainActivity extends Activity {
         syncHandler.removeCallbacks(syncTicker);
         super.onPause();
     }
+    // Ouvre la sauvegarde directement depuis le diagnostic du bouton MAJ.
+    void openBackupSettings() { showSettings(); }
+
     private void showSettings() {
         screen("Confidentialité et sauvegarde",this::showHome);
         subtitle("Les consommations sont stockées localement sur cet appareil. Aucun compte Shotgun ou Gmail n'est nécessaire.");
