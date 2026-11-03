@@ -486,14 +486,12 @@ public final class MainActivity extends Activity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             add(card,row,0);
-            String url=e.optString("poster");
-            if(!url.isEmpty()){
-                ImageView image=new ImageView(this);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setBackground(rounded(Color.rgb(42,44,64),10));
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(73),dp(92));
-                lp.rightMargin=dp(12);row.addView(image,lp);loadImage(image,url);
-            }
+            // Always show a poster, including hand-created private evenings.
+            View posterThumb=EventPoster.create(this,e);
+            LinearLayout.LayoutParams thumbLp=new LinearLayout.LayoutParams(
+                dp(73),dp(92));
+            thumbLp.rightMargin=dp(12);
+            row.addView(posterThumb,thumbLp);
             LinearLayout details=column();
             row.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             TextView title=text(e.optString("title","Événement"),17,Color.WHITE,true);
@@ -556,17 +554,11 @@ public final class MainActivity extends Activity {
         eventScreen=true;
         renderedEventRevision=AppStore.revision(this);
         // L'affiche et le titre apparaissent avant le journal personnel.
-        String poster=event.optString("poster");
-        if(!poster.isEmpty()) {
-            ImageView image=new ImageView(this);
-            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setBackground(rounded(PANEL,18));
-            image.setContentDescription("Affiche de "+event.optString("title"));
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(265));
-            lp.bottomMargin=dp(17);
-            page.addView(image,lp);
-            loadImage(image,poster);
-        }
+        View poster=EventPoster.create(this,event);
+        poster.setContentDescription("Affiche de "+event.optString("title","Soirée"));
+        LinearLayout.LayoutParams posterLp=new LinearLayout.LayoutParams(-1,dp(265));
+        posterLp.bottomMargin=dp(17);
+        page.addView(poster,posterLp);
         add(page,text(event.optString("title","Soirée"),24,Color.WHITE,true),8);
         String headlineDate=prettyDate(event.optString("date"));
         String startHour=event.optString("start");
