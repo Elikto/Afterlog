@@ -86,6 +86,14 @@ public final class MainActivity extends Activity {
         GalleryThumb(FrameLayout frame,TextView check){this.frame=frame;this.check=check;}
     }
 
+    // Photos already loaded must survive the UI refresh triggered by each
+    // newly resolved Spotify portrait (otherwise the display keeps showing initials).
+    private final android.util.LruCache<String,Bitmap> imageMemory=
+        new android.util.LruCache<String,Bitmap>(10*1024*1024){
+            @Override protected int sizeOf(String key,Bitmap value){
+                return value==null?0:value.getByteCount();
+            }
+        };
     private long renderedEventRevision=-1L;
     private long displayedEventsRevision=-1L;
     private final Handler syncHandler=new Handler(Looper.getMainLooper());
@@ -1776,14 +1784,27 @@ public final class MainActivity extends Activity {
     }
     private void loadImage(ImageView image,String url,String backup,Runnable onLoaded){
         if(url==null||!url.startsWith("https://"))return;
+        Bitmap cached=imageMemory.get(url);
+        if(cached==null&&backup!=null)cached=imageMemory.get(backup);
+        if(cached!=null){
+            image.setVisibility(View.VISIBLE);
+            image.setImageBitmap(cached);
+            if(onLoaded!=null)onLoaded.run();
+            return;
+        }
         new Thread(()->{
             Bitmap bmp=fetchImage(url);
-            if(bmp==null&&backup!=null&&backup.startsWith("https://"))
+            String successful=url;
+            if(bmp==null&&backup!=null&&backup.startsWith("https://")){
                 bmp=fetchImage(backup);
+                successful=backup;
+            }
             if(bmp==null)return;
             final Bitmap portrait=bmp;
+            final String cacheKey=successful;
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
+                imageMemory.put(cacheKey,portrait);
                 image.setVisibility(View.VISIBLE);
                 image.setImageBitmap(portrait);
                 if(onLoaded!=null)onLoaded.run();
