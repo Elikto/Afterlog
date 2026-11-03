@@ -789,12 +789,10 @@ public final class MainActivity extends Activity {
                     LinearLayout bubble=column();
                     bubble.setGravity(Gravity.CENTER);
                     bubble.setPadding(dp(3),dp(5),dp(3),dp(5));
-                    GradientDrawable circle=new GradientDrawable(
-                        GradientDrawable.Orientation.TL_BR,
-                        new int[]{Color.rgb(47,41,70),Color.rgb(28,27,44)});
-                    circle.setShape(GradientDrawable.OVAL);
-                    circle.setStroke(dp(1),Color.rgb(88,75,120));
-                    bubble.setBackground(circle);
+                    int substanceColor=ConsumptionPalette.forEntry(
+                        entry.optString("category"),entry.optString("name"));
+                    bubble.setBackground(ConsumptionPalette.circle(substanceColor,
+                        getResources().getDisplayMetrics().density));
                     cell.addView(bubble,new FrameLayout.LayoutParams(
                         dp(circleDp),dp(circleDp),Gravity.CENTER));
                     String icon=ConsumptionActivity.iconFor(
@@ -807,7 +805,7 @@ public final class MainActivity extends Activity {
                     name.setSingleLine(true);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     add(bubble,name,0);
-                    TextView quantity=text(compactQuantity(entry),9,ACCENT,true);
+                    TextView quantity=text(compactQuantity(entry),9,substanceColor,true);
                     quantity.setGravity(Gravity.CENTER);
                     quantity.setSingleLine(true);
                     quantity.setEllipsize(android.text.TextUtils.TruncateAt.END);
