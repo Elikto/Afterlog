@@ -850,7 +850,7 @@ public final class MainActivity extends Activity {
             String key=p.optString("name").trim().toLowerCase(Locale.ROOT);
             if(seen.add(key))ordered.put(p);
         }
-        for(String artist:event.optString("artists").split(",")){
+        for(String artist:event.optString("artists").split("[,;\\n]+")){
             String name=artist.trim();
             if(name.isEmpty()||!seen.add(name.toLowerCase(Locale.ROOT)))continue;
             JSONObject profile=new JSONObject();
@@ -866,178 +866,164 @@ public final class MainActivity extends Activity {
             if(SpotifyArtistVerifier.isArtistUrl(item.optString("spotify")))linkedCount++;
             if(item.optString("spotifyPhoto").startsWith("https://"))photoCount++;
         }
-        add(page,text("Artistes · "+ordered.length(),13,SOFT,false),6);
-        add(page,text("Spotify : "+linkedCount+"/"+ordered.length()+
-            " profils · "+photoCount+" photos officielles",12,SOFT,false),10);
+        add(page,text("Artistes · "+ordered.length(),14,SOFT,false),5);
         if(linkedCount<ordered.length()||photoCount<ordered.length()){
-            add(page,button("↻ Rechercher Spotify dans toutes mes soirées",false,()->{
+            add(page,text(linkedCount+" profils Spotify · "+photoCount+
+                " photos · recherche sur toutes les soirées",12,SOFT,false),6);
+            add(page,button("↻ Compléter les artistes",false,()->{
                 SpotifyArtistBackfillWorker.refreshAll(this);
-                message("Recherche des profils et portraits de tous les événements relancée.");
-            }),12);
+                message("Recherche des artistes relancée sur toutes les soirées.");
+            }),11);
         }
-        // Fixed diameter for the entire artist card; the portrait alone is not the card.
-        final int circleDp=Math.max(106,Math.min(126,
-            (getResources().getConfiguration().screenWidthDp-52)/3));
-        final int portraitDp=Math.max(35,circleDp-76);
+
+        // Portrait plein cadre avec voile dégradé, nom lisible en bas et
+        // petite pastille Spotify dans le coin. Aucun gros cercle vide.
+        final int circleDp=Math.min(134,Math.max(96,
+            (getResources().getConfiguration().screenWidthDp-48)/3));
+        final int accent=Color.rgb(186,166,255);
         for(int index=0;index<ordered.length();index+=3){
             LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.TOP);
-            add(page,row,12);
+            add(page,row,9);
             for(int slot=0;slot<3;slot++){
                 int i=index+slot;
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
-                    0,dp(circleDp),1f);
-                lp.setMargins(dp(2),0,dp(2),0);
-                if(i>=ordered.length()){row.addView(new View(this),lp);continue;}
+                LinearLayout.LayoutParams columnLp=
+                    new LinearLayout.LayoutParams(0,dp(circleDp),1f);
+                columnLp.setMargins(dp(3),0,dp(3),0);
+                FrameLayout holder=new FrameLayout(this);
+                row.addView(holder,columnLp);
+                if(i>=ordered.length())continue;
                 JSONObject artist=ordered.optJSONObject(i);
                 if(artist==null)continue;
                 String name=artist.optString("name").trim();
                 String photo=artist.optString("spotifyPhoto");
                 if(photo.isEmpty())photo=artist.optString("photo");
                 String candidate=artist.optString("spotify");
-                String shotgun=artist.optString("shotgunUrl");
                 String direct=SpotifyArtistFinder.savedProfile(this,name);
                 if(direct.isEmpty())direct=SpotifyArtistFinder.trustedProfile(name);
-                if(direct.isEmpty() && SpotifyArtistVerifier.isArtistUrl(candidate))
+                if(direct.isEmpty()&&SpotifyArtistVerifier.isArtistUrl(candidate))
                     direct=candidate;
                 final String[] target={direct};
 
-                FrameLayout cardSlot=new FrameLayout(this);
-                row.addView(cardSlot,lp);
-                LinearLayout tile=column();
-                tile.setGravity(Gravity.CENTER_HORIZONTAL|Gravity.CENTER_VERTICAL);
-                tile.setPadding(dp(5),dp(4),dp(5),dp(3));
-                GradientDrawable cardCircle=new GradientDrawable(
+                FrameLayout tile=new FrameLayout(this);
+                GradientDrawable base=new GradientDrawable(
                     GradientDrawable.Orientation.TL_BR,
-                    new int[]{Color.rgb(42,33,65),Color.rgb(25,28,44)});
-                cardCircle.setShape(GradientDrawable.OVAL);
-                cardCircle.setStroke(dp(1),Color.rgb(88,70,123));
-                tile.setBackground(cardCircle);
+                    new int[]{Color.rgb(82,52,119),Color.rgb(27,34,64)});
+                base.setShape(GradientDrawable.OVAL);
+                tile.setBackground(base);
                 tile.setClipToOutline(true);
-                cardSlot.addView(tile,new FrameLayout.LayoutParams(
+                holder.addView(tile,new FrameLayout.LayoutParams(
                     dp(circleDp),dp(circleDp),Gravity.CENTER));
 
-                FrameLayout frame=new FrameLayout(this);
-                LinearLayout.LayoutParams portraitLp=new LinearLayout.LayoutParams(
-                    dp(portraitDp),dp(portraitDp));
-                portraitLp.gravity=Gravity.CENTER_HORIZONTAL;
-                portraitLp.bottomMargin=dp(2);
-                tile.addView(frame,portraitLp);
-                ImageView portrait=new ImageView(this);
-                portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                GradientDrawable circle=new GradientDrawable(
-                    GradientDrawable.Orientation.TL_BR,
-                    new int[]{Color.rgb(84,66,127),Color.rgb(48,42,75)});
-                circle.setShape(GradientDrawable.OVAL);
-                portrait.setBackground(circle);
-                portrait.setClipToOutline(true);
-                frame.addView(portrait,new FrameLayout.LayoutParams(-1,-1));
                 TextView fallback=text(name.isEmpty()?"♪":
                     name.substring(0,1).toUpperCase(Locale.ROOT),
-                    30,Color.rgb(222,207,255),true);
+                    43,Color.rgb(227,205,255),true);
                 fallback.setGravity(Gravity.CENTER);
-                frame.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+                tile.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+
+                ImageView image=new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                tile.addView(image,new FrameLayout.LayoutParams(-1,-1));
                 if(photo.startsWith("https://"))
-                    loadImage(portrait,photo,()->fallback.setVisibility(View.GONE));
+                    loadImage(image,photo,()->fallback.setVisibility(View.GONE));
+                else image.setVisibility(View.GONE);
 
-                TextView title=text(name,circleDp<112?10:11,Color.WHITE,true);
-                title.setGravity(Gravity.CENTER);
-                title.setMaxLines(2);
-                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                tile.addView(title,new LinearLayout.LayoutParams(-1,dp(29)));
+                // Darken only the bottom of the portrait, not the full image.
+                View gradient=new View(this);
+                GradientDrawable shade=new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.TRANSPARENT,Color.argb(65,8,7,17),
+                        Color.argb(238,9,8,21)});
+                gradient.setBackground(shade);
+                tile.addView(gradient,new FrameLayout.LayoutParams(-1,-1));
 
-                SpotifyMarkView spotifyMark=new SpotifyMarkView(this);
-                spotifyMark.setVerified(false);
-                spotifyMark.setContentDescription("Spotify : recherche de "+name);
-                LinearLayout.LayoutParams iconLp=new LinearLayout.LayoutParams(dp(19),dp(19));
-                iconLp.gravity=Gravity.CENTER_HORIZONTAL;
-                tile.addView(spotifyMark,iconLp);
-                TextView destination=text("Associer",9,ACCENT,false);
-                destination.setGravity(Gravity.CENTER);
-                destination.setMaxLines(1);
-                destination.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                tile.addView(destination,new LinearLayout.LayoutParams(-1,dp(13)));
+                TextView label=text(name,11,Color.WHITE,true);
+                label.setGravity(Gravity.CENTER);
+                label.setMaxLines(2);
+                label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                label.setPadding(dp(7),0,dp(7),dp(4));
+                label.setShadowLayer(dp(2),0,dp(1),Color.BLACK);
+                FrameLayout.LayoutParams nameLp=new FrameLayout.LayoutParams(
+                    -1,dp(37),Gravity.BOTTOM);
+                nameLp.bottomMargin=dp(5);
+                tile.addView(label,nameLp);
+
+                SpotifyMarkView spotify=new SpotifyMarkView(this);
+                spotify.setVerified(SpotifyArtistVerifier.isArtistUrl(target[0]));
+                spotify.setContentDescription(spotify.isClickable()?
+                    "Profil Spotify de "+name:"Compte Spotify de "+name);
+                FrameLayout.LayoutParams badgeLp=new FrameLayout.LayoutParams(
+                    dp(27),dp(27),Gravity.RIGHT|Gravity.TOP);
+                badgeLp.topMargin=dp(11);
+                badgeLp.rightMargin=dp(11);
+                tile.addView(spotify,badgeLp);
+
+                // Subtle ring with no fill, so photos remain prominent.
+                View border=new View(this);
+                GradientDrawable ring=new GradientDrawable();
+                ring.setShape(GradientDrawable.OVAL);
+                ring.setColor(Color.TRANSPARENT);
+                ring.setStroke(dp(1),Color.argb(170,204,178,255));
+                border.setBackground(ring);
+                tile.addView(border,new FrameLayout.LayoutParams(-1,-1));
 
                 Runnable openSpotify=()->{
                     if(SpotifyArtistVerifier.isArtistUrl(target[0])){
                         try{
-                            // App Spotify intercepte ce lien s'il est installé,
-                            // sinon Android ouvre la page de l'artiste sur le web.
-                            startActivity(new Intent(Intent.ACTION_VIEW,
-                                Uri.parse(target[0])));
+                            startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target[0])));
                         }catch(Exception ignored){
                             message("Impossible d'ouvrir ce profil Spotify.");
                         }
                     }else{
-                        // Ne pas rediriger vers Shotgun ou vers une recherche.
-                        android.widget.EditText field=new android.widget.EditText(this);
-                        field.setHint("https://open.spotify.com/artist/…");
-                        field.setSingleLine(true);
-                        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT |
-                            android.text.InputType.TYPE_TEXT_VARIATION_URI);
+                        EditText input=new EditText(this);
+                        input.setHint("https://open.spotify.com/artist/…");
+                        input.setSingleLine(true);
+                        input.setTextColor(Color.WHITE);
+                        input.setInputType(InputType.TYPE_CLASS_TEXT|
+                            InputType.TYPE_TEXT_VARIATION_URI);
                         NeonDialog.builder(this)
-                            .setTitle("Profil Spotify de "+name)
-                            .setMessage("Aucun compte Spotify direct n'a été confirmé automatiquement. Tu peux associer son vrai lien si tu le connais.")
-                            .setView(field)
-                            .setNegativeButton("Fermer",null)
+                            .setTitle("Spotify · "+name)
+                            .setMessage("Profil non confirmé. Tu peux coller son lien officiel si tu le connais, ou relancer la recherche dans les paramètres.")
+                            .setView(input)
+                            .setNegativeButton("Annuler",null)
                             .setPositiveButton("Associer",(dialog,which)->{
-                                String link=field.getText().toString().trim();
+                                String link=input.getText().toString().trim();
                                 if(!SpotifyArtistVerifier.isArtistUrl(link)){
-                                    message("Il faut un lien direct open.spotify.com/artist/…");
+                                    message("Lien Spotify artiste invalide.");
                                     return;
                                 }
                                 SpotifyArtistFinder.saveProfile(this,name,link);
-                                SpotifyArtistBackfillWorker.schedule(this);
+                                SpotifyArtistBackfillWorker.refreshAll(this);
                                 target[0]=link;
-                                spotifyMark.setVerified(true);
-                                destination.setText("Spotify");
-                                destination.setTextColor(Color.rgb(30,215,96));
-                                try{
-                                    startActivity(new Intent(Intent.ACTION_VIEW,
-                                        Uri.parse(link)));
-                                }catch(Exception ignored){}
+                                spotify.setVerified(true);
+                                message("Profil ajouté. Vérification du portrait en cours.");
                             }).show();
                     }
                 };
-                spotifyMark.setOnClickListener(v->openSpotify.run());
-                destination.setOnClickListener(v->openSpotify.run());
-                frame.setContentDescription("Profil Spotify de "+name);
-                frame.setOnClickListener(v->openSpotify.run());
-                title.setOnClickListener(v->openSpotify.run());
-                if(SpotifyArtistVerifier.isArtistUrl(target[0])){
-                    spotifyMark.setVerified(true);
-                    destination.setText("Spotify");
-                    destination.setTextColor(Color.rgb(30,215,96));
-                }
-                // Les profils et les photos sont enrichis dans un seul travail
-                // WorkManager couvrant toutes les soirées, plutôt qu'un réseau
-                // d'appels concurrents pour chaque carte à chaque affichage.
-                if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
-                    destination.setText("Associer");
+                tile.setContentDescription(name+
+                    (SpotifyArtistVerifier.isArtistUrl(target[0])?
+                    " · ouvrir sur Spotify":" · associer un profil Spotify"));
+                tile.setOnClickListener(v->openSpotify.run());
             }
         }
+
         String eventUrl=event.optString("url");
         if(eventUrl.startsWith("https://shotgun.live/")||
             eventUrl.startsWith("https://r.shotgun.live/")){
             int missing=0;
             for(int i=0;i<ordered.length();i++){
                 JSONObject p=ordered.optJSONObject(i);
-                if(p!=null&&p.optString("photo").isEmpty())missing++;
+                if(p!=null&&p.optString("photo").isEmpty()&&
+                    p.optString("spotifyPhoto").isEmpty())missing++;
             }
-            if(missing>0){
-                add(page,text(missing+" portrait(s) non extraits de Shotgun. "+
-                    "Une recherche Spotify est tentée en complément.",12,SOFT,false),9);
-                add(page,button("↻ Récupérer les portraits sur Shotgun",false,()->{
-                    Intent browser=new Intent(this,ShotgunBrowserActivity.class);
-                    browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,eventUrl);
-                    browser.putExtra("afterlog_auto_extract",true);
-                    startActivityForResult(browser,SHOTGUN_EVENT_REFRESH);
-                }),12);
-            }
+            if(missing>0)add(page,button("↻ Compléter depuis Shotgun",false,()->{
+                Intent browser=new Intent(this,ShotgunBrowserActivity.class);
+                browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,eventUrl);
+                browser.putExtra("afterlog_auto_extract",true);
+                startActivityForResult(browser,SHOTGUN_EVENT_REFRESH);
+            }),11);
         }
-        add(page,text("Spotify vert : vrai profil vérifié. Violet : recherche. "+
-            "Les portraits peuvent provenir de Shotgun ou d'un profil Spotify vérifié.",
+        add(page,text("Touche une photo pour ouvrir Spotify. Une pastille violette indique un profil non confirmé.",
             11,SOFT,false),13);
     }
 
