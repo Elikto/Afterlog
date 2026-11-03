@@ -1,5 +1,18 @@
 # AfterLog — Application Android
 
+## Nouveautés 0.13.0
+- **Bulles en vrais cercles** et bouton + de même taille.
+- **Logos des produits** directement sur chaque carte de soirée.
+- **Partage Android** après importation de médias, notamment vers les applications et messageries installées, avec option Story Instagram si elle est prise en charge.
+- **Photos des artistes Shotgun** : extraction élargie aux cartes en images d'arrière-plan et aux images différées ; résultat à vérifier sur l'événement réel.
+- **RDR compact** : pastille d'avertissement, sans alerte automatique pour seulement deux verres saisis.
+- **Graphiques de suivi** en courbes, colorés par catégorie de substance.
+- **Mises à jour** : prise en charge de la signature permanente via un secret GitHub.
+
+[Lire le cahier des charges et les limites](docs/APPLICATION_V013.md).
+
+# AfterLog — Application Android
+
 ## Mise à jour 0.12.0 : bouton MAJ et signature permanente
 
 Le système de mise à jour reprend le circuit **CyberQuiz** : une release stable fixe `apk-latest`, un fichier de métadonnées `update.json` avec SHA-256, et une clé de signature permanente.

@@ -88,15 +88,16 @@ final class RiskGuidance {
                 if(ketamine(e))group.add("ketamine");
                 if(cocaine(e))group.add("cocaine");
                 if(ghb(e))group.add("ghb");
-                String substance=e.optString("name").trim().toLowerCase(Locale.ROOT);
-                bySubstance.computeIfAbsent(eventDay+"|"+substance,k->new ArrayList<>()).add(e);
+                String substance=mdma(e)?"mdma / ecstasy":
+                    e.optString("name").trim().toLowerCase(Locale.ROOT);
+                // Regrouper aussi les entrées de minuit au sein d'une soirée.
+                bySubstance.computeIfAbsent(e.optLong("eventId")+"|"+substance,
+                    k->new ArrayList<>()).add(e);
             }
         }
-        boolean alcoholLimit=false;
-        for(int value:glasses.values())if(value>2)alcoholLimit=true;
-        if(alcoholLimit)warnings.add(new Warning("Alcool : repère quotidien dépassé",
-            "Plus de 2 verres ont été saisis pour une journée. Santé publique France recommande au maximum 2 verres STANDARD par jour et pas tous les jours. La contenance et le degré d'alcool ne sont pas mesurés ici : impossible de connaître les verres standards réels.",
-            SOURCE_ALCOHOL));
+        // Les nombres de verres saisis ne garantissent pas un verre standard.
+        // Ne pas déclencher de bannière de risque sur 2 verres ou sur une
+        // quantité sans volume et degré d'alcool connus.
         boolean mdmaMix=false,ketamineMix=false,cocaineMix=false,ghbMix=false;
         for(HashSet<String> group:categories.values()){
             if(!group.contains("alcohol"))continue;
@@ -118,7 +119,7 @@ final class RiskGuidance {
         for(List<JSONObject> sequence:bySubstance.values()){
             int total=0;
             for(JSONObject e:sequence)total+=quantity(e);
-            if(total>=2)repeated=true;
+            if(sequence.size()>1)repeated=true;
             for(int i=0;i<sequence.size();i++)for(int j=i+1;j<sequence.size();j++){
                 JSONObject a=sequence.get(i),b=sequence.get(j);
                 if(!mdma(a)||!mdma(b) || a.optBoolean("allNight") ||
@@ -128,15 +129,18 @@ final class RiskGuidance {
                 try{
                     LocalTime t1=LocalTime.parse(a.optString("time"));
                     LocalTime t2=LocalTime.parse(b.optString("time"));
-                    long minutes=Math.abs(ChronoUnit.MINUTES.between(t1,t2));
+                    LocalDate d1=day(a),d2=day(b);
+                    if(d1==null||d2==null)continue;
+                    long minutes=Math.abs(ChronoUnit.MINUTES.between(
+                        d1.atTime(t1),d2.atTime(t2)));
                     if(minutes<120)closeMdma=true;
                 }catch(Exception ignored){}
             }
         }
-        if(closeMdma)warnings.add(new Warning("Deux prises de MDMA déclarées à moins de 2 h",
-            "Des prises ont été déclarées à moins de deux heures d'intervalle. Drogues Info Service recommande d'attendre de percevoir les effets avant d'envisager une nouvelle prise et met en garde contre les prises successives. Deux heures ne constituent pas un seuil de sécurité.",SOURCE_REPEATS));
-        else if(repeated)warnings.add(new Warning("Prises répétées dans une même soirée",
-            "Plusieurs prises d'une même substance ont été notées. Leur proximité réelle et leur teneur ne peuvent pas toujours être déduites du journal, surtout si l'heure est approximative. Une prise supplémentaire peut augmenter les risques.",SOURCE_DRUGS));
+        if(closeMdma)warnings.add(new Warning("Prises de MDMA rapprochées (heures déclarées)",
+            "Deux saisies d'horaires précis se trouvent proches dans le journal. Drogues Info Service déconseille les prises successives de MDMA. Le délai affiché n'est ni une limite officielle ni une garantie de sécurité.",SOURCE_REPEATS));
+        // Un seul enregistrement « 2 demi + 1 quart » n'est pas une
+        // preuve de prises rapprochées : n'en déduire aucun délai.
         return warnings;
     }
     static List<Warning> forPeriod(List<JSONObject> entries,LocalDate from,LocalDate end){

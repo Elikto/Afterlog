@@ -464,6 +464,24 @@ public final class MainActivity extends Activity {
             String venue=e.optString("venue");
             if(venue.isEmpty())venue=e.optString("city");
             if(!venue.isEmpty())add(details,text(venue,13,SOFT,false),5);
+            java.util.LinkedHashSet<String> icons=new java.util.LinkedHashSet<>();
+            for(JSONObject intake:store.entries(e.optLong("id"))) {
+                String picture=ConsumptionActivity.iconFor(
+                    intake.optString("category"),intake.optString("name"));
+                if(!picture.trim().isEmpty())icons.add(picture);
+            }
+            if(!icons.isEmpty()){
+                StringBuilder marks=new StringBuilder();
+                int shown=0;
+                for(String picture:icons){
+                    if(shown++>=8)break;
+                    if(marks.length()>0)marks.append("  ");
+                    marks.append(picture);
+                }
+                TextView badges=text(marks.toString(),19,Color.WHITE,false);
+                badges.setContentDescription("Produits notés pour cette soirée");
+                add(details,badges,5);
+            }
             add(details,text("Ouvrir  ›",12,SOFT,true),0);
             row.setOnClickListener(v->showEvent(e.optLong("id")));
             card.setOnClickListener(v->showEvent(e.optLong("id")));
@@ -610,95 +628,116 @@ public final class MainActivity extends Activity {
     private void renderJournalFirst(long id) {
         List<JSONObject> entries=store.entries(id);
         add(page,text("Mon journal de soirée",21,Color.WHITE,true),12);
-        if(entries.isEmpty()){
+        if(entries.isEmpty()) {
             add(page,button("＋ Ajouter une consommation",true,
                 ()->editEntry(new JSONObject(),id)),13);
-        }else{
-            // 2 colonnes, même taille pour toutes les bulles. Le + occupe
-            // exactement la case qui suit la dernière prise.
+        } else {
+            final int circleDp=Math.min(174,Math.max(118,
+                (int)(getResources().getDisplayMetrics().widthPixels/
+                    getResources().getDisplayMetrics().density-49)/2));
             int total=entries.size()+1;
             for(int offset=0;offset<total;offset+=2){
                 LinearLayout row=new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.TOP);
                 add(page,row,9);
                 for(int slot=0;slot<2;slot++){
-                    int position=offset+slot;
-                    LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(0,dp(125),1f);
-                    layout.setMargins(dp(3),0,dp(3),0);
-                    if(position>=total) {
-                        row.addView(new View(this),layout);continue;
-                    }
-                    if(position==entries.size()){
-                        TextView plus=text("＋",35,BG,true);
+                    int index=offset+slot;
+                    FrameLayout cell=new FrameLayout(this);
+                    LinearLayout.LayoutParams cellLayout=
+                        new LinearLayout.LayoutParams(0,dp(circleDp),1f);
+                    cellLayout.setMargins(dp(2),0,dp(2),0);
+                    row.addView(cell,cellLayout);
+                    if(index>=total)continue;
+                    if(index==entries.size()){
+                        TextView plus=text("+",42,BG,true);
                         plus.setGravity(Gravity.CENTER);
+                        GradientDrawable plusBackground=new GradientDrawable();
+                        plusBackground.setShape(GradientDrawable.OVAL);
+                        plusBackground.setColor(ACCENT);
+                        plus.setBackground(plusBackground);
                         plus.setContentDescription("Ajouter une consommation");
-                        plus.setBackground(rounded(ACCENT,27));
                         plus.setElevation(dp(2));
                         plus.setOnClickListener(v->editEntry(new JSONObject(),id));
-                        row.addView(plus,layout);
+                        cell.addView(plus,new FrameLayout.LayoutParams(
+                            dp(circleDp),dp(circleDp),Gravity.CENTER));
                         continue;
                     }
-                    JSONObject entry=entries.get(position);
+                    JSONObject entry=entries.get(index);
                     LinearLayout bubble=column();
-                    bubble.setPadding(dp(13),dp(14),dp(13),dp(10));
-                    GradientDrawable bg=new GradientDrawable(
+                    bubble.setGravity(Gravity.CENTER);
+                    bubble.setPadding(dp(11),dp(13),dp(11),dp(13));
+                    GradientDrawable circle=new GradientDrawable(
                         GradientDrawable.Orientation.TL_BR,
-                        new int[]{Color.rgb(39,37,58),Color.rgb(28,29,44)});
-                    bg.setCornerRadius(dp(27));
-                    bg.setStroke(dp(1),Color.rgb(62,55,84));
-                    bubble.setBackground(bg);
+                        new int[]{Color.rgb(46,40,70),Color.rgb(28,29,46)});
+                    circle.setShape(GradientDrawable.OVAL);
+                    circle.setStroke(dp(1),Color.rgb(89,75,119));
+                    bubble.setBackground(circle);
                     bubble.setElevation(dp(2));
-                    row.addView(bubble,layout);
+                    cell.addView(bubble,new FrameLayout.LayoutParams(
+                        dp(circleDp),dp(circleDp),Gravity.CENTER));
                     String icon=ConsumptionActivity.iconFor(
                         entry.optString("category"),entry.optString("name"));
-                    TextView name=text(icon+" "+entry.optString("name","Consommation"),
-                        15,Color.WHITE,true);
-                    name.setMaxLines(1);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,name,6);
-                    TextView summary=text(primaryQuantity(entry),12,ACCENT,true);
+                    TextView emoji=text(icon,25,Color.WHITE,true);
+                    emoji.setGravity(Gravity.CENTER);
+                    add(bubble,emoji,3);
+                    TextView name=text(entry.optString("name","Consommation"),
+                        14,Color.WHITE,true);
+                    name.setGravity(Gravity.CENTER);
+                    name.setMaxLines(1);
+                    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    add(bubble,name,4);
+                    TextView summary=text(primaryQuantity(entry),11,ACCENT,true);
+                    summary.setGravity(Gravity.CENTER);
                     summary.setMaxLines(2);
                     summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,summary,4);
+                    add(bubble,summary,3);
                     String when=timeDescription(entry);
                     if(!when.isEmpty()){
-                        TextView time=text("◷ "+when,11,SOFT,false);
+                        TextView time=text(when,10,SOFT,false);
+                        time.setGravity(Gravity.CENTER);
                         time.setMaxLines(1);
                         time.setEllipsize(android.text.TextUtils.TruncateAt.END);
                         add(bubble,time,0);
                     }
-                    // Consulter reste possible en cliquant sur toute la bulle,
-                    // sans texte supplémentaire qui change la hauteur.
-                    bubble.setContentDescription("Voir la prise "+entry.optString("name")+
-                        " : "+primaryQuantity(entry)+(when.isEmpty()?"":", "+when));
+                    bubble.setContentDescription("Voir "+entry.optString("name")+
+                        ", "+primaryQuantity(entry));
                     bubble.setOnClickListener(v->showEntryDetails(entry,id));
                 }
             }
         }
         add(page,text("Informations de l'événement",21,Color.WHITE,true),13);
     }
-    private void renderRdrAlerts(long eventId){
+    private void renderRdrAlerts(long eventId) {
         List<RiskGuidance.Warning> risks=RiskGuidance.forEvent(store.entries(eventId));
         if(risks.isEmpty())return;
-        LinearLayout panel=column();
-        panel.setPadding(dp(14),dp(13),dp(14),dp(13));
-        GradientDrawable background=new GradientDrawable();
-        background.setColor(Color.rgb(37,32,46));
-        background.setCornerRadius(dp(18));
-        background.setStroke(dp(1),Color.rgb(104,78,83));
-        panel.setBackground(background);
-        add(page,panel,12);
-        add(panel,text("⚠ Prévention · "+risks.size()+" point(s) de vigilance",
-            15,Color.rgb(244,191,151),true),8);
-        for(int i=0;i<Math.min(2,risks.size());i++) {
-            RiskGuidance.Warning warning=risks.get(i);
-            add(panel,text("• "+warning.title,13,Color.WHITE,true),5);
-            add(panel,text(warning.detail,12,SOFT,false),9);
-        }
-        add(panel,text("Ces alertes reposent sur les informations saisies, pas sur une analyse du produit ou un diagnostic.",
-            11,SOFT,false),9);
-        add(panel,button("Voir le suivi, les sources et les contacts d'aide",false,()->
-            startActivity(new Intent(this,SuiviActivity.class))),0);
+        boolean high=false;
+        for(RiskGuidance.Warning item:risks)
+            if(item.title.contains("GHB")||item.title.contains("Kétamine et alcool"))high=true;
+        final boolean urgentMix=high;
+        TextView chip=text((high?"● ":"● ")+risks.size()+
+            " vigilance"+(risks.size()>1?"s":"")+" RDR  ›",13,
+            high?Color.rgb(255,153,153):Color.rgb(255,190,127),true);
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setPadding(dp(15),dp(10),dp(15),dp(10));
+        GradientDrawable chipBg=new GradientDrawable();
+        chipBg.setColor(Color.rgb(34,30,43));chipBg.setCornerRadius(dp(17));
+        chipBg.setStroke(dp(1),high?Color.rgb(169,93,93):Color.rgb(137,103,74));
+        chip.setBackground(chipBg);
+        add(page,chip,12);
+        chip.setOnClickListener(v->{
+            LinearLayout detail=column();
+            detail.setPadding(dp(16),dp(12),dp(16),dp(8));
+            for(RiskGuidance.Warning warning:risks){
+                add(detail,text(warning.title,15,Color.WHITE,true),5);
+                add(detail,text(warning.detail,13,SOFT,false),13);
+            }
+            new AlertDialog.Builder(this)
+                .setTitle(urgentMix?"Vigilance RDR":"Prévention et réduction des risques")
+                .setView(detail)
+                .setNeutralButton("Voir le suivi",(d,w)->
+                    startActivity(new Intent(this,SuiviActivity.class)))
+                .setPositiveButton("Fermer",null).show();
+        });
     }
 
     private void showEntryDetails(JSONObject entry,long eventId){
@@ -1252,6 +1291,8 @@ public final class MainActivity extends Activity {
             new Thread(()->{
                 int added=0,errors=0;
                 String failure="";
+                String lastFilename="";
+                boolean lastVideo=false;
                 try{
                     AppStore localStore=new AppStore(getApplicationContext());
                     JSONObject event=localStore.event(target);
@@ -1262,11 +1303,15 @@ public final class MainActivity extends Activity {
                             if(mime!=null&&mime.startsWith("image/")){
                                 if(EventPhotos.gallery(event).length()>=40)
                                     throw new Exception("40 photos maximum");
-                                EventPhotos.append(event,EventPhotos.importUri(this,uri));
+                                lastFilename=EventPhotos.importUri(this,uri);
+                                EventPhotos.append(event,lastFilename);
+                                lastVideo=false;
                             }else{
                                 if(EventVideos.list(event).length()>=EventVideos.MAX_COUNT)
                                     throw new Exception("30 vidéos maximum");
-                                EventVideos.append(event,EventVideos.importVideo(this,uri));
+                                lastFilename=EventVideos.importVideo(this,uri);
+                                EventVideos.append(event,lastFilename);
+                                lastVideo=true;
                             }
                             added++;
                         }catch(Exception e){
@@ -1277,13 +1322,26 @@ public final class MainActivity extends Activity {
                     if(added>0)localStore.saveEvent(event);
                 }catch(Exception e){errors++;failure=e.getMessage();}
                 final int imported=added,rejected=errors;
-                final String errorText=failure;
+                final String errorText=failure,shareFilename=lastFilename;
+                final boolean shareIsVideo=lastVideo;
                 runOnUiThread(()->{
                     if(isFinishing())return;
                     store=new AppStore(this);
                     if(eventScreen&&currentEventId==target)showEvent(target);
                     message(imported+" média(s) ajouté(s)"+
                         (rejected>0?" · "+rejected+" non importé(s) : "+errorText:""));
+                    if(imported>0 && !shareFilename.isEmpty()){
+                        new AlertDialog.Builder(this)
+                            .setTitle("Médias ajoutés")
+                            .setMessage("Partager le dernier média sur Instagram, dans les messages ou une autre application compatible ?")
+                            .setNegativeButton("Plus tard",null)
+                            .setPositiveButton("Partager",(dialog,which)->{
+                                java.io.File file=shareIsVideo?
+                                    EventVideos.file(this,shareFilename):
+                                    EventPhotos.file(this,shareFilename);
+                                EventGalleryActivity.shareFile(this,file,shareIsVideo,false);
+                            }).show();
+                    }
                 });
             },"AfterLog-media-import").start();
             return;

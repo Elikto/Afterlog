@@ -224,25 +224,52 @@ public final class SuiviActivity extends Activity {
                 counts.add(RiskGuidance.within(entries,day,day.plusMonths(1)).size());
             }
         }
-        int max=1;
-        for(int n:counts)max=Math.max(max,n);
-        for(int i=0;i<labels.size();i++){
-            LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);add(chart,row,8);
-            TextView label=text(labels.get(i),12,SOFT,false);
-            row.addView(label,new LinearLayout.LayoutParams(dp(104),-2));
-            LinearLayout track=new LinearLayout(this);
-            track.setBackground(background(Color.rgb(46,46,69),9));
-            row.addView(track,new LinearLayout.LayoutParams(0,dp(17),1));
-            View fill=new View(this);fill.setBackground(background(ACCENT,9));
-            float fraction=Math.max(.01f,(float)counts.get(i)/max);
-            track.addView(fill,new LinearLayout.LayoutParams(0,dp(17),fraction));
-            track.addView(new View(this),new LinearLayout.LayoutParams(
-                0,dp(17),Math.max(0f,1f-fraction)));
-            TextView total=text("  "+counts.get(i),12,WHITE,true);
-            row.addView(total,new LinearLayout.LayoutParams(dp(36),-2));
+        // Courbes multi-séries, plutôt que des barres horizontales.
+        int n=labels.size();
+        int[][] series=new int[3][n]; // alcool, MDMA/ecstasy, autres
+        int[] alerts=new int[n];
+        ArrayList<ArrayList<JSONObject>> grouped=new ArrayList<>();
+        for(int i=0;i<n;i++)grouped.add(new ArrayList<>());
+        for(JSONObject item:entries){
+            LocalDate date=RiskGuidance.day(item);
+            if(date==null||date.isBefore(start)||!date.isBefore(until))continue;
+            int bucket=-1;
+            if(mode==0){
+                if(item.optBoolean("allNight") ||
+                    !"exact".equals(item.optString("timeMode","exact")))continue;
+                try{
+                    int hour=Integer.parseInt(item.optString("time").substring(0,2));
+                    bucket=Math.min(5,Math.max(0,hour/4));
+                }catch(Exception ignored){}
+            }else if(mode==1){
+                bucket=(int)java.time.temporal.ChronoUnit.DAYS.between(start,date);
+            }else if(mode==2){
+                bucket=(int)java.time.temporal.ChronoUnit.DAYS.between(start,date)/7;
+            }else{
+                bucket=(int)java.time.temporal.ChronoUnit.MONTHS.between(
+                    start.withDayOfMonth(1),date.withDayOfMonth(1));
+            }
+            if(bucket<0||bucket>=n)continue;
+            int type=RiskGuidance.alcohol(item)?0:RiskGuidance.mdma(item)?1:2;
+            series[type][bucket]++;
+            grouped.get(bucket).add(item);
         }
+        for(int i=0;i<n;i++){
+            List<RiskGuidance.Warning> risk=RiskGuidance.forEvent(grouped.get(i));
+            if(!risk.isEmpty()){
+                alerts[i]=1;
+                for(RiskGuidance.Warning w:risk)
+                    if(w.title.contains("GHB")||w.title.contains("Kétamine et alcool"))
+                        alerts[i]=2;
+            }
+        }
+        TrackingChartView drawing=new TrackingChartView(this);
+        drawing.show(labels,series,alerts);
+        add(chart,drawing,7);
+        add(chart,text("● Alcool     ● MDMA / ecstasy     ● Autres",12,SOFT,false),7);
+        add(chart,text("Points orange : vigilance. Rouge : interaction connue à risque ; ce n'est pas une mesure de toxicité. Les prises sans heure précise ne figurent pas dans le graphique horaire.",
+            11,SOFT,false),0);
+
     }
     private void showWarning(RiskGuidance.Warning warning){
         LinearLayout card=card(body);

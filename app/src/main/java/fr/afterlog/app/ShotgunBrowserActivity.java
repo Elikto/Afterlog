@@ -46,6 +46,7 @@ public final class ShotgunBrowserActivity extends Activity {
     private ShotgunTicketDiscovery discovery;
     private boolean discovering;
     private boolean autoExtractEvent,autoExtractStarted;
+    private boolean lineupScrollPrepared=false;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
@@ -193,6 +194,13 @@ public final class ShotgunBrowserActivity extends Activity {
             return;
         }
         if(web.getProgress()<100){toast("Attends la fin du chargement");return;}
+        if(autoExtractEvent&&!lineupScrollPrepared){
+            lineupScrollPrepared=true;
+            web.evaluateJavascript("(function(){let el=Array.from(document.querySelectorAll('h1,h2,h3,h4')).find(x=>x.textContent && x.textContent.toLowerCase().includes('line up'));if(el)el.scrollIntoView({block:'center'});return true})()",ignored->
+                new android.os.Handler(android.os.Looper.getMainLooper())
+                    .postDelayed(this::importCurrent,1500));
+            return;
+        }
         web.evaluateJavascript(CURRENT_EVENT_JS,value->{
             try {
                 JSONObject event=new JSONObject(decoded(value));
@@ -469,6 +477,80 @@ public final class ShotgunBrowserActivity extends Activity {
           }
           // Préserver les profils sans portrait : il s'agit d'une information
           // manquante, et non d'une image supposée de l'artiste.
+          // Parcourir également les portraits Shotgun rendus en CSS, les
+          // vignettes lazy-loadées et les cartes sans lien <a>.
+          // N'associer une image qu'à un bloc portant exactement le nom attendu.
+          const simple=s=>(s||'').normalize('NFD').toLowerCase()
+             .replace(/[^a-z0-9]/g,'');
+          const asUrl=v=>{
+             try{const u=new URL(v,location.href);return u.protocol==='https:'?u.href:'';}
+             catch(_){return '';}
+          };
+          const imageOf=element=>{
+             if(!element)return '';
+             const img=element.tagName==='IMG'?element:
+               element.querySelector('img');
+             if(img){
+               const url=img.currentSrc||img.getAttribute('data-src')||
+                 img.getAttribute('data-lazy-src')||img.getAttribute('src')||
+                 img.getAttribute('srcset')?.split(',')[0]?.trim().split(' ')[0]||'';
+               const found=asUrl(url);
+               if(found&&!found.startsWith('data:'))return found;
+             }
+             const candidates=[element,...element.querySelectorAll(
+               '[style*="background"],[style*="image"],[data-src]')].slice(0,12);
+             for(const node of candidates){
+               const css=getComputedStyle(node).backgroundImage||
+                 node.style?.backgroundImage||'';
+               const start=css.indexOf('url(');
+               if(start<0)continue;
+               const raw=css.substring(start+4).split(')')[0]
+                 .replaceAll('"','').replaceAll("'","");
+               const found=asUrl(raw);
+               if(found)return found;
+             }
+             return '';
+          };
+          const names=profiles.map(p=>p.name).filter(Boolean);
+          const textCandidates=[...document.querySelectorAll(
+            'main h2,main h3,main h4,main p,main span,main a,main strong,main [data-testid*="artist"]')];
+          for(const artistName of names){
+            const wantedName=simple(artistName);
+            if(!wantedName)continue;
+            const existing=seenArtists.get(artistName.toLocaleLowerCase());
+            if(existing?.photo)continue;
+            let found='';
+            let parentCard=null;
+            // Priorité à un alt exact : association beaucoup plus fiable.
+            for(const img of document.querySelectorAll('main img,article img')){
+              if(simple(img.getAttribute('alt'))!==wantedName)continue;
+              found=imageOf(img);
+              if(found){parentCard=img.closest('article,a,li')||img.parentElement;break;}
+            }
+            if(!found){
+              for(const el of textCandidates){
+                if((el.textContent||'').length>100 ||
+                   simple(el.textContent)!==wantedName)continue;
+                let node=el.parentElement;
+                for(let level=0;level<4 && node;level++,node=node.parentElement){
+                  if((node.textContent||'').length>240 ||
+                     node.querySelectorAll('img').length>6)continue;
+                  const candidate=imageOf(node);
+                  if(candidate && candidate!==result.poster) {
+                    found=candidate;parentCard=node;break;
+                  }
+                }
+                if(found)break;
+              }
+            }
+            if(found){
+              const sourceSpotify=parentCard?.querySelector(
+                'a[href*="open.spotify.com/artist/"]')?.href||'';
+              const sourceShotgun=parentCard?.querySelector(
+                'a[href*="/artists/"],a[href*="/artist/"]')?.href||'';
+              upsertArtist(artistName,found,sourceSpotify,sourceShotgun);
+            }
+          }
           if(profiles.length)result.artistProfiles=profiles;
           return JSON.stringify(result);
         })();

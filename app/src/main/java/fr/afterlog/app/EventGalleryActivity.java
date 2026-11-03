@@ -107,7 +107,7 @@ public final class EventGalleryActivity extends Activity {
         position=new TextView(this);position.setTextColor(Color.WHITE);
         position.setTextSize(16);position.setGravity(Gravity.CENTER);
         top.addView(position,new LinearLayout.LayoutParams(0,dp(52),1));
-        top.addView(control("↗",21,this::openExternally),
+        top.addView(control("↗",21,this::shareCurrent),
             new LinearLayout.LayoutParams(dp(52),dp(52)));
 
         bottom=new LinearLayout(this);
@@ -129,10 +129,20 @@ public final class EventGalleryActivity extends Activity {
         TextView spacer=new TextView(this);nav.addView(spacer,new LinearLayout.LayoutParams(0,dp(58),1));
         TextView next=control("›",34,()->navigate(1));
         nav.addView(next,new LinearLayout.LayoutParams(dp(65),dp(58)));
-        external=control("Ouvrir / diffuser dans une autre application",13,this::openExternally);
-        LinearLayout.LayoutParams extLp=new LinearLayout.LayoutParams(-1,dp(48));
-        extLp.topMargin=dp(12);
+        external=control("Partager sur les réseaux / messages",13,this::shareCurrent);
+        LinearLayout.LayoutParams extLp=new LinearLayout.LayoutParams(-1,dp(46));
+        extLp.topMargin=dp(10);
         bottom.addView(external,extLp);
+        LinearLayout extras=new LinearLayout(this);
+        extras.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams extraLp=new LinearLayout.LayoutParams(-1,dp(47));
+        extraLp.topMargin=dp(7);
+        bottom.addView(extras,extraLp);
+        TextView story=control("Story Instagram",12,this::shareInstagramStory);
+        extras.addView(story,new LinearLayout.LayoutParams(0,-1,1));
+        TextView other=control("Lecteur / Cast externe",12,this::openExternally);
+        LinearLayout.LayoutParams otherLp=new LinearLayout.LayoutParams(0,-1,1);
+        otherLp.leftMargin=dp(7);extras.addView(other,otherLp);
     }
     private void navigate(int direction){
         int next=currentIndex+direction;
@@ -187,6 +197,58 @@ public final class EventGalleryActivity extends Activity {
         label.setText(message);label.setTextColor(Color.WHITE);label.setGravity(Gravity.CENTER);
         stage.addView(label,new FrameLayout.LayoutParams(-1,-1));
     }
+    private File currentFile(){
+        if(items.isEmpty())return null;
+        Item item=items.get(currentIndex);
+        return item.video?EventVideos.file(this,item.name):
+            EventPhotos.file(this,item.name);
+    }
+    private void shareCurrent(){
+        Item item=items.get(currentIndex);
+        File file=currentFile();
+        if(file==null||!file.isFile()) {
+            Toast.makeText(this,"Média introuvable",Toast.LENGTH_LONG).show();return;
+        }
+        shareFile(this,file,item.video,false);
+    }
+    private void shareInstagramStory(){
+        Item item=items.get(currentIndex);
+        File file=currentFile();
+        if(file==null||!file.isFile()){
+            Toast.makeText(this,"Média introuvable",Toast.LENGTH_LONG).show();return;
+        }
+        shareFile(this,file,item.video,true);
+    }
+    static void shareFile(Activity activity,File file,boolean video,boolean instagramStory){
+        if(file==null||!file.isFile()){
+            Toast.makeText(activity,"Média introuvable",Toast.LENGTH_LONG).show();return;
+        }
+        try{
+            Uri uri=FileProvider.getUriForFile(activity,activity.getPackageName()+".media",file);
+            String mime=video?EventVideos.mimeFor(file.getName()):"image/jpeg";
+            Intent share;
+            if(instagramStory){
+                share=new Intent("com.instagram.share.ADD_TO_STORY");
+                share.setPackage("com.instagram.android");
+                share.setDataAndType(uri,mime);
+            }else{
+                share=new Intent(Intent.ACTION_SEND);
+                share.setType(mime);
+                share.putExtra(Intent.EXTRA_STREAM,uri);
+            }
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            share.setClipData(ClipData.newUri(activity.getContentResolver(),
+                "AfterLog — média personnel",uri));
+            if(instagramStory)activity.startActivity(share);
+            else activity.startActivity(Intent.createChooser(share,
+                "Partager la photo ou la vidéo"));
+        }catch(Exception e){
+            Toast.makeText(activity,instagramStory?
+                "Story Instagram indisponible pour ce média. Essaie le partage classique.":
+                "Aucune application compatible avec ce média.",Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void openExternally(){
         Item item=items.get(currentIndex);
         File file=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
