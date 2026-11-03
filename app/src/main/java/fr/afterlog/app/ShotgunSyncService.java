@@ -407,7 +407,7 @@ public final class ShotgunSyncService extends Service {
     }
     private void saveEventPreservingUserData(JSONObject incoming) throws Exception {
         JSONObject existing=findExisting(incoming);
-        if(existing==null){store.saveEvent(incoming);return;}
+        if(existing==null){store.saveEvent(incoming);SpotifyArtistBackfillWorker.schedule(this);return;}
         for(String key:new String[]{"poster","description","date","start","end","endDate",
             "venue","city","address","artists","organizer","genres","url","ticketUrl"}) {
             String newValue=incoming.optString(key).trim();
@@ -416,6 +416,7 @@ public final class ShotgunSyncService extends Service {
         }
         ArtistProfileMerger.merge(existing,incoming);
         store.saveEvent(existing);
+        SpotifyArtistBackfillWorker.schedule(this);
     }
     private static String clean(String value) {
         return java.text.Normalizer.normalize(value.toLowerCase(Locale.ROOT),
