@@ -1,8 +1,17 @@
 # AfterLog — Application Android
 
-**Version 0.7.0 (bêta expérimentale)**
+## Nouveautés de la version 0.8.0
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.7.0-debug/AfterLog-v0.7.0.apk)
+- **Ecstasy : modification des fractions.** Choisis Quart, Demi ou Entier, règle le compteur, puis clique sur **✓ OK**. Pour corriger « 2 quarts », retouche Quart : le compteur affiche 2, puis tu peux changer la quantité et valider. Les valeurs sont remplacées, jamais additionnées par erreur.
+- **Correction de la connexion Shotgun :** la recherche des billets s'effectue dans le navigateur intégré **visible et connecté**, afin d'éviter l'échec de la navigation automatique dans un navigateur en arrière-plan. En cas d'impossibilité, tu peux ouvrir « Mes billets → Passés » manuellement puis choisir **Lire mes billets passés**.
+- **Accueil :** message d'échec de synchronisation compact et bouton pour le masquer.
+
+**À tester :** le parcours Shotgun dépend de l'interface du site et n'est pas une intégration officielle garantie. Les APK bêta utilisent encore des certificats de signature temporaires : sauvegarde ton journal JSON avant toute éventuelle réinstallation.
+
+
+**Version 0.8.0 (bêta expérimentale)**
+
+[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.8.0-debug/AfterLog-v0.8.0.apk)
 
 ## Une page d'accueil plus simple
 - Un petit bouton **↻ MAJ** à gauche du titre.

@@ -85,7 +85,9 @@ public final class ConsumptionActivity extends Activity {
     private boolean allNight=false;
     private String timeMode="exact",timeEnd="";
     private int quarterCount=0,halfCount=0,wholeCount=0;
-    private String lastPart="";
+    // L'option actuellement éditée n'est enregistrée qu'en appuyant sur OK.
+    private String editingPart="";
+    private TextView confirmPartButton;
     private LinearLayout substanceOptions,measurementBlock,routeBlock;
     private EditText measuredQty,customRoute;
     private Spinner unitSelect;
@@ -227,7 +229,7 @@ public final class ConsumptionActivity extends Activity {
         LinearLayout counter=horizontal();
         add(details,counter,8);
 
-        TextView minus=action("−",false,()->{if(count>1){count--;refreshCounter();}});
+        TextView minus=action("−",false,()->{if(count>(isEcstasy()?0:1)){count--;refreshCounter();}});
         minus.setTextSize(24);
         counter.addView(minus,new LinearLayout.LayoutParams(dp(63),dp(58)));
         quantityText=text("1",30,WHITE,true);
@@ -242,22 +244,24 @@ public final class ConsumptionActivity extends Activity {
         add(details,measureText,12);
         ecstasyParts=column();
         add(details,ecstasyParts,18);
-        add(ecstasyParts,text("AJOUTER LES MORCEAUX",12,ACCENT,true),8);
+        add(ecstasyParts,text("FRACTIONS",12,ACCENT,true),8);
+        add(ecstasyParts,text("Touche Quart, Demi ou Entier, règle le compteur puis valide avec ✓ OK. Touche de nouveau une fraction pour modifier sa quantité.",13,SOFT,false),10);
         LinearLayout typeRow=horizontal();
         add(ecstasyParts,typeRow,9);
-        quarterBtn=action("Quart",false,()->addEcstasyPart("quart"));
-        halfBtn=action("Demi",false,()->addEcstasyPart("demi"));
-        wholeBtn=action("Entier",false,()->addEcstasyPart("entier"));
+        quarterBtn=action("Quart",false,()->selectEcstasyPart("quart"));
+        halfBtn=action("Demi",false,()->selectEcstasyPart("demi"));
+        wholeBtn=action("Entier",false,()->selectEcstasyPart("entier"));
         for(TextView part:new TextView[]{quarterBtn,halfBtn,wholeBtn}){
             part.setTextSize(13);
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(58),1);
             lp.setMargins(dp(2),0,dp(2),0);
             typeRow.addView(part,lp);
         }
+        confirmPartButton=action("✓ OK · Valider",true,this::confirmEcstasyPart);
+        add(ecstasyParts,confirmPartButton,12);
         partsSummary=text("",15,WHITE,true);
         add(ecstasyParts,partsSummary,9);
-        add(ecstasyParts,action("↶  Retirer le dernier choix",false,this::undoLastEcstasyPart),6);
-        add(ecstasyParts,text("Le compteur revient à zéro après chaque choix. L'application enregistre les fractions déclarées, pas une quantité de substance active.",12,SOFT,false),10);
+        add(ecstasyParts,text("Pour supprimer une fraction, sélectionne-la, règle son compteur sur 0 et confirme avec ✓ OK.",12,SOFT,false),10);
         substanceOptions=column();
         add(details,substanceOptions,16);
         measurementBlock=column();
@@ -424,7 +428,10 @@ public final class ConsumptionActivity extends Activity {
     }
     private void select(Choice choice,boolean fromTap) {
         boolean changed=selected==null || selected!=choice;
-        if(changed && "Ecstasy".equals(choice.name))count=0;
+        if(changed && "Ecstasy".equals(choice.name)){
+            count=0;
+            editingPart="";
+        }
         else if(changed && count==0)count=1;
         if(changed){routeChoice="";subjectiveSize="";}
         selected=choice;
@@ -566,28 +573,52 @@ public final class ConsumptionActivity extends Activity {
     private boolean isEcstasy() {
         return selected!=null && "Ecstasy".equalsIgnoreCase(selected.name);
     }
-    private void addEcstasyPart(String part) {
-        if(count<1){
-            Toast.makeText(this,"Choisis d'abord un nombre avec +",Toast.LENGTH_SHORT).show();
+    private int savedPartCount(String part) {
+        switch(part){
+            case "quart": return quarterCount;
+            case "demi": return halfCount;
+            case "entier": return wholeCount;
+            default: return 0;
+        }
+    }
+    private String partName(String part) {
+        if("quart".equals(part))return "quart";
+        if("demi".equals(part))return "demi";
+        return "entier";
+    }
+    private void selectEcstasyPart(String part) {
+        if(!editingPart.isEmpty() && !editingPart.equals(part) &&
+            count!=savedPartCount(editingPart)){
+            new AlertDialog.Builder(this)
+                .setTitle("Modification non validée")
+                .setMessage("Tu as modifié "+partName(editingPart)+
+                    " sans appuyer sur ✓ OK. Abandonner cette modification ?")
+                .setNegativeButton("Continuer la modification",null)
+                .setPositiveButton("Abandonner",(dialog,which)->loadEcstasyPart(part))
+                .show();
             return;
         }
-        if("quart".equals(part))quarterCount+=count;
-        else if("demi".equals(part))halfCount+=count;
-        else wholeCount+=count;
-        lastPart=part;
-        count=0;
+        // Permettre aussi : régler le compteur, puis choisir Quart/Demi/Entier.
+        int pending=count;
+        boolean newPart=editingPart.isEmpty() && savedPartCount(part)==0 && pending>0;
+        loadEcstasyPart(part);
+        if(newPart){count=pending;refreshCounter();}
+    }
+    private void loadEcstasyPart(String part) {
+        editingPart=part;
+        count=savedPartCount(part);
         refreshCounter();
     }
-    private void undoLastEcstasyPart() {
-        if("quart".equals(lastPart)&&quarterCount>0)quarterCount--;
-        else if("demi".equals(lastPart)&&halfCount>0)halfCount--;
-        else if("entier".equals(lastPart)&&wholeCount>0)wholeCount--;
-        else {
-            if(wholeCount>0)wholeCount--;
-            else if(halfCount>0)halfCount--;
-            else if(quarterCount>0)quarterCount--;
+    private void confirmEcstasyPart() {
+        if(editingPart.isEmpty()){
+            Toast.makeText(this,"Sélectionne d'abord Quart, Demi ou Entier",Toast.LENGTH_SHORT).show();
+            return;
         }
-        lastPart="";
+        if("quart".equals(editingPart))quarterCount=count;
+        else if("demi".equals(editingPart))halfCount=count;
+        else wholeCount=count;
+        editingPart="";
+        count=0;
         refreshCounter();
     }
     private static String ecstasySummary(int whole,int half,int quarter) {
@@ -600,14 +631,31 @@ public final class ConsumptionActivity extends Activity {
     private void refreshCounter(){
         quantityText.setText(String.valueOf(count));
         if(selected==null)return;
-        if(isEcstasy()) {
+        if(isEcstasy()){
             if(ecstasyParts!=null)ecstasyParts.setVisibility(View.VISIBLE);
-            if(partsSummary!=null)partsSummary.setText(ecstasySummary(wholeCount,halfCount,quarterCount));
+            if(partsSummary!=null)partsSummary.setText("Enregistré : "+
+                ecstasySummary(wholeCount,halfCount,quarterCount));
             if(quarterBtn!=null)quarterBtn.setText("Quart"+(quarterCount>0?" · "+quarterCount:""));
             if(halfBtn!=null)halfBtn.setText("Demi"+(halfCount>0?" · "+halfCount:""));
             if(wholeBtn!=null)wholeBtn.setText("Entier"+(wholeCount>0?" · "+wholeCount:""));
-            measureText.setText("Choisis un nombre puis Quart, Demi ou Entier");
-        }else {
+            for(TextView button:new TextView[]{quarterBtn,halfBtn,wholeBtn}){
+                if(button==null)continue;
+                boolean focused=button==quarterBtn && "quart".equals(editingPart) ||
+                    button==halfBtn && "demi".equals(editingPart) ||
+                    button==wholeBtn && "entier".equals(editingPart);
+                button.setBackground(shape(focused?ACCENT:TILE,12,focused));
+                button.setTextColor(focused?BG:WHITE);
+            }
+            if(confirmPartButton!=null){
+                confirmPartButton.setVisibility(editingPart.isEmpty()?View.GONE:View.VISIBLE);
+                if(!editingPart.isEmpty())
+                    confirmPartButton.setText("✓ OK · Valider "+count+" "+partName(editingPart));
+            }
+            measureText.setText(editingPart.isEmpty()?
+                "Choisis Quart, Demi ou Entier pour ajouter ou corriger une quantité" :
+                "Modification : "+partName(editingPart)+
+                " · valeur enregistrée "+savedPartCount(editingPart));
+        }else{
             if(ecstasyParts!=null)ecstasyParts.setVisibility(View.GONE);
             String label=isDrug()?"prise":selected.unit;
             measureText.setText(count+" "+label+(count>1?"s":"")+" enregistré"+(count>1?"s":""));
@@ -674,8 +722,8 @@ public final class ConsumptionActivity extends Activity {
                 Toast.makeText(this,"Ajoute au moins un quart, un demi ou un entier",Toast.LENGTH_LONG).show();
                 return;
             }
-            if(count>0) {
-                Toast.makeText(this,"Il reste "+count+" au compteur : choisis Quart, Demi ou Entier avant d'enregistrer",Toast.LENGTH_LONG).show();
+            if(!editingPart.isEmpty()) {
+                Toast.makeText(this,"Appuie sur ✓ OK pour valider la fraction avant d'enregistrer",Toast.LENGTH_LONG).show();
                 return;
             }
         }

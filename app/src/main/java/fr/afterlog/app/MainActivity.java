@@ -288,6 +288,20 @@ public final class MainActivity extends Activity {
             add(syncPanel,panel,18);
             return;
         }
+        if(SyncState.BLOCKED.equals(mode) || SyncState.ERROR.equals(mode) ||
+            SyncState.CANCELED.equals(mode)) {
+            add(panel,text("⚠  Import Shotgun à reprendre",17,Color.WHITE,true),9);
+            add(panel,text(state.optString("phase"),14,SOFT,false),12);
+            add(panel,button("Ouvrir mes billets sur Shotgun",false,this::connectShotgun),8);
+            add(panel,button("Masquer cet avertissement",false,()->{
+                SyncState.save(this,SyncState.IDLE,"",0,0,-1,"");
+                syncLastSignature="";
+                renderSyncProgress();
+            }),0);
+            renderFailedEvents(panel);
+            add(syncPanel,panel,15);
+            return;
+        }
         String heading=SyncState.RUNNING.equals(mode)?"Synchronisation Shotgun":
             SyncState.DONE.equals(mode)?"Synchronisation terminée":
             SyncState.BLOCKED.equals(mode)?"Synchronisation à reprendre":
