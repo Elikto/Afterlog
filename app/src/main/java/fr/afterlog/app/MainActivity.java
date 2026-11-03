@@ -924,9 +924,12 @@ public final class MainActivity extends Activity {
                 ImageView image=new ImageView(this);
                 image.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 tile.addView(image,new FrameLayout.LayoutParams(-1,-1));
-                if(photo.startsWith("https://"))
-                    loadImage(image,photo,()->fallback.setVisibility(View.GONE));
-                else image.setVisibility(View.GONE);
+                if(photo.startsWith("https://")){
+                    String secondary=artist.optString("photo");
+                    if(secondary.equals(photo))secondary="";
+                    loadImage(image,photo,secondary,
+                        ()->fallback.setVisibility(View.GONE));
+                }else image.setVisibility(View.GONE);
 
                 // Darken only the bottom of the portrait, not the full image.
                 View gradient=new View(this);
@@ -1766,32 +1769,60 @@ public final class MainActivity extends Activity {
         else super.onBackPressed();
     }
     private void loadImage(ImageView image,String url) {
-        loadImage(image,url,null);
+        loadImage(image,url,null,null);
     }
     private void loadImage(ImageView image,String url,Runnable onLoaded) {
+        loadImage(image,url,null,onLoaded);
+    }
+    private void loadImage(ImageView image,String url,String backup,Runnable onLoaded){
         if(url==null||!url.startsWith("https://"))return;
         new Thread(()->{
-            HttpURLConnection connection=null;
-            try {
-                connection=(HttpURLConnection)new URL(url).openConnection();
-                connection.setConnectTimeout(8000);
-                connection.setReadTimeout(10000);
-                connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("Accept","image/avif,image/webp,image/*");
-                if(connection.getResponseCode()!=200)return;
-                try(InputStream in=connection.getInputStream()) {
-                    BitmapFactory.Options opts=new BitmapFactory.Options();
-                    opts.inSampleSize=2;
-                    Bitmap bmp=BitmapFactory.decodeStream(in,null,opts);
-                    if(bmp!=null)runOnUiThread(()->{
-                        if(isFinishing())return;
-                        image.setImageBitmap(bmp);
-                        if(onLoaded!=null)onLoaded.run();
-                    });
+            Bitmap bmp=fetchImage(url);
+            if(bmp==null&&backup!=null&&backup.startsWith("https://"))
+                bmp=fetchImage(backup);
+            if(bmp==null)return;
+            final Bitmap portrait=bmp;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed())return;
+                image.setVisibility(View.VISIBLE);
+                image.setImageBitmap(portrait);
+                if(onLoaded!=null)onLoaded.run();
+            });
+        },"NØCTARIA-image").start();
+    }
+    private Bitmap fetchImage(String url){
+        HttpURLConnection connection=null;
+        try{
+            connection=(HttpURLConnection)new URL(url).openConnection();
+            connection.setConnectTimeout(8500);
+            connection.setReadTimeout(11000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("Accept","image/jpeg,image/png,image/webp,image/*");
+            connection.setRequestProperty("User-Agent","Mozilla/5.0 (Android; NOCTARIA)");
+            if(connection.getResponseCode()!=200)return null;
+            // Avoid decoding unlimited third-party images on the UI thread.
+            if(connection.getContentLengthLong()>5_000_000L)return null;
+            try(InputStream in=connection.getInputStream()){
+                byte[] buffer=new byte[8192];
+                java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();
+                int count;
+                while((count=in.read(buffer))!=-1){
+                    if(out.size()+count>5_000_000)return null;
+                    out.write(buffer,0,count);
                 }
-            }catch(Exception ignored){}
-            finally {if(connection!=null)connection.disconnect();}
-        },"NØCTARIA-photo").start();
+                byte[] bytes=out.toByteArray();
+                BitmapFactory.Options options=new BitmapFactory.Options();
+                options.inJustDecodeBounds=true;
+                BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+                if(options.outWidth<=0||options.outHeight<=0)return null;
+                options.inSampleSize=1;
+                while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>750)
+                    options.inSampleSize*=2;
+                options.inJustDecodeBounds=false;
+                return BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+            }
+        }catch(Exception ignored){return null;}
+        finally{if(connection!=null)connection.disconnect();}
     }
 
 }
