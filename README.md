@@ -1,3 +1,14 @@
+## NØCTIS v0.17.1 — Sélection des médias dans la fiche événement
+
+- Le bouton **Sélectionner** et l'**appui long** sur une vignette permettent d'activer la sélection directement dans « Ma galerie », sans passer par le lecteur plein écran.
+- Une fois le mode sélection activé, chaque vignette se coche ou se décoche d'un toucher. **Tout / Aucun** permet de gérer le lot complet.
+- Les actions **Supprimer**, **Partager** et **Story Instagram** sont disponibles dans la fiche de soirée, avec confirmation personnalisée avant une suppression. La copie NØCTIS est retirée, pas l'original dans la galerie du téléphone.
+- Le partage multiple utilise `ACTION_SEND_MULTIPLE` et les URI temporaires de `FileProvider`; un fichier unique utilise le partage Story Instagram standard. Instagram n'offre pas de garantie qu'une sélection mixte de plusieurs photos et vidéos soit importée intégralement dans une story.
+- L'ancien dialogue qui proposait uniquement de partager **le dernier fichier importé** est supprimé.
+- Aucun changement de l'identifiant Android `fr.afterlog.app` ou du stockage des soirées.
+
+---
+
 # NØCTIS v0.17.0 — Nouvelle identité
 
 AfterLog devient **NØCTIS**, le journal personnel des soirées, festivals et souvenirs.
