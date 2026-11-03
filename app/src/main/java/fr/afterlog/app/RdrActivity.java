@@ -21,8 +21,9 @@ import java.nio.charset.StandardCharsets;
 public final class RdrActivity extends Activity {
     private static final int BG=Color.rgb(12,14,24),CARD=Color.rgb(25,28,44),
         ACCENT=Color.rgb(186,166,255),WHITE=Color.WHITE,SOFT=Color.rgb(183,189,208);
-    private LinearLayout body;
+    private LinearLayout body,placesContainer;
     private String town;
+    private long searchVersion=0;
     private int dp(int x){return Math.round(x*getResources().getDisplayMetrics().density);}
     private GradientDrawable bg(int c){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(16));return g;}
     private LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
@@ -74,33 +75,30 @@ public final class RdrActivity extends Activity {
         add(helpline,btn("🌐 Site et chat",()->open("https://www.drogues-info-service.fr/")),0);
         add(body,helpline,17);
 
-        add(body,txt("📍 Structures et associations",20,true,WHITE),11);
-        add(body,btn("Localisation choisie : "+town+"  ✎",this::chooseTown),13);
-        if(town.toLowerCase(java.util.Locale.ROOT).contains("arles")){
-            facility("CSAPA Camargue · La Maison Jaune","Consultation, accompagnement et prévention des addictions.",
-                "10 rue Jean Saler, 13200 Arles","04 90 93 46 50","csapa.arles@groupe-sos.org",
-                "https://www.drogues-info-service.fr/Adresses-utiles","10 rue Jean Saler Arles");
-            facility("CAARUD Antenne mobile Camargue","Réduction des risques, matériel, accueil et orientation. Structure mobile : appeler pour connaître le lieu de permanence.",
-                "13200 Arles · antenne mobile","07 87 69 85 44","caarud.mobile.camargue@groupe-sos.org",
-                "https://drogues-info-service.fr/Adresses-utiles/101948","CAARUD mobile Camargue Arles");
-            facility("CSAPA Camargue · Mas-Thibert","Centre de soins et d'accompagnement, notamment résidentiel. Contact préalable recommandé.",
-                "Mas des Lauriers, route de Port-Saint-Louis-du-Rhône, 13104 Arles",
-                "04 90 98 75 70","","https://www.drogues-info-service.fr/Adresses-utiles",
-                "Mas des Lauriers Mas Thibert");
-        }else {
-            add(body,txt("L'adresse n'est pas envoyée à AfterLog ni utilisée pour te géolocaliser. Recherche les structures autour du lieu saisi via l'annuaire officiel ou une carte.",14,false,SOFT),12);
-        }
-        add(body,btn("🔎 Trouver des structures autour de "+town,()->open(
-            "https://www.google.com/maps/search/?api=1&query="+Uri.encode("CAARUD CSAPA réduction des risques "+town))),10);
-        add(body,btn("Annuaire officiel Drogues Info Service",()->
-            open("https://www.drogues-info-service.fr/Adresses-utiles")),16);
+        add(body,txt("📍 Structures et associations",20,true,WHITE),9);
+        add(body,txt("CAARUD, CSAPA et structures d'addictologie proches de l'adresse de ton choix.",
+            13,false,SOFT),12);
+        add(body,btn("📍 "+town+"  ✎ Changer",this::chooseTown),8);
+        add(body,btn("↻ Actualiser les résultats",()->searchPlaces(town)),11);
+        placesContainer=col();
+        add(body,placesContainer,13);
+        // Unlike the old Arles-only hardcoded cards, results are looked up
+        // around the address currently selected on every page visit.
+        searchPlaces(town);
+
+        add(body,btn("🔎 Annuaire officiel · Drogues Info Service",()->
+            open("https://www.drogues-info-service.fr/Adresses-utiles")),8);
+        add(body,btn("📍 Rechercher sur une carte",()->open(
+            "https://www.google.com/maps/search/?api=1&query="+
+                Uri.encode("CAARUD CSAPA réduction des risques "+town))),16);
 
         add(body,txt("🧪 Analyse de produits",20,true,WHITE),9);
         LinearLayout analysis=card();
         add(analysis,txt("Analyse ton prod",17,true,WHITE),6);
         add(analysis,txt("Recherche de dispositifs d'analyse des substances psychoactives. Contacte la structure avant de te déplacer : les modalités et disponibilités varient.",14,false,SOFT),9);
         add(analysis,btn("Consulter les points d'analyse",()->open("https://www.analysetonprod.fr/")),9);
-        add(analysis,btn("Demander au CAARUD d'Arles",()->phone("0787698544")),0);
+        add(analysis,btn("Trouver un CAARUD proche",()->open(
+            "https://www.drogues-info-service.fr/Adresses-utiles")),0);
         add(body,analysis,19);
 
         add(body,txt("📚 Fiches de prévention",20,true,WHITE),6);
@@ -128,17 +126,67 @@ public final class RdrActivity extends Activity {
         }
         add(body,txt("Sources : Drogues Info Service, dispositifs CAARUD et CSAPA. Les informations pratiques peuvent changer : vérifier avant déplacement.",12,false,SOFT),12);
     }
-    private void facility(String name,String desc,String address,String number,String email,String site,String query) {
+    private void searchPlaces(String address){
+        if(placesContainer==null)return;
+        long version=++searchVersion;
+        placesContainer.removeAllViews();
+        LinearLayout loading=card();
+        add(loading,txt("Recherche autour de "+address+"…",15,true,ACCENT),7);
+        add(loading,txt("Recherche de structures proches à partir de l'adresse renseignée.",
+            12,false,SOFT),0);
+        add(placesContainer,loading,9);
+        RdrPlacesSearch.search(address,result->{
+            if(version!=searchVersion||isFinishing()||placesContainer==null)return;
+            placesContainer.removeAllViews();
+            if(!result.resolved.isEmpty()){
+                add(placesContainer,txt("Adresse reconnue : "+result.resolved,
+                    13,false,SOFT),9);
+            }
+            if(!result.error.isEmpty()){
+                LinearLayout warning=card();
+                add(warning,txt(result.error,14,false,SOFT),10);
+                add(warning,btn("Réessayer",()->searchPlaces(town)),0);
+                add(placesContainer,warning,11);
+            }
+            if(result.places.isEmpty()){
+                LinearLayout empty=card();
+                add(empty,txt("Aucune structure trouvée dans la base cartographique.",
+                    15,true,WHITE),7);
+                add(empty,txt("La couverture d'OpenStreetMap est incomplète. Cela ne signifie pas qu'aucun CAARUD ou CSAPA n'existe dans cette zone. Consulte l'annuaire national.",
+                    13,false,SOFT),11);
+                add(empty,btn("Consulter l'annuaire officiel",()->
+                    open(result.officialDirectory())),0);
+                add(placesContainer,empty,12);
+            }else{
+                add(placesContainer,txt(result.places.size()+
+                    " structure(s) cartographiée(s), par proximité",14,true,ACCENT),11);
+                for(RdrPlacesSearch.Place place:result.places)
+                    facility(place);
+                add(placesContainer,txt("Distances à vol d'oiseau. Informations OpenStreetMap à vérifier avant le déplacement ; la liste n'est pas exhaustive.",
+                    12,false,SOFT),10);
+                add(placesContainer,btn("Compléter avec l'annuaire national",()->
+                    open(result.officialDirectory())),11);
+            }
+        });
+    }
+    private void facility(RdrPlacesSearch.Place place){
         LinearLayout c=card();
-        add(c,txt(name,17,true,WHITE),6);
-        add(c,txt(desc,13,false,SOFT),8);
-        add(c,txt(address,14,false,WHITE),8);
-        add(c,btn("📞 "+number,()->phone(number)),7);
-        if(!email.isEmpty())add(c,btn("✉ "+email,()->
-            open("mailto:"+email)),7);
-        add(c,btn("Site ou fiche officielle",()->open(site)),7);
-        add(c,btn("📍 Voir sur la carte",()->open("geo:0,0?q="+Uri.encode(query))),0);
-        add(body,c,11);
+        add(c,txt(place.name,17,true,WHITE),6);
+        add(c,txt(place.category+" · "+
+            String.format(java.util.Locale.FRANCE,"%.1f km",place.distanceKm)+
+            " à vol d'oiseau",13,true,ACCENT),7);
+        if(!place.address.isEmpty())add(c,txt(place.address,14,false,WHITE),9);
+        if(!place.phone.isEmpty())
+            add(c,btn("📞 "+place.phone,()->phone(place.phone)),7);
+        if(!place.email.isEmpty())
+            add(c,btn("✉ "+place.email,()->open(
+                "mailto:"+Uri.encode(place.email))),7);
+        if(place.website.startsWith("https://")||place.website.startsWith("http://"))
+            add(c,btn("🌐 Site de la structure",()->open(place.website)),7);
+        add(c,btn("📍 Itinéraire",()->open(
+            "https://www.google.com/maps/search/?api=1&query="+
+            Uri.encode(String.format(java.util.Locale.ROOT,"%.6f,%.6f",place.lat,place.lon)))),0);
+        add(placesContainer,c,10);
     }
     private void chooseTown(){
         EditText city=new EditText(this);
