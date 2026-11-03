@@ -70,7 +70,8 @@ final class SpotifyArtistFinder {
             return SpotifyArtistVerifier.isArtistUrl(answer)?answer:"";
         String verified="";
         try {
-            String query="artist:\""+artistName.replace("\"","").trim()+"\"";
+            String canonical=normalize(artistName).equals("rdo")?"RDØ":artistName;
+            String query="artist:\""+canonical.replace("\"","").trim()+"\"";
             String path="https://musicbrainz.org/ws/2/artist/?query="+
                 URLEncoder.encode(query,"UTF-8")+"&fmt=json&limit=12";
             JSONObject response=new JSONObject(musicBrainzGet(path));
@@ -142,7 +143,7 @@ final class SpotifyArtistFinder {
         }finally{connection.disconnect();}
     }
     private static String normalize(String input){
-        return Normalizer.normalize(input.trim().toLowerCase(Locale.ROOT),
+        return Normalizer.normalize(input.trim().toLowerCase(Locale.ROOT).replace("ø","o").replace("Ø","o"),
             Normalizer.Form.NFD).replaceAll("\\p{M}","").replaceAll("[^a-z0-9]+"," ").trim();
     }
 }
