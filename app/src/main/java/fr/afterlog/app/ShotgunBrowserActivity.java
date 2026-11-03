@@ -114,7 +114,7 @@ public final class ShotgunBrowserActivity extends Activity {
                     autoExtractStarted=true;
                     status.setText("Extraction des informations et portraits d'artistes…");
                     new android.os.Handler(android.os.Looper.getMainLooper())
-                        .postDelayed(this::importCurrent,2200);
+                        .postDelayed(ShotgunBrowserActivity.this::importCurrent,2200);
                 }
                 else if(discovery!=null && discovering)discovery.pageFinished();
                 else status.setText("Shotgun connecté : ouvre Mes billets → Passés si nécessaire.");
