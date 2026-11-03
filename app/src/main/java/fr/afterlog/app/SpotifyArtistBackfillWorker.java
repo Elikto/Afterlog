@@ -15,202 +15,285 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Enrichit TOUS les événements enregistrés, anciens et nouveaux.
- * Ne lit jamais la session Spotify/Shotgun : seules les pages publiques sont consultées.
- * Les portraits provenant de Spotify restent séparés des images Shotgun.
+ * Backfill across the WHOLE private journal, not only the event currently open.
+ * Discovers unique artist names from all saved line-ups, shares only validated
+ * profiles/photos across occurrences, and never uploads the journal.
  */
 public final class SpotifyArtistBackfillWorker extends Worker {
-    private static final String JOB="afterlog-spotify-artists-backfill";
-    private static final String PERIODIC="afterlog-spotify-artists-daily";
-    private static final String PREFS="afterlog_spotify_backfill";
-    private static final long RETRY_AFTER=12L*60L*60L*1000L;
-    private static final int MAX_LOOKUPS=12;
+    private static final String JOB="afterlog-spotify-artists-backfill-v3";
+    private static final String PERIODIC="afterlog-spotify-artists-daily-v3";
+    private static final String PREFS="afterlog_spotify_backfill_v3";
+    private static final int MAX_LOOKUPS=16;
+    private static final long FAILED_RETRY=6L*60*60*1000;
+    private static final long QUEUE_COOLDOWN=2L*60*1000;
 
     private static final class Artist {
         final String name;
-        String shotgunPhoto="", explicitSpotify="";
-        String knownSpotify="", knownPhoto="";
+        String shotgunPhoto="", spotifyLink="", spotifyPhoto="";
+        boolean ambiguous=false;
         Artist(String name){this.name=name;}
     }
-
-    public SpotifyArtistBackfillWorker(@NonNull Context context,
-                                       @NonNull WorkerParameters parameters) {
-        super(context,parameters);
+    private static final class Counts {
+        int total,linked,photos,events,withoutLineup;
     }
 
-    /** Travail ponctuel à l'ouverture + rappel quotidien pour les artistes non trouvés. */
-    static void schedule(Context ctx) {
-        SharedPreferences prefs=ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+    public SpotifyArtistBackfillWorker(@NonNull Context ctx,
+                                       @NonNull WorkerParameters params){
+        super(ctx,params);
+    }
+    static void schedule(Context context){
+        schedule(context,false);
+    }
+    static void refreshAll(Context context){
         long now=System.currentTimeMillis();
+        SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        if(now-prefs.getLong("forcedAt",0)<60_000L)return;
+        SharedPreferences.Editor editor=prefs.edit().putLong("forcedAt",now);
+        for(String key:prefs.getAll().keySet())
+            if(key.startsWith("attempt_"))editor.remove(key);
+        editor.apply();
+        SpotifyArtistFinder.clearNegativeCache(context);
+        schedule(context,true);
+    }
+    private static void schedule(Context context,boolean replace){
         Constraints network=new Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED).build();
-        PeriodicWorkRequest recurring=new PeriodicWorkRequest.Builder(
+        WorkManager manager=WorkManager.getInstance(context);
+        PeriodicWorkRequest periodic=new PeriodicWorkRequest.Builder(
             SpotifyArtistBackfillWorker.class,24,TimeUnit.HOURS)
             .setConstraints(network).build();
-        WorkManager manager=WorkManager.getInstance(ctx);
         manager.enqueueUniquePeriodicWork(PERIODIC,
-            ExistingPeriodicWorkPolicy.KEEP,recurring);
-        if(now-prefs.getLong("lastQueued",0)<2L*60L*1000L)return;
+            ExistingPeriodicWorkPolicy.KEEP,periodic);
+
+        SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        long now=System.currentTimeMillis();
+        if(!replace && now-prefs.getLong("lastQueued",0)<QUEUE_COOLDOWN)return;
         prefs.edit().putLong("lastQueued",now).apply();
         OneTimeWorkRequest request=new OneTimeWorkRequest.Builder(
-            SpotifyArtistBackfillWorker.class)
-            .setConstraints(network)
-            .setBackoffCriteria(BackoffPolicy.LINEAR,15,TimeUnit.MINUTES)
-            .build();
-        manager.enqueueUniqueWork(JOB,ExistingWorkPolicy.KEEP,request);
+            SpotifyArtistBackfillWorker.class).setConstraints(network)
+            .setBackoffCriteria(BackoffPolicy.LINEAR,15,TimeUnit.MINUTES).build();
+        manager.enqueueUniqueWork(JOB,
+            replace?ExistingWorkPolicy.REPLACE:ExistingWorkPolicy.KEEP,request);
     }
 
-    @Override @NonNull public Result doWork() {
-        Context context=getApplicationContext();
+    static String status(Context context){
         SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
-        LinkedHashMap<String,Artist> artists=new LinkedHashMap<>();
-        AppStore initial=new AppStore(context);
-        for(JSONObject event:initial.events()){
+        String state=prefs.getString("state","");
+        if("".equals(state))return "Recherche Spotify prévue pour toutes tes soirées.";
+        int total=prefs.getInt("total",0);
+        int linked=prefs.getInt("linked",0);
+        int photos=prefs.getInt("photos",0);
+        int pending=Math.max(0,total-linked);
+        String suffix="running".equals(state)?" · Recherche en cours":
+            "partial".equals(state)?" · Autres artistes en attente de vérification":
+            " · Vérification terminée pour ce passage";
+        return total+" artistes distincts · "+linked+" profils Spotify · "+
+            photos+" photos Spotify · "+pending+" sans profil confirmé"+suffix;
+    }
+
+    @Override @NonNull public Result doWork(){
+        Context ctx=getApplicationContext();
+        SharedPreferences prefs=ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        try {
+            // Capture all events. Even older imported festivals may have only an
+            // "artists" string and no "artistProfiles" objects.
+            ensureProfiles(ctx);
+            LinkedHashMap<String,Artist> artists=collect(new AppStore(ctx).events());
+            updateStatus(ctx,"running");
+            int attempted=0;
+            boolean pending=false;
+            long now=System.currentTimeMillis();
+            for(Map.Entry<String,Artist> row:artists.entrySet()){
+                if(isStopped())return Result.retry();
+                String key=row.getKey();
+                Artist artist=row.getValue();
+                // Different explicit Spotify IDs for identical stage names:
+                // do not spread one artist's photo to a possible namesake.
+                if(artist.ambiguous)continue;
+                if(SpotifyArtistVerifier.isArtistUrl(artist.spotifyLink) &&
+                   !artist.spotifyPhoto.isEmpty()){
+                    apply(ctx,key,artist.spotifyLink,artist.spotifyPhoto);
+                    continue;
+                }
+                if(now-prefs.getLong("attempt_"+key,0)<FAILED_RETRY)continue;
+                if(attempted>=MAX_LOOKUPS){pending=true;continue;}
+                attempted++;
+                try{
+                    String link=SpotifyArtistVerifier.isArtistUrl(artist.spotifyLink)
+                        ?artist.spotifyLink
+                        :SpotifyArtistFinder.resolve(ctx,artist.name,
+                            artist.shotgunPhoto,"");
+                    if(SpotifyArtistVerifier.isArtistUrl(link) &&
+                       SpotifyArtistVerifier.matchesName(link,artist.name)){
+                        String photo=SpotifyArtistVerifier.verifiedThumbnail(
+                            link,artist.name);
+                        apply(ctx,key,link,photo);
+                    }
+                }catch(Exception ignored){
+                    // No guessed profiles: leave the card as "unconfirmed".
+                }
+                prefs.edit().putLong("attempt_"+key,System.currentTimeMillis()).apply();
+                if(attempted%4==0)updateStatus(ctx,"running");
+            }
+            updateStatus(ctx,pending?"partial":"complete");
+            return pending?Result.retry():Result.success();
+        }catch(Exception failure){
+            prefs.edit().putString("state","partial").apply();
+            return Result.retry();
+        }
+    }
+
+    private static String key(String input){
+        if(input==null)return "";
+        return Normalizer.normalize(input.trim().toLowerCase(Locale.ROOT)
+            .replace("ø","o"),Normalizer.Form.NFD)
+            .replaceAll("\\p{M}","").replaceAll("[^a-z0-9]+"," ").trim();
+    }
+    private static List<String> names(String raw){
+        ArrayList<String> result=new ArrayList<>();
+        if(raw==null)return result;
+        for(String name:raw.split("[,;\\n]+")){
+            String trimmed=name.trim();
+            if(trimmed.length()>=2 && trimmed.length()<=120)result.add(trimmed);
+        }
+        return result;
+    }
+    private static Artist find(LinkedHashMap<String,Artist> artists,String name){
+        String normalized=key(name);
+        if(normalized.isEmpty())return null;
+        Artist item=artists.get(normalized);
+        if(item==null){
+            item=new Artist(name.trim());
+            artists.put(normalized,item);
+        }
+        return item;
+    }
+    private static LinkedHashMap<String,Artist> collect(List<JSONObject> events){
+        LinkedHashMap<String,Artist> collected=new LinkedHashMap<>();
+        for(JSONObject event:events){
             JSONArray profiles=event.optJSONArray("artistProfiles");
             if(profiles!=null)for(int i=0;i<profiles.length();i++){
                 JSONObject p=profiles.optJSONObject(i);
                 if(p==null)continue;
-                String name=p.optString("name").trim();
-                Artist a=artistFor(artists,name);
+                Artist a=find(collected,p.optString("name"));
                 if(a==null)continue;
-                if(a.shotgunPhoto.isEmpty())a.shotgunPhoto=p.optString("photo");
-                if(a.explicitSpotify.isEmpty() &&
-                    SpotifyArtistVerifier.isArtistUrl(p.optString("spotify")))
-                    a.explicitSpotify=p.optString("spotify");
-                if(SpotifyArtistVerifier.isArtistUrl(p.optString("spotify")) &&
-                   p.optString("spotifyPhoto").startsWith("https://")){
-                    a.knownSpotify=p.optString("spotify");
-                    a.knownPhoto=p.optString("spotifyPhoto");
+                if(a.shotgunPhoto.isEmpty() &&
+                   p.optString("photo").startsWith("https://"))
+                    a.shotgunPhoto=p.optString("photo");
+                String link=p.optString("spotify");
+                if(SpotifyArtistVerifier.isArtistUrl(link)){
+                    if(!a.spotifyLink.isEmpty()&&!a.spotifyLink.equals(link))
+                        a.ambiguous=true;
+                    if(a.spotifyLink.isEmpty())a.spotifyLink=link;
+                    if(link.equals(a.spotifyLink) &&
+                       p.optString("spotifyPhoto").startsWith("https://"))
+                        a.spotifyPhoto=p.optString("spotifyPhoto");
                 }
             }
-            for(String n:event.optString("artists").split(","))artistFor(artists,n.trim());
+            for(String name:names(event.optString("artists")))find(collected,name);
         }
-
-        int checked=0,found=0,attempted=0;
-        boolean remaining=false;
-        long now=System.currentTimeMillis();
-        for(Artist artist:artists.values()){
-            if(isStopped())return Result.retry();
-            String key=key(artist.name);
-            // Un artiste déjà confirmé sur une autre soirée s'applique partout.
-            if(!artist.knownSpotify.isEmpty() && !artist.knownPhoto.isEmpty()){
-                apply(context,key,artist.knownSpotify,artist.knownPhoto);
-                found++;checked++;continue;
+        return collected;
+    }
+    private static void ensureProfiles(Context ctx){
+        for(JSONObject event:new AppStore(ctx).events()){
+            JSONArray profiles=event.optJSONArray("artistProfiles");
+            if(profiles==null)profiles=new JSONArray();
+            HashSet<String> seen=new HashSet<>();
+            for(int i=0;i<profiles.length();i++){
+                JSONObject p=profiles.optJSONObject(i);
+                if(p!=null)seen.add(key(p.optString("name")));
             }
-            if(!needsEnrichment(context,key)){
-                if(!artist.explicitSpotify.isEmpty())found++;
-                checked++;continue;
+            boolean modified=false;
+            for(String name:names(event.optString("artists"))){
+                if(!seen.add(key(name)))continue;
+                try{
+                    profiles.put(new JSONObject().put("name",name));
+                    modified=true;
+                }catch(Exception ignored){}
             }
-            if(now-prefs.getLong("attempt_"+key,0)<RETRY_AFTER){
-                checked++;continue;
-            }
-            if(attempted>=MAX_LOOKUPS){remaining=true;continue;}
-            attempted++;
-            String link="";
-            String photo="";
-            try {
-                link=SpotifyArtistFinder.resolve(context,artist.name,
-                    artist.shotgunPhoto,artist.explicitSpotify);
-                if(SpotifyArtistVerifier.isArtistUrl(link) &&
-                   SpotifyArtistVerifier.matchesName(link,artist.name)){
-                    photo=SpotifyArtistVerifier.verifiedThumbnail(link,artist.name);
-                    if(!photo.isEmpty()){
-                        apply(context,key,link,photo);
-                        found++;
-                    }else {
-                        // Le lien a été reconnu, mais une vignette manquante ne
-                        // doit jamais effacer un portrait Shotgun existant.
-                        apply(context,key,link,"");
-                        found++;
+            if(modified){
+                try{
+                    // Reload immediately before writing to preserve recent
+                    // edits and user-entered journal data.
+                    AppStore store=new AppStore(ctx);
+                    JSONObject current=store.event(event.optLong("id"));
+                    if(current==null)continue;
+                    JSONArray latest=current.optJSONArray("artistProfiles");
+                    if(latest==null)latest=new JSONArray();
+                    HashSet<String> present=new HashSet<>();
+                    for(int i=0;i<latest.length();i++){
+                        JSONObject p=latest.optJSONObject(i);
+                        if(p!=null)present.add(key(p.optString("name")));
                     }
-                }
-            }catch(Exception ignored){}
-            prefs.edit().putLong("attempt_"+key,System.currentTimeMillis()).apply();
-            checked++;
-        }
-        prefs.edit().putInt("artistsTotal",artists.size())
-            .putInt("artistsChecked",checked)
-            .putInt("artistsFound",found)
-            .putLong("lastRun",System.currentTimeMillis()).apply();
-        return remaining?Result.retry():Result.success();
-    }
-
-    private static Artist artistFor(LinkedHashMap<String,Artist> map,String name){
-        if(name==null||name.trim().isEmpty())return null;
-        String key=key(name);
-        if(key.isEmpty())return null;
-        Artist existing=map.get(key);
-        if(existing!=null)return existing;
-        Artist a=new Artist(name.trim());map.put(key,a);return a;
-    }
-
-    private static String key(String name){
-        return Normalizer.normalize(name.toLowerCase(Locale.ROOT).replace("ø","o"),
-            Normalizer.Form.NFD).replaceAll("\\p{M}","")
-            .replaceAll("[^a-z0-9]+"," ").trim();
-    }
-
-    private static boolean needsEnrichment(Context context,String target){
-        for(JSONObject event:new AppStore(context).events()){
-            boolean named=false;
-            JSONArray arr=event.optJSONArray("artistProfiles");
-            if(arr!=null)for(int i=0;i<arr.length();i++){
-                JSONObject p=arr.optJSONObject(i);
-                if(p==null||!key(p.optString("name")).equals(target))continue;
-                named=true;
-                if(p.optString("spotifyPhoto").isEmpty())return true;
-            }
-            if(!named)for(String name:event.optString("artists").split(",")){
-                if(key(name.trim()).equals(target))return true;
+                    for(String name:names(current.optString("artists"))){
+                        if(present.add(key(name)))
+                            latest.put(new JSONObject().put("name",name));
+                    }
+                    current.put("artistProfiles",latest);
+                    store.saveEvent(current);
+                }catch(Exception ignored){}
             }
         }
-        return false;
     }
-
-    private static void apply(Context context,String target,String spotify,String photo){
-        // Relire la version à jour : ne pas écraser les modifications personnelles
-        // ajoutées pendant la recherche réseau.
-        for(JSONObject event:new AppStore(context).events()){
+    private static void apply(Context context,String target,String link,String photo){
+        for(JSONObject snapshot:new AppStore(context).events()){
             try{
+                AppStore store=new AppStore(context);
+                JSONObject event=store.event(snapshot.optLong("id"));
+                if(event==null)continue;
                 JSONArray profiles=event.optJSONArray("artistProfiles");
                 if(profiles==null)profiles=new JSONArray();
-                boolean changed=false,exists=false;
+                boolean changed=false;
                 for(int i=0;i<profiles.length();i++){
-                    JSONObject p=profiles.optJSONObject(i);
-                    if(p==null||!key(p.optString("name")).equals(target))continue;
-                    exists=true;
-                    String oldLink=p.optString("spotify");
-                    // Deux profils officiels différents : ne pas confondre les homonymes.
-                    if(!oldLink.isEmpty()&&!oldLink.equals(spotify))continue;
-                    if(!oldLink.equals(spotify)){
-                        p.put("spotify",spotify);changed=true;
+                    JSONObject profile=profiles.optJSONObject(i);
+                    if(profile==null||!target.equals(key(profile.optString("name"))))
+                        continue;
+                    String previous=profile.optString("spotify");
+                    if(!previous.isEmpty()&&!previous.equals(link))continue;
+                    if(!link.equals(previous)){
+                        profile.put("spotify",link);changed=true;
                     }
-                    if(!photo.isEmpty()&&!photo.equals(p.optString("spotifyPhoto"))){
-                        p.put("spotifyPhoto",photo);changed=true;
-                    }
-                }
-                if(!exists){
-                    for(String name:event.optString("artists").split(",")){
-                        String trimmed=name.trim();
-                        if(!key(trimmed).equals(target))continue;
-                        JSONObject p=new JSONObject();
-                        p.put("name",trimmed);
-                        p.put("spotify",spotify);
-                        if(!photo.isEmpty())p.put("spotifyPhoto",photo);
-                        profiles.put(p);changed=true;break;
+                    if(!photo.isEmpty()&&!photo.equals(profile.optString("spotifyPhoto"))){
+                        profile.put("spotifyPhoto",photo);changed=true;
                     }
                 }
                 if(changed){
                     event.put("artistProfiles",profiles);
-                    new AppStore(context).saveEvent(event);
+                    store.saveEvent(event);
                 }
             }catch(Exception ignored){}
         }
+    }
+    private static void updateStatus(Context ctx,String state){
+        LinkedHashMap<String,Artist> artists=collect(new AppStore(ctx).events());
+        Counts c=new Counts();
+        c.total=artists.size();
+        for(Artist a:artists.values()){
+            if(SpotifyArtistVerifier.isArtistUrl(a.spotifyLink))c.linked++;
+            if(!a.spotifyPhoto.isEmpty())c.photos++;
+        }
+        for(JSONObject event:new AppStore(ctx).events()){
+            c.events++;
+            boolean any=event.optJSONArray("artistProfiles")!=null &&
+                event.optJSONArray("artistProfiles").length()>0;
+            if(!any && names(event.optString("artists")).isEmpty())
+                c.withoutLineup++;
+        }
+        ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+            .putInt("total",c.total).putInt("linked",c.linked)
+            .putInt("photos",c.photos).putInt("events",c.events)
+            .putInt("withoutLineup",c.withoutLineup)
+            .putString("state",state).putLong("lastRun",System.currentTimeMillis())
+            .apply();
     }
 }
