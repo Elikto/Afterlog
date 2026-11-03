@@ -245,7 +245,7 @@ public final class ShotgunScheduledWorker extends Worker {
     }
     private void persist(JSONObject incoming) throws Exception {
         JSONObject old=match(incoming);
-        if(old==null){store.saveEvent(incoming);return;}
+        if(old==null){store.saveEvent(incoming);SpotifyArtistBackfillWorker.schedule(getApplicationContext());return;}
         for(String key:new String[]{"poster","date","start","end","endDate","venue",
                 "city","address","description","artists","organizer","genres","url"}) {
             String value=incoming.optString(key);
@@ -253,6 +253,7 @@ public final class ShotgunScheduledWorker extends Worker {
         }
         ArtistProfileMerger.merge(old,incoming);
         store.saveEvent(old);
+        SpotifyArtistBackfillWorker.schedule(getApplicationContext());
     }
     private static boolean safe(String url) {
         try {
