@@ -227,7 +227,7 @@ public final class EventGalleryActivity extends Activity {
             Toast.makeText(this,"Suppression indisponible pour cette soirée non enregistrée.",
                 Toast.LENGTH_LONG).show();return;
         }
-        new AlertDialog.Builder(this).setTitle("Supprimer ce média ?")
+        NeonDialog.builder(this).setTitle("Supprimer ce média ?")
             .setMessage("La photo ou vidéo sera définitivement retirée de la soirée.")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Supprimer",(dialog,which)->deleteCurrent()).show();
