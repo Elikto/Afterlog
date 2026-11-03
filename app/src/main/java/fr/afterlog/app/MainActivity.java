@@ -885,6 +885,10 @@ public final class MainActivity extends Activity {
                 message("Recherche des profils et portraits de tous les événements relancée.");
             }),12);
         }
+        // Fixed diameter for the entire artist card; the portrait alone is not the card.
+        final int circleDp=Math.max(106,Math.min(126,
+            (getResources().getConfiguration().screenWidthDp-52)/3));
+        final int portraitDp=Math.max(35,circleDp-76);
         for(int index=0;index<ordered.length();index+=3){
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -892,8 +896,9 @@ public final class MainActivity extends Activity {
             add(page,row,12);
             for(int slot=0;slot<3;slot++){
                 int i=index+slot;
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);
-                lp.setMargins(dp(3),0,dp(3),0);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
+                    0,dp(circleDp),1f);
+                lp.setMargins(dp(2),0,dp(2),0);
                 if(i>=ordered.length()){row.addView(new View(this),lp);continue;}
                 JSONObject artist=ordered.optJSONObject(i);
                 if(artist==null)continue;
@@ -908,17 +913,26 @@ public final class MainActivity extends Activity {
                     direct=candidate;
                 final String[] target={direct};
 
+                FrameLayout cardSlot=new FrameLayout(this);
+                row.addView(cardSlot,lp);
                 LinearLayout tile=column();
-                tile.setPadding(dp(6),dp(11),dp(6),dp(10));
-                tile.setGravity(Gravity.CENTER_HORIZONTAL);
-                tile.setBackground(rounded(PANEL,19));
-                row.addView(tile,lp);
+                tile.setGravity(Gravity.CENTER_HORIZONTAL|Gravity.CENTER_VERTICAL);
+                tile.setPadding(dp(5),dp(4),dp(5),dp(3));
+                GradientDrawable cardCircle=new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(42,33,65),Color.rgb(25,28,44)});
+                cardCircle.setShape(GradientDrawable.OVAL);
+                cardCircle.setStroke(dp(1),Color.rgb(88,70,123));
+                tile.setBackground(cardCircle);
+                tile.setClipToOutline(true);
+                cardSlot.addView(tile,new FrameLayout.LayoutParams(
+                    dp(circleDp),dp(circleDp),Gravity.CENTER));
 
                 FrameLayout frame=new FrameLayout(this);
                 LinearLayout.LayoutParams portraitLp=new LinearLayout.LayoutParams(
-                    dp(80),dp(80));
+                    dp(portraitDp),dp(portraitDp));
                 portraitLp.gravity=Gravity.CENTER_HORIZONTAL;
-                portraitLp.bottomMargin=dp(9);
+                portraitLp.bottomMargin=dp(2);
                 tile.addView(frame,portraitLp);
                 ImageView portrait=new ImageView(this);
                 portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -937,21 +951,23 @@ public final class MainActivity extends Activity {
                 if(photo.startsWith("https://"))
                     loadImage(portrait,photo,()->fallback.setVisibility(View.GONE));
 
-                TextView title=text(name,13,Color.WHITE,true);
+                TextView title=text(name,circleDp<112?10:11,Color.WHITE,true);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(2);
-                add(tile,title,8);
+                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                tile.addView(title,new LinearLayout.LayoutParams(-1,dp(29)));
 
                 SpotifyMarkView spotifyMark=new SpotifyMarkView(this);
                 spotifyMark.setVerified(false);
                 spotifyMark.setContentDescription("Spotify : recherche de "+name);
-                LinearLayout.LayoutParams iconLp=new LinearLayout.LayoutParams(dp(27),dp(27));
+                LinearLayout.LayoutParams iconLp=new LinearLayout.LayoutParams(dp(19),dp(19));
                 iconLp.gravity=Gravity.CENTER_HORIZONTAL;
                 tile.addView(spotifyMark,iconLp);
-                TextView destination=text("Recherche Spotify",11,ACCENT,false);
+                TextView destination=text("Associer",9,ACCENT,false);
                 destination.setGravity(Gravity.CENTER);
-                destination.setMaxLines(2);
-                add(tile,destination,3);
+                destination.setMaxLines(1);
+                destination.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                tile.addView(destination,new LinearLayout.LayoutParams(-1,dp(13)));
 
                 Runnable openSpotify=()->{
                     if(SpotifyArtistVerifier.isArtistUrl(target[0])){
@@ -985,7 +1001,7 @@ public final class MainActivity extends Activity {
                                 SpotifyArtistBackfillWorker.schedule(this);
                                 target[0]=link;
                                 spotifyMark.setVerified(true);
-                                destination.setText("Ouvrir Spotify");
+                                destination.setText("Spotify");
                                 destination.setTextColor(Color.rgb(30,215,96));
                                 try{
                                     startActivity(new Intent(Intent.ACTION_VIEW,
@@ -1001,14 +1017,14 @@ public final class MainActivity extends Activity {
                 title.setOnClickListener(v->openSpotify.run());
                 if(SpotifyArtistVerifier.isArtistUrl(target[0])){
                     spotifyMark.setVerified(true);
-                    destination.setText("Ouvrir Spotify");
+                    destination.setText("Spotify");
                     destination.setTextColor(Color.rgb(30,215,96));
                 }
                 // Les profils et les photos sont enrichis dans un seul travail
                 // WorkManager couvrant toutes les soirées, plutôt qu'un réseau
                 // d'appels concurrents pour chaque carte à chaque affichage.
                 if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
-                    destination.setText("Associer Spotify");
+                    destination.setText("Associer");
             }
         }
         String eventUrl=event.optString("url");
