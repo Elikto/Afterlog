@@ -271,42 +271,73 @@ public final class EventGalleryActivity extends Activity {
     private void shareInstagramStory(){shareGroup(true);}
     private void shareGroup(boolean instagram){
         ArrayList<Item> chosen=chosenItems();
-        if(chosen.size()==1){
-            Item item=chosen.get(0);
+        ArrayList<File> files=new ArrayList<>();
+        ArrayList<Boolean> videos=new ArrayList<>();
+        for(Item item:chosen){
             File f=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
-            shareFile(this,f,item.video,instagram);return;
+            if(f==null||!f.isFile())continue;
+            files.add(f);
+            videos.add(item.video);
+        }
+        shareMediaFiles(this,files,videos,instagram);
+    }
+
+    /** Partage réutilisé par le plein écran et directement par les vignettes d'événement. */
+    static void shareMediaFiles(Activity activity,java.util.List<File> files,
+                                java.util.List<Boolean> videoFlags,boolean instagram){
+        if(files==null||files.isEmpty()||videoFlags==null||
+           videoFlags.size()!=files.size()){
+            Toast.makeText(activity,"Aucun média disponible.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(files.size()==1){
+            shareFile(activity,files.get(0),videoFlags.get(0),instagram);
+            return;
         }
         try{
             ArrayList<Uri> uris=new ArrayList<>();
             ClipData clip=null;
             boolean hasPhotos=false,hasVideos=false;
-            for(Item item:chosen){
-                File f=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
-                if(f==null||!f.isFile())continue;
-                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".media",f);
+            for(int i=0;i<files.size();i++){
+                File file=files.get(i);
+                if(file==null||!file.isFile())continue;
+                Uri uri=FileProvider.getUriForFile(activity,
+                    activity.getPackageName()+".media",file);
                 uris.add(uri);
-                if(clip==null)clip=ClipData.newUri(getContentResolver(),"Médias NØCTIS",uri);
+                if(clip==null)clip=ClipData.newUri(activity.getContentResolver(),
+                    "Médias NØCTIS",uri);
                 else clip.addItem(new ClipData.Item(uri));
-                if(item.video)hasVideos=true;else hasPhotos=true;
+                if(videoFlags.get(i))hasVideos=true;else hasPhotos=true;
             }
-            if(uris.isEmpty())throw new Exception("Aucun fichier disponible");
-            Intent send=new Intent(Intent.ACTION_SEND_MULTIPLE);
-            send.setType(hasVideos?(hasPhotos?"*/*":"video/*"):"image/jpeg");
-            send.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
-            send.setClipData(clip);
-            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if(uris.isEmpty())throw new IllegalStateException("Médias introuvables");
+            Intent share=new Intent(Intent.ACTION_SEND_MULTIPLE);
+            share.setType(hasVideos?(hasPhotos?"*/*":"video/*"):"image/jpeg");
+            share.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
+            share.setClipData(clip);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             if(instagram){
-                // L'API ADD_TO_STORY n'accepte qu'un média : pour plusieurs,
-                // utiliser le partage multiple et laisser Instagram les importer.
-                send.setPackage("com.instagram.android");
-                startActivity(send);
-            }else startActivity(Intent.createChooser(send,"Partager les médias sélectionnés"));
-        }catch(Exception e){
-            Toast.makeText(this,instagram?
-                "Instagram ne prend pas en charge ce partage multiple. Essaie le partage classique.":
-                "Impossible de partager les médias.",Toast.LENGTH_LONG).show();
+                // ADD_TO_STORY n'autorise qu'un média. Plusieurs médias sont
+                // transmis à Instagram via le partage Android standard, et
+                // l'utilisateur choisit Story dans Instagram si disponible.
+                share.setPackage("com.instagram.android");
+                try{
+                    activity.startActivity(share);
+                }catch(android.content.ActivityNotFoundException unavailable){
+                    share.setPackage(null);
+                    activity.startActivity(Intent.createChooser(share,
+                        "Partager les médias (Story si proposée par Instagram)"));
+                }
+            }else{
+                activity.startActivity(Intent.createChooser(share,
+                    "Partager les "+uris.size()+" médias sélectionnés"));
+            }
+        }catch(Exception error){
+            Toast.makeText(activity,instagram?
+                "Instagram ne permet pas ce partage groupé ici. Essaie « Partager ».":
+                "Impossible de partager ces médias.",Toast.LENGTH_LONG).show();
         }
     }
+
     static void shareFile(Activity activity,File file,boolean video,boolean instagramStory){
         if(file==null||!file.isFile()){
             Toast.makeText(activity,"Média introuvable",Toast.LENGTH_LONG).show();return;
