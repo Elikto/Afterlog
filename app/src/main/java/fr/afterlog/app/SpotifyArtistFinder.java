@@ -22,6 +22,14 @@ final class SpotifyArtistFinder {
     // Pas de génération d'ID à partir du nom (source d'erreurs d'homonymie).
     static String trustedProfile(String artist){
         switch(normalize(artist)){
+            // Confirmed public artist discographies (avoid same-name unrelated acts).
+            case "astrix":return "https://open.spotify.com/artist/3dUltShd2gJQc98Kc7Syit";
+            case "billx":return "https://open.spotify.com/artist/0Ldjd0Z66CJ0rChWXx0jzB";
+            case "carv":return "https://open.spotify.com/artist/6xenmpQHeDugzwDn9H2pSI";
+            case "dimitri k":return "https://open.spotify.com/artist/1WXsfnqh2lT56nFMI5Pc0E";
+            case "dirtyphonics":return "https://open.spotify.com/artist/4zymhxzJ0UJc74tMHGyoWs";
+            case "eczodia":return "https://open.spotify.com/artist/3EYdIeVPZ8IXT0Uiq7h0R2";
+            case "hysta":return "https://open.spotify.com/artist/5b4R0928g89y6qmOgtEN1O";
             case "rdo":return "https://open.spotify.com/artist/31ZuDTe0cwR1OyiV7QhmjT";
             case "perceval":return "https://open.spotify.com/artist/3dJ5aHKA9m7zKAr0lX6rtb";
             case "acidpach":return "https://open.spotify.com/artist/0Z1E5Ebqj4e5CYElhs1lwC";
