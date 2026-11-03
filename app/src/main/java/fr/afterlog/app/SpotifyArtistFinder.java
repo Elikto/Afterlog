@@ -22,6 +22,7 @@ final class SpotifyArtistFinder {
     // Pas de génération d'ID à partir du nom (source d'erreurs d'homonymie).
     static String trustedProfile(String artist){
         switch(normalize(artist)){
+            case "rdo":return "https://open.spotify.com/artist/31ZuDTe0cwR1OyiV7QhmjT";
             case "perceval":return "https://open.spotify.com/artist/3dJ5aHKA9m7zKAr0lX6rtb";
             case "acidpach":return "https://open.spotify.com/artist/0Z1E5Ebqj4e5CYElhs1lwC";
             case "lekkerfaces":return "https://open.spotify.com/artist/45Meh6B3L1TNh03On3y349";
