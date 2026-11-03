@@ -70,7 +70,7 @@ public final class RdrActivity extends Activity {
 
         LinearLayout helpline=card();
         add(helpline,txt("Drogues Info Service",19,true,WHITE),6);
-        add(helpline,txt("0 800 23 13 13 · anonyme et gratuit · 7j/7 de 8 h à 23 h (horaires annoncés depuis octobre 2026).",14,false,SOFT),11);
+        add(helpline,txt("0 800 23 13 13 · anonyme et gratuit · 7j/7 de 8 h à 2 h, 7j/7 (vérifier les horaires avant d’appeler).",14,false,SOFT),11);
         add(helpline,btn("📞 Appeler gratuitement",()->phone("0800231313")),7);
         add(helpline,btn("🌐 Site et chat",()->open("https://www.drogues-info-service.fr/")),0);
         add(body,helpline,17);
@@ -193,7 +193,7 @@ public final class RdrActivity extends Activity {
         city.setSingleLine(true);city.setText(town);
         LinearLayout space=col();space.setPadding(dp(18),0,dp(18),0);space.addView(city);
         NeonDialog.builder(this).setTitle("Changer de ville ou d'adresse")
-            .setMessage("Aucune autorisation GPS n'est nécessaire. L'adresse sert uniquement à ouvrir une recherche autour du lieu choisi.")
+            .setMessage("Sans GPS : ton adresse est recherchée avec le service public de l’IGN ; seules ses coordonnées servent ensuite à la recherche de structures. Ton journal reste privé.")
             .setView(space).setNegativeButton("Annuler",null)
             .setPositiveButton("Valider",(d,w)->{
                 String value=city.getText().toString().trim();
