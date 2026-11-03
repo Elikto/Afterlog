@@ -335,7 +335,7 @@ public final class EventEditorActivity extends Activity {
                 ()->previewMedia(EventPhotos.gallery(event).length()+position)),7);
             add(item,button("Retirer la vidéo",false,()->NeonDialog.builder(this)
                 .setTitle("Supprimer cette vidéo ?")
-                .setMessage("Elle sera supprimée du stockage d'NØCTIS.")
+                .setMessage("Elle sera supprimée du stockage de NØCTARIA.")
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Supprimer",(d,w)->{
                     try{EventVideos.remove(this,event,position);showVideos();}
