@@ -1,6 +1,15 @@
 # AfterLog — Application Android
 
-## Nouveautés de la version 0.8.0
+## Nouveautés de la version 0.9.0
+
+- **Soirées visibles sans redémarrer :** l'accueil repère chaque nouvel événement enregistré par Shotgun et rafraîchit automatiquement ses cartes pendant la synchronisation.
+- **Événements décochés :** ils ne comptent pas comme échecs. Dès que toutes les soirées choisies sont présentes, le bandeau de fin de synchronisation disparaît. Les vrais problèmes d'import restent consultables.
+- **Artistes façon Shotgun :** portraits ronds (jusqu'à trois par ligne), noms sous les photos et pictogramme Spotify.
+- **Spotify vert :** ouvre directement le profil d'artiste si un lien Spotify a été explicitement fourni par Shotgun et qu'un contrôle du nom et de la similarité des vignettes est concluant.
+- **Spotify violet :** ouvre une recherche si aucun lien direct fiable ne peut être confirmé. Un nom semblable ne suffit pas à valider un profil.
+- Le réglage des fractions **Quart, Demi, Entier**, avec confirmation **✓ OK** et correction, reste inclus.
+
+
 
 - **Ecstasy : modification des fractions.** Choisis Quart, Demi ou Entier, règle le compteur, puis clique sur **✓ OK**. Pour corriger « 2 quarts », retouche Quart : le compteur affiche 2, puis tu peux changer la quantité et valider. Les valeurs sont remplacées, jamais additionnées par erreur.
 - **Correction de la connexion Shotgun :** la recherche des billets s'effectue dans le navigateur intégré **visible et connecté**, afin d'éviter l'échec de la navigation automatique dans un navigateur en arrière-plan. En cas d'impossibilité, tu peux ouvrir « Mes billets → Passés » manuellement puis choisir **Lire mes billets passés**.
@@ -9,9 +18,9 @@
 **À tester :** le parcours Shotgun dépend de l'interface du site et n'est pas une intégration officielle garantie. Les APK bêta utilisent encore des certificats de signature temporaires : sauvegarde ton journal JSON avant toute éventuelle réinstallation.
 
 
-**Version 0.8.0 (bêta expérimentale)**
+**Version 0.9.0 (bêta expérimentale)**
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.8.0-debug/AfterLog-v0.8.0.apk)
+[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.9.0-debug/AfterLog-v0.9.0.apk)
 
 ## Une page d'accueil plus simple
 - Un petit bouton **↻ MAJ** à gauche du titre.

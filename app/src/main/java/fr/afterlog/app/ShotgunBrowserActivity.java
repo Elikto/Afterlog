@@ -357,35 +357,55 @@ public final class ShotgunBrowserActivity extends Activity {
           if(!result.artists)result.artists=linked(/\\/artist/i,45);
           if(!result.organizer)result.organizer=linked(/\\/organi[sz]er/i,10);
           const profiles=[];
-          const seenArtists=new Set();
-          const addArtist=(name,photo,spotify)=>{
-            name=typeof name==='string'?name.trim():'';
-            if(!name||seenArtists.has(name.toLowerCase())||profiles.length>=45)return;
-            if(photo && !/^https:\\/\\//.test(photo))photo='';
-            if(spotify && !/^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]+/.test(spotify))spotify='';
-            seenArtists.add(name.toLowerCase());
-            profiles.push({name,photo:photo||'',spotify:spotify||''});
+          const seenArtists=new Map();
+          const isSpotifyArtist=u=>/^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]{22}(?:[?#].*)?$/i.test(u||'');
+          const safeHttps=u=>/^https:\\/\\//i.test(u||'')?u:'';
+          const upsertArtist=(name,photo,spotify,shotgunUrl)=>{
+            name=(typeof name==='string'?name:'').trim().replace(/\\s+/g,' ');
+            if(!name||profiles.length>=60)return;
+            const key=name.toLocaleLowerCase();
+            if(seenArtists.has(key)){
+              const p=seenArtists.get(key);
+              if(!p.photo && safeHttps(photo))p.photo=photo;
+              if(!p.spotify && isSpotifyArtist(spotify))p.spotify=spotify;
+              if(!p.shotgunUrl && safeHttps(shotgunUrl))p.shotgunUrl=shotgunUrl;
+              return;
+            }
+            const p={name,photo:safeHttps(photo),spotify:isSpotifyArtist(spotify)?spotify:'',
+              shotgunUrl:safeHttps(shotgunUrl)};
+            profiles.push(p);seenArtists.set(key,p);
           };
           if(node){
-            const perf=Array.isArray(node.performer)?node.performer:[node.performer];
-            for(const person of perf){
-              if(!person || typeof person!=='object')continue;
-              const photo=typeof person.image==='string'?person.image:
-                Array.isArray(person.image)?person.image[0]:
-                person.image&&typeof person.image==='object'?person.image.url:'';
+            const performers=Array.isArray(node.performer)?node.performer:[node.performer];
+            for(const person of performers){
+              if(!person)continue;
+              if(typeof person==='string'){upsertArtist(person,'','','');continue;}
+              if(typeof person!=='object')continue;
+              const image=person.image;
+              const photo=typeof image==='string'?image:Array.isArray(image)?image[0]:
+                image&&typeof image==='object'?image.url:'';
               const same=Array.isArray(person.sameAs)?person.sameAs:[person.sameAs];
-              const spotify=same.find(u=>typeof u==='string'&&
-                /^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]+/.test(u))||'';
-              addArtist(person.name,photo,spotify);
+              const spotify=same.find(u=>typeof u==='string'&&isSpotifyArtist(u))||'';
+              upsertArtist(person.name,photo,spotify,person.url);
             }
           }
-          for(const a of document.querySelectorAll('main a[href*="/artist"],article a[href*="/artist"]')){
-            if(profiles.length>=45)break;
-            const name=(a.querySelector('h2,h3,h4')?.textContent ||a.textContent ||
+          // Association locale sur une même carte Shotgun uniquement, pour éviter de
+          // relier le profil Spotify d'un autre artiste au mauvais portrait.
+          for(const a of document.querySelectorAll(
+            'main a[href*="/artist"],article a[href*="/artist"]')){
+            if(profiles.length>=60)break;
+            const name=(a.querySelector('h2,h3,h4')?.textContent ||a.textContent||
               a.querySelector('img')?.alt||'').trim().replace(/\\s+/g,' ');
-            const img=a.querySelector('img');
+            const card=a.closest('article,li,[class*="artist"],[class*="Artist"]')||a;
+            const img=card.querySelector('img')||a.querySelector('img');
             const photo=img?.currentSrc||img?.src||'';
-            addArtist(name,photo,'');
+            const near=card.querySelector('a[href*="open.spotify.com/artist/"]');
+            const direct=near&&isSpotifyArtist(near.href)?near.href:'';
+            upsertArtist(name,photo,direct,a.href);
+          }
+          // Un événement peut exposer uniquement une liste de noms.
+          for(const name of (result.artists||'').split(',')){
+            upsertArtist(name,'','','');
           }
           if(profiles.length)result.artistProfiles=profiles;
           return JSON.stringify(result);

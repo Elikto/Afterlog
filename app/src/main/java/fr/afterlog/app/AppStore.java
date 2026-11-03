@@ -24,11 +24,17 @@ final class AppStore {
             entries = root.optJSONArray("entries") != null ? root.getJSONArray("entries") : new JSONArray();
         } catch (Exception ignored) { events = new JSONArray(); entries = new JSONArray(); }
     }
+    static long revision(Context context) {
+        return context.getSharedPreferences("afterlog_private",Context.MODE_PRIVATE)
+            .getLong("revision",0L);
+    }
     private void persist() {
         JSONObject root = new JSONObject();
         try { root.put("format", "afterlog-v1"); root.put("events", events); root.put("entries", entries); }
         catch (Exception e) { throw new IllegalStateException(e); }
-        if (!preferences.edit().putString(KEY, root.toString()).commit()) {
+        long revision=preferences.getLong("revision",0L);
+        if (!preferences.edit().putString(KEY, root.toString())
+            .putLong("revision",revision+1).commit()) {
             throw new IllegalStateException("Impossible d'enregistrer les données");
         }
     }

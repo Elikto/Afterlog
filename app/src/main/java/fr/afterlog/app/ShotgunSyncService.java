@@ -117,6 +117,7 @@ public final class ShotgunSyncService extends Service {
                 JSONObject item=picked.optJSONObject(n);
                 if(item==null)continue;
                 if(retryFailed&&!item.optString("url").equals(intent.getStringExtra(EXTRA_FAILED_URL)))continue;
+                if(retryFailed && TicketSelectionStore.isExcluded(this,item.optString("url")))continue;
                 if(trusted(item.optString("url")))queue.add(item);
             }
             if(queue.isEmpty()) {
@@ -254,6 +255,9 @@ public final class ShotgunSyncService extends Service {
                     extracted.put("url",normalizeUrl(url));
                     extracted.put("origin","Shotgun · Synchronisation");
                     JSONObject previous=queue.get(nextIndex);
+                    // Permet de retrouver précisément la carte de billet choisie
+                    // même si l'URL du billet et celle de l'événement diffèrent.
+                    extracted.put("ticketUrl",normalizeUrl(previous.optString("url")));
                     if(extracted.optString("poster").isEmpty())
                         extracted.put("poster",previous.optString("poster"));
                     if(extracted.optString("date").isEmpty())
@@ -380,6 +384,12 @@ public final class ShotgunSyncService extends Service {
         else finish(SyncState.BLOCKED,message);
     }
     private JSONObject findExisting(JSONObject incoming) {
+        String ticketUrl=normalizeUrl(incoming.optString("ticketUrl"));
+        if(!ticketUrl.isEmpty()){
+            for(JSONObject item:store.events()){
+                if(ticketUrl.equals(normalizeUrl(item.optString("ticketUrl"))))return item;
+            }
+        }
         String url=normalizeUrl(incoming.optString("url"));
         for(JSONObject item:store.events()) {
             if(url.equals(normalizeUrl(item.optString("url")))&&!url.isEmpty())return item;
@@ -399,13 +409,12 @@ public final class ShotgunSyncService extends Service {
         JSONObject existing=findExisting(incoming);
         if(existing==null){store.saveEvent(incoming);return;}
         for(String key:new String[]{"poster","description","date","start","end","endDate",
-            "venue","city","address","artists","organizer","genres","url"}) {
+            "venue","city","address","artists","organizer","genres","url","ticketUrl"}) {
             String newValue=incoming.optString(key).trim();
             if(!newValue.isEmpty()&&existing.optString(key).trim().isEmpty())
                 existing.put(key,newValue);
         }
-        if(existing.optJSONArray("artistProfiles")==null && incoming.optJSONArray("artistProfiles")!=null)
-            existing.put("artistProfiles",incoming.getJSONArray("artistProfiles"));
+        ArtistProfileMerger.merge(existing,incoming);
         store.saveEvent(existing);
     }
     private static String clean(String value) {

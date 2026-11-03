@@ -251,6 +251,7 @@ public final class ShotgunScheduledWorker extends Worker {
             String value=incoming.optString(key);
             if(!value.isEmpty() && old.optString(key).isEmpty())old.put(key,value);
         }
+        ArtistProfileMerger.merge(old,incoming);
         store.saveEvent(old);
     }
     private static boolean safe(String url) {

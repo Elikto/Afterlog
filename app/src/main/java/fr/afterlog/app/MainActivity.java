@@ -57,6 +57,8 @@ public final class MainActivity extends Activity {
     private LinearLayout page;
     private long currentEventId = 0;
     private Runnable backAction;
+    private boolean homeScreen=false;
+    private long displayedEventsRevision=-1L;
     private final Handler syncHandler=new Handler(Looper.getMainLooper());
     private LinearLayout syncPanel;
     private String syncLastSignature="";
@@ -65,7 +67,13 @@ public final class MainActivity extends Activity {
     private final Runnable syncTicker=new Runnable(){
         @Override public void run(){
             if(!syncActiveView)return;
-            renderSyncProgress();
+            if(homeScreen && displayedEventsRevision!=AppStore.revision(MainActivity.this)){
+                // Nouveaux événements enregistrés par le service : rafraîchir la
+                // liste immédiatement, sans relancer ni redémarrer AfterLog.
+                showHome();
+            } else {
+                renderSyncProgress();
+            }
             syncHandler.postDelayed(this,1500);
         }
     };
@@ -120,6 +128,7 @@ public final class MainActivity extends Activity {
         return l;
     }
     private void screen(String title, Runnable back) {
+        homeScreen=back==null;
         backAction=back;
         LinearLayout outer = column(); outer.setBackgroundColor(BG);
         outer.setPadding(dp(16), dp(14), dp(16), 0);
@@ -264,14 +273,56 @@ public final class MainActivity extends Activity {
         add(panel,text("La synchronisation continuera sur l'accueil. Les cases décochées ne seront pas importées lors de cette sélection.",12,SOFT,false),0);
     }
 
+    private boolean allSelectedEventsPresent() {
+        JSONArray wanted=TicketSelectionStore.chosen(this);
+        if(wanted.length()==0)return false;
+        List<JSONObject> saved=new AppStore(this).events();
+        for(int i=0;i<wanted.length();i++){
+            JSONObject expected=wanted.optJSONObject(i);
+            if(expected==null)continue;
+            String ticket=TicketSelectionStore.canonical(expected.optString("url"));
+            String title=expected.optString("title").trim().toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+"," ");
+            String date=expected.optString("date");
+            boolean present=false;
+            for(JSONObject event:saved){
+                String origin=TicketSelectionStore.canonical(event.optString("ticketUrl"));
+                String eventUrl=TicketSelectionStore.canonical(event.optString("url"));
+                if(!ticket.isEmpty() && (ticket.equals(origin)||ticket.equals(eventUrl))){
+                    present=true;break;
+                }
+                String candidate=event.optString("title").trim().toLowerCase(Locale.ROOT)
+                    .replaceAll("[^\\p{L}\\p{N}]+"," ");
+                if(!date.isEmpty()&&date.equals(event.optString("date")) &&
+                    !title.isEmpty() && (candidate.equals(title) ||
+                        candidate.startsWith(title+" ") || title.startsWith(candidate+" "))){
+                    present=true;break;
+                }
+            }
+            if(!present)return false;
+        }
+        return true;
+    }
+    private int visibleFailureCount(){
+        JSONArray failures=SyncFailureStore.list(this);
+        int count=0;
+        for(int i=0;i<failures.length();i++){
+            JSONObject issue=failures.optJSONObject(i);
+            if(issue!=null && !TicketSelectionStore.isExcluded(this,issue.optString("url")))
+                count++;
+        }
+        return count;
+    }
     private void renderSyncProgress() {
         if(syncPanel==null)return;
         JSONObject state=SyncState.read(this);
         String mode=state.optString("state",SyncState.IDLE);
         if(SyncState.IDLE.equals(mode) ||
-          (SyncState.DONE.equals(mode) && SyncFailureStore.list(this).length()==0 &&
-           !state.optString("phase").toLowerCase(Locale.ROOT).contains("partiel") &&
-           !state.optString("detail").toLowerCase(Locale.ROOT).contains("non récupéré"))) {
+          (SyncState.DONE.equals(mode) &&
+              (allSelectedEventsPresent() ||
+               (visibleFailureCount()==0 &&
+                !state.optString("phase").toLowerCase(Locale.ROOT).contains("partiel") &&
+                !state.optString("detail").toLowerCase(Locale.ROOT).contains("non récupéré"))))) {
             syncPanel.removeAllViews();
             syncPanel.setVisibility(View.GONE);
             return;
@@ -355,6 +406,7 @@ public final class MainActivity extends Activity {
     }
     private void showHome() {
         store=new AppStore(this);
+        displayedEventsRevision=AppStore.revision(this);
         screen("AfterLog",null);
         syncPanel=column();
         syncLastSignature="";
@@ -556,43 +608,105 @@ public final class MainActivity extends Activity {
 
     private void renderArtistProfiles(JSONObject event) {
         JSONArray profiles=event.optJSONArray("artistProfiles");
-        if(profiles==null||profiles.length()==0){
-            addChips(event.optString("artists"),"🎧");
-            return;
-        }
+        if(profiles==null)profiles=new JSONArray();
+        // Même sans métadonnée/photo structurée, garder tous les artistes du line-up.
+        java.util.HashSet<String> names=new java.util.HashSet<>();
+        JSONArray ordered=new JSONArray();
         for(int i=0;i<profiles.length();i++){
-            JSONObject profile=profiles.optJSONObject(i);
-            if(profile==null)continue;
-            String name=profile.optString("name").trim();
-            if(name.isEmpty())continue;
-            LinearLayout card=card();
+            JSONObject p=profiles.optJSONObject(i);
+            if(p==null||p.optString("name").trim().isEmpty())continue;
+            String key=p.optString("name").trim().toLowerCase(Locale.ROOT);
+            if(names.add(key))ordered.put(p);
+        }
+        for(String artist:event.optString("artists").split(",")){
+            String name=artist.trim();
+            if(name.isEmpty() || !names.add(name.toLowerCase(Locale.ROOT)))continue;
+            JSONObject profile=new JSONObject();
+            try{profile.put("name",name);}catch(Exception ignored){}
+            ordered.put(profile);
+        }
+        if(ordered.length()==0)return;
+        for(int index=0;index<ordered.length();index+=3) {
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            add(card,row,0);
-            String photo=profile.optString("photo");
-            if(photo.startsWith("https://")){
-                ImageView image=new ImageView(this);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setBackground(rounded(Color.rgb(35,38,53),12));
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(64),dp(64));
-                lp.rightMargin=dp(13);
-                row.addView(image,lp);loadImage(image,photo);
+            row.setGravity(Gravity.TOP);
+            add(page,row,14);
+            for(int slot=0;slot<3;slot++){
+                int i=index+slot;
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);
+                lp.setMargins(dp(4),0,dp(4),0);
+                if(i>=ordered.length()){
+                    row.addView(new View(this),lp);
+                    continue;
+                }
+                JSONObject artist=ordered.optJSONObject(i);
+                if(artist==null)continue;
+                String name=artist.optString("name").trim();
+                String photo=artist.optString("photo");
+                String candidate=artist.optString("spotify");
+                String search="https://open.spotify.com/search/"+Uri.encode(name);
+                final String[] target={search};
+                LinearLayout tile=column();
+                tile.setPadding(dp(7),dp(12),dp(7),dp(12));
+                tile.setGravity(Gravity.CENTER_HORIZONTAL);
+                tile.setBackground(rounded(PANEL,16));
+                row.addView(tile,lp);
+
+                ImageView portrait=new ImageView(this);
+                portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                android.graphics.drawable.GradientDrawable circle=
+                    new android.graphics.drawable.GradientDrawable();
+                circle.setColor(Color.rgb(48,43,72));
+                circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                portrait.setBackground(circle);
+                portrait.setClipToOutline(true);
+                portrait.setContentDescription("Photo de "+name);
+                LinearLayout.LayoutParams imageLp=new LinearLayout.LayoutParams(dp(85),dp(85));
+                imageLp.gravity=Gravity.CENTER_HORIZONTAL;
+                imageLp.bottomMargin=dp(10);
+                tile.addView(portrait,imageLp);
+                if(photo.startsWith("https://"))loadImage(portrait,photo);
+                else portrait.setImageResource(android.R.drawable.ic_menu_myplaces);
+                TextView label=text(name,13,Color.WHITE,true);
+                label.setGravity(Gravity.CENTER);
+                label.setMaxLines(2);
+                add(tile,label,7);
+                SpotifyMarkView spotifyMark=new SpotifyMarkView(this);
+                spotifyMark.setVerified(false);
+                spotifyMark.setContentDescription("Spotify : recherche de "+name);
+                LinearLayout.LayoutParams badgeLp=new LinearLayout.LayoutParams(dp(28),dp(28));
+                badgeLp.gravity=Gravity.CENTER_HORIZONTAL;
+                badgeLp.bottomMargin=dp(5);
+                tile.addView(spotifyMark,badgeLp);
+                TextView destination=text("Recherche Spotify",11,ACCENT,false);
+                destination.setGravity(Gravity.CENTER);
+                destination.setMaxLines(2);
+                add(tile,destination,0);
+                tile.setContentDescription(name+" · Recherche Spotify");
+                tile.setOnClickListener(v->{
+                    try {startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target[0])));}
+                    catch(Exception e){message("Impossible d'ouvrir Spotify.");}
+                });
+                // Seul un lien artiste explicitement publié par Shotgun peut être
+                // validé. Vérifier nom officiel ET correspondance des portraits.
+                if(SpotifyArtistVerifier.isArtistUrl(candidate) && photo.startsWith("https://")){
+                    new Thread(()->{
+                        boolean verified=SpotifyArtistVerifier.verify(candidate,name,photo);
+                        if(verified)runOnUiThread(()->{
+                            if(isFinishing())return;
+                            target[0]=candidate;
+                            spotifyMark.setVerified(true);
+                            spotifyMark.setContentDescription("Spotify vérifié : "+name);
+                            destination.setText("Profil Spotify");
+                            destination.setTextColor(Color.rgb(30,215,96));
+                            tile.setContentDescription(name+" · Profil Spotify vérifié");
+                        });
+                    },"AfterLog-spotify-check").start();
+                }
             }
-            LinearLayout info=column();
-            row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-            add(info,text(name,17,Color.WHITE,true),5);
-            String spotify=profile.optString("spotify");
-            boolean verified=spotify.matches("^https://open\\.spotify\\.com/artist/[A-Za-z0-9]+.*");
-            String target=verified?spotify:"https://open.spotify.com/search/"+Uri.encode(name);
-            add(info,text(verified?"Ouvrir l'artiste sur Spotify ↗":
-                "Rechercher l'artiste sur Spotify ↗",13,ACCENT,false),0);
-            card.setOnClickListener(v->{
-                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target)));}
-                catch(Exception e){message("Spotify n'a pas pu être ouvert.");}
-            });
-            add(page,card,10);
         }
+        add(page,text("Icône verte : profil Spotify vérifié avec le nom et la photo. Icône violette : recherche Spotify (correspondance non confirmée).",
+            12,SOFT,false),12);
     }
 
     private void renderFailedEvents(LinearLayout panel) {
@@ -602,7 +716,7 @@ public final class MainActivity extends Activity {
         add(panel,text("Voici les soirées que Shotgun n'a pas permis de compléter.",13,SOFT,false),12);
         for(int i=0;i<failures.length();i++){
             JSONObject item=failures.optJSONObject(i);
-            if(item==null)continue;
+            if(item==null || TicketSelectionStore.isExcluded(this,item.optString("url")))continue;
             LinearLayout c=card();
             add(c,text(item.optString("title","Événement"),16,Color.WHITE,true),6);
             if(!item.optString("date").isEmpty())
@@ -863,11 +977,7 @@ public final class MainActivity extends Activity {
                 changed=true;
             }
         }
-        if(existing.optJSONArray("artistProfiles")==null &&
-            incoming.optJSONArray("artistProfiles")!=null) {
-            existing.put("artistProfiles",incoming.getJSONArray("artistProfiles"));
-            changed=true;
-        }
+        if(ArtistProfileMerger.merge(existing,incoming))changed=true;
         return changed;
     }
     private String normalizedEventUrl(String url) {
