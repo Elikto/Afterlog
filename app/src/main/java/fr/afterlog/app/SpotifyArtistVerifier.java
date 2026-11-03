@@ -3,6 +3,9 @@ package fr.afterlog.app;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import org.json.JSONObject;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -47,7 +50,27 @@ final class SpotifyArtistVerifier {
                 "(?i)\\s*[|·–-]\\s*(spotify|artist|artiste)\\s*$","");
             if(!normalize(expectedName).equals(normalize(title)))return "";
             String image=metadata.optString("thumbnail_url");
-            return safeImageUrl(image)?image:"";
+            if(safeImageUrl(image))return image;
+            // Certains oEmbed n’exposent plus de vignette : lire og:image
+            // sur la page Spotify officielle uniquement.
+            return spotifyPageThumbnail(spotifyUrl);
+        }catch(Exception ignored){return "";}
+    }
+    private static String spotifyPageThumbnail(String spotifyUrl){
+        if(!isArtistUrl(spotifyUrl))return "";
+        try{
+            Document document=Jsoup.connect(spotifyUrl)
+                .userAgent("Mozilla/5.0 (compatible; AfterLog/0.17)")
+                .timeout(9000).maxBodySize(1600000).get();
+            Element tag=document.selectFirst(
+                "meta[property=og:image][content],meta[name=twitter:image][content]");
+            String value=tag==null?"":tag.attr("content");
+            if(!safeImageUrl(value))return "";
+            URL u=new URL(value);
+            String host=u.getHost().toLowerCase(Locale.ROOT);
+            // Exclusivement un visuel fourni par l'hôte Spotify.
+            return host.equals("i.scdn.co")||host.endsWith(".spotifycdn.com")
+                ?value:"";
         }catch(Exception ignored){return "";}
     }
     private static JSONObject oembed(String spotifyUrl)throws Exception{
