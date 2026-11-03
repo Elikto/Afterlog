@@ -73,7 +73,7 @@ public final class MainActivity extends Activity {
             if(!syncActiveView)return;
             if(homeScreen && displayedEventsRevision!=AppStore.revision(MainActivity.this)){
                 // Nouveaux événements enregistrés par le service : rafraîchir la
-                // liste immédiatement, sans relancer ni redémarrer AfterLog.
+                // liste immédiatement, sans relancer ni redémarrer NØCTIS.
                 showHome();
             } else if(eventScreen && currentEventId>0 &&
                 renderedEventRevision!=AppStore.revision(MainActivity.this)){
@@ -159,9 +159,9 @@ public final class MainActivity extends Activity {
             branding.setGravity(Gravity.CENTER);
             ImageView logo=new ImageView(this);
             logo.setImageResource(R.drawable.ic_afterlog_foreground);
-            logo.setContentDescription("Logo AfterLog");
+            logo.setContentDescription("Logo NØCTIS");
             branding.addView(logo,new LinearLayout.LayoutParams(dp(40),dp(40)));
-            TextView brand=text("AfterLog",26,Color.WHITE,true);
+            TextView brand=text("NØCTIS",26,Color.WHITE,true);
             brand.setGravity(Gravity.CENTER_VERTICAL);
             branding.addView(brand,new LinearLayout.LayoutParams(-2,dp(48)));
             bar.addView(branding,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -418,7 +418,7 @@ public final class MainActivity extends Activity {
     private void showHome() {
         store=new AppStore(this);
         displayedEventsRevision=AppStore.revision(this);
-        screen("AfterLog",null);
+        screen("NØCTIS",null);
         syncPanel=column();
         syncLastSignature="";
         add(page,syncPanel,8);
@@ -1340,7 +1340,7 @@ public final class MainActivity extends Activity {
             startActivityForResult(intent,IMPORT);
         }),14);
         subtitle("Attention : la sauvegarde JSON actuelle n'inclut pas les fichiers des photos personnelles. Conserve les photos originales sur ton téléphone. Le journal JSON n'est pas chiffré.");
-        subtitle("Après connexion à Shotgun, AfterLog recherche « Mes billets → Passés » et affiche les événements à cocher avant de synchroniser. La disponibilité dépend du site et de ta session.");
+        subtitle("Après connexion à Shotgun, NØCTIS recherche « Mes billets → Passés » et affiche les événements à cocher avant de synchroniser. La disponibilité dépend du site et de ta session.");
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
@@ -1379,7 +1379,7 @@ public final class MainActivity extends Activity {
             }else if(data.getData()!=null)sources.add(data.getData());
             if(sources.isEmpty())return;
             long target=currentEventId;
-            message("Importation de "+sources.size()+" média(s) dans AfterLog…");
+            message("Importation de "+sources.size()+" média(s) dans NØCTIS…");
             new Thread(()->{
                 int added=0,errors=0;
                 String failure="";
@@ -1435,7 +1435,7 @@ public final class MainActivity extends Activity {
                             }).show();
                     }
                 });
-            },"AfterLog-media-import").start();
+            },"NØCTIS-media-import").start();
             return;
         }
         if(requestCode==EVENT_VIDEOS_REQUEST){
@@ -1556,7 +1556,7 @@ public final class MainActivity extends Activity {
                 }
             }catch(Exception ignored){}
             finally {if(connection!=null)connection.disconnect();}
-        },"AfterLog-photo").start();
+        },"NØCTIS-photo").start();
     }
 
 }
