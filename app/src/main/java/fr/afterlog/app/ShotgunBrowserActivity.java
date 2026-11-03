@@ -66,23 +66,22 @@ public final class ShotgunBrowserActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(nav);
-        button(nav,"← AfterLog",()->{
+        button(nav,"← Retour",()->{
             if(batch!=null && batch.isActive())batch.askCancel();else finish();
         },1);
-        button(nav,"Accueil Shotgun",()->web.loadUrl("https://shotgun.live/fr"),1);
-        button(nav,"Actualiser",()->web.reload(),1);
+        button(nav,"↻",()->web.reload(),0.23f);
         status = new TextView(this);
         status.setTextColor(Color.LTGRAY);
         status.setTextSize(12);
-        status.setText("Connecte-toi sur shotgun.live, puis ouvre Mes billets → Passés.");
+        status.setText("Connecte-toi à Shotgun pour retrouver tes soirées.");
         status.setPadding(0,dp(10),0,dp(10));
         header.addView(status);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(actions);
-        button(actions,"Importer cet événement",this::importCurrent,1);
-        button(actions,"Lire mes billets passés",this::beginDiscovery,1);
+        button(actions,"Importer la soirée",this::importCurrent,1);
+        button(actions,"Mes billets passés",this::beginDiscovery,1);
 
         web = new WebView(this);
         discovery=new ShotgunTicketDiscovery(this,web,status,this::onTicketsFound);
@@ -140,11 +139,10 @@ public final class ShotgunBrowserActivity extends Activity {
         footer.setOrientation(LinearLayout.HORIZONTAL);
         footer.setPadding(dp(12),dp(7),dp(12),dp(10));
         outer.addView(footer,new LinearLayout.LayoutParams(-1,-2));
-        button(footer,"← Page précédente",()->{
+        button(footer,"‹ Précédent",()->{
             if(batch!=null && batch.isActive()){batch.askCancel();return;}
             if(web.canGoBack()) web.goBack(); else finish();
-        },2);
-        button(footer,"Déconnecter Shotgun",this::confirmLogout,2);
+        },1);
 
         autoExtractEvent=getIntent().getBooleanExtra("afterlog_auto_extract",false);
         autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
@@ -158,7 +156,7 @@ public final class ShotgunBrowserActivity extends Activity {
     }
 
     private int dp(int n) {return Math.round(n*getResources().getDisplayMetrics().density);}
-    private void button(LinearLayout row,String label,Runnable runnable,int weight) {
+    private void button(LinearLayout row,String label,Runnable runnable,float weight) {
         TextView b=new TextView(this);
         b.setText(label);b.setTextSize(12);b.setTextColor(Color.WHITE);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
