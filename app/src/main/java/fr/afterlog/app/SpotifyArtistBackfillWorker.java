@@ -30,9 +30,9 @@ import java.util.concurrent.TimeUnit;
  * profiles/photos across occurrences, and never uploads the journal.
  */
 public final class SpotifyArtistBackfillWorker extends Worker {
-    private static final String JOB="afterlog-spotify-artists-backfill-v3";
-    private static final String PERIODIC="afterlog-spotify-artists-daily-v3";
-    private static final String PREFS="afterlog_spotify_backfill_v3";
+    private static final String JOB="afterlog-spotify-artists-backfill-v4";
+    private static final String PERIODIC="afterlog-spotify-artists-daily-v4";
+    private static final String PREFS="afterlog_spotify_backfill_v4";
     private static final int MAX_LOOKUPS=8; // Keep each background batch under Android's worker deadline.
     private static final long FAILED_RETRY=6L*60*60*1000;
     private static final long QUEUE_COOLDOWN=2L*60*1000;
@@ -94,11 +94,13 @@ public final class SpotifyArtistBackfillWorker extends Worker {
         int linked=prefs.getInt("linked",0);
         int photos=prefs.getInt("photos",0);
         int pending=Math.max(0,total-linked);
+        int missingPortraits=Math.max(0,linked-photos);
         String suffix="running".equals(state)?" · Recherche en cours":
             "partial".equals(state)?" · Autres artistes en attente de vérification":
             " · Vérification terminée pour ce passage";
         return total+" artistes distincts · "+linked+" profils Spotify · "+
-            photos+" photos Spotify · "+pending+" sans profil confirmé"+suffix;
+            photos+" portraits Spotify · "+missingPortraits+
+            " portraits à récupérer · "+pending+" comptes sans correspondance"+suffix;
     }
 
     @Override @NonNull public Result doWork(){
@@ -126,37 +128,50 @@ public final class SpotifyArtistBackfillWorker extends Worker {
             int attempted=0;
             boolean pending=false;
             long now=System.currentTimeMillis();
-            for(Map.Entry<String,Artist> row:artists.entrySet()){
-                if(isStopped())return Result.retry();
-                String key=row.getKey();
-                Artist artist=row.getValue();
-                // Different explicit Spotify IDs for identical stage names:
-                // do not spread one artist's photo to a possible namesake.
-                if(artist.ambiguous)continue;
-                if(SpotifyArtistVerifier.isArtistUrl(artist.spotifyLink) &&
-                   !artist.spotifyPhoto.isEmpty()){
-                    apply(ctx,key,artist.spotifyLink,artist.spotifyPhoto);
-                    continue;
-                }
-                if(now-prefs.getLong("attempt_"+key,0)<FAILED_RETRY)continue;
-                if(attempted>=MAX_LOOKUPS){pending=true;continue;}
-                attempted++;
-                try{
-                    String link=SpotifyArtistVerifier.isArtistUrl(artist.spotifyLink)
-                        ?artist.spotifyLink
-                        :SpotifyArtistFinder.resolve(ctx,artist.name,
-                            artist.shotgunPhoto,"");
-                    if(SpotifyArtistVerifier.isArtistUrl(link) &&
-                       SpotifyArtistVerifier.matchesName(link,artist.name)){
-                        String photo=SpotifyArtistVerifier.verifiedThumbnail(
-                            link,artist.name);
-                        apply(ctx,key,link,photo);
+            // Prioritise photos for profiles already found: users should not
+            // see a verified green Spotify badge with a placeholder initial.
+            for(int pass=0;pass<2;pass++){
+                for(Map.Entry<String,Artist> row:artists.entrySet()){
+                    if(isStopped())return Result.retry();
+                    String key=row.getKey();
+                    Artist artist=row.getValue();
+                    if(artist.ambiguous)continue;
+                    boolean linked=SpotifyArtistVerifier.isArtistUrl(artist.spotifyLink);
+                    if(pass==0&&!linked)continue; // portraits first
+                    if(pass==1&&linked)continue;  // new profiles second
+                    if(linked&&!artist.spotifyPhoto.isEmpty()){
+                        apply(ctx,key,artist.spotifyLink,artist.spotifyPhoto);
+                        continue;
                     }
-                }catch(Exception ignored){
-                    // No guessed profiles: leave the card as "unconfirmed".
+                    String retryKey=(linked?"portrait_":"attempt_")+key;
+                    if(now-prefs.getLong(retryKey,0)<FAILED_RETRY)continue;
+                    if(attempted>=MAX_LOOKUPS){pending=true;continue;}
+                    attempted++;
+                    try{
+                        String link=linked?artist.spotifyLink:
+                            SpotifyArtistFinder.resolve(ctx,artist.name,
+                                artist.shotgunPhoto,"");
+                        if(SpotifyArtistVerifier.isArtistUrl(link)){
+                            // A matching name is verified inside verifiedThumbnail,
+                            // using Spotify's real artist and embed pages. Don't
+                            // request oEmbed twice for every artist.
+                            String photo=SpotifyArtistVerifier.verifiedThumbnail(
+                                link,artist.name);
+                            if(!linked&&!SpotifyArtistVerifier.matchesName(
+                                link,artist.name)){
+                                // Never silently assign a name-sake by coincidence.
+                                continue;
+                            }
+                            apply(ctx,key,link,photo);
+                            if(!photo.isEmpty())artist.spotifyPhoto=photo;
+                        }
+                    }catch(Exception ignored){
+                        // Keep previous Spotify link / Shotgun artwork intact.
+                    }finally{
+                        prefs.edit().putLong(retryKey,System.currentTimeMillis()).apply();
+                    }
+                    if(attempted%3==0)updateStatus(ctx,"running");
                 }
-                prefs.edit().putLong("attempt_"+key,System.currentTimeMillis()).apply();
-                if(attempted%4==0)updateStatus(ctx,"running");
             }
             updateStatus(ctx,pending?"partial":"complete");
             if(pending){
