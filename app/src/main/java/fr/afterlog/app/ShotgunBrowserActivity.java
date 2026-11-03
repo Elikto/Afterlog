@@ -372,183 +372,185 @@ public final class ShotgunBrowserActivity extends Activity {
           if(!result.genres)result.genres=linked(/\\/genre|\\/music\\//i,20);
           if(!result.artists)result.artists=linked(/\\/artist/i,45);
           if(!result.organizer)result.organizer=linked(/\\/organi[sz]er/i,10);
+
+          // Line-up : associer le portrait provenant de la carte Shotgun à
+          // son nom, y compris lorsque le site n'utilise aucun lien <a>.
           const profiles=[];
-          const seenArtists=new Map();
-          const isSpotifyArtist=u=>/^https:\\/\\/open\\.spotify\\.com\\/artist\\/[A-Za-z0-9]{22}(?:[?#].*)?$/i.test(u||'');
-          const safeHttps=u=>/^https:\\/\\//i.test(u||'')?u:'';
-          const upsertArtist=(name,photo,spotify,shotgunUrl)=>{
-            name=(typeof name==='string'?name:'').trim().replace(/\\s+/g,' ');
-            if(!name||profiles.length>=60)return;
-            const key=name.toLocaleLowerCase();
-            if(seenArtists.has(key)){
-              const p=seenArtists.get(key);
-              if(!p.photo && safeHttps(photo))p.photo=photo;
-              if(!p.spotify && isSpotifyArtist(spotify))p.spotify=spotify;
-              if(!p.shotgunUrl && safeHttps(shotgunUrl))p.shotgunUrl=shotgunUrl;
-              return;
-            }
-            const p={name,photo:safeHttps(photo),spotify:isSpotifyArtist(spotify)?spotify:'',
-              shotgunUrl:safeHttps(shotgunUrl)};
-            profiles.push(p);seenArtists.set(key,p);
-          };
-          if(node){
-            const performers=Array.isArray(node.performer)?node.performer:[node.performer];
-            for(const person of performers){
-              if(!person)continue;
-              if(typeof person==='string'){upsertArtist(person,'','','');continue;}
-              if(typeof person!=='object')continue;
-              const image=person.image;
-              const photo=typeof image==='string'?image:Array.isArray(image)?image[0]:
-                image&&typeof image==='object'?image.url:'';
-              const same=Array.isArray(person.sameAs)?person.sameAs:[person.sameAs];
-              const spotify=same.find(u=>typeof u==='string'&&isSpotifyArtist(u))||'';
-              upsertArtist(person.name,photo,spotify,person.url);
-            }
-          }
-          // Association locale sur une même carte Shotgun uniquement, pour éviter de
-          // relier le profil Spotify d'un autre artiste au mauvais portrait.
-          for(const a of document.querySelectorAll(
-            'main a[href*="/artist"],article a[href*="/artist"]')){
-            if(profiles.length>=60)break;
-            const name=(a.querySelector('h2,h3,h4')?.textContent ||a.textContent||
-              a.querySelector('img')?.alt||'').trim().replace(/\\s+/g,' ');
-            const card=a.closest('article,li,[class*="artist"],[class*="Artist"]')||a;
-            const img=card.querySelector('img')||a.querySelector('img');
-            const photo=img?.currentSrc||img?.src||'';
-            const near=card.querySelector('a[href*="open.spotify.com/artist/"]');
-            const direct=near&&isSpotifyArtist(near.href)?near.href:'';
-            upsertArtist(name,photo,direct,a.href);
-          }
-          // Un événement peut exposer uniquement une liste de noms.
-          for(const name of (result.artists||'').split(',')){
-            upsertArtist(name,'','','');
-          }
-          // Shotgun peut afficher le line-up en cartes non cliquables :
-          // retrouver les portraits dans les <img>, <picture> et lazy-loads
-          // voisins des noms, sans les confondre avec l'affiche de l'événement.
-          const normalizeArtist=s=>(s||'').normalize('NFD')
+          const artistsByName=new Map();
+          const norm=v=>(v||'').toString().normalize('NFD')
             .replace(/[\\u0300-\\u036f]/g,'').toLowerCase()
             .replace(/[^a-z0-9]+/g,' ').trim();
-          const wanted=profiles.map(p=>p.name).filter(Boolean);
-          const extractImage=img=>{
-            if(!img)return '';
-            let src=img.currentSrc||img.src||img.getAttribute('data-src')||
-              img.getAttribute('data-lazy-src')||'';
-            if(!/^https:\\/\\//i.test(src)){
-              const srcset=img.getAttribute('srcset')||
-                img.closest('picture')?.querySelector('source[srcset]')?.getAttribute('srcset')||'';
-              const first=srcset.split(',')[0]?.trim().split(/\\s+/)[0]||'';
-              if(/^https:\\/\\//i.test(first))src=first;
-            }
-            return /^https:\\/\\//i.test(src)?src:'';
+          const absolute=v=>{
+            try{
+              const url=new URL(v,location.href);
+              return url.protocol==='https:'?url.href:'';
+            }catch(_){return '';}
           };
-          const portraits=[...document.querySelectorAll(
-            'main img,article img,[data-testid*="artist"] img,[class*="lineup"] img')];
-          for(const artistName of wanted) {
-            if(!artistName)continue;
-            const expected=normalizeArtist(artistName);
-            const current=seenArtists.get(artistName.toLocaleLowerCase());
-            if(current?.photo)continue;
-            for(const img of portraits) {
-              const source=extractImage(img);
-              if(!source)continue;
-              const alt=normalizeArtist(img.getAttribute('alt'));
-              let matched=alt===expected;
-              let related=img.parentElement;
-              let element=null;
-              for(let d=0;d<5 && related && !matched;d++,related=related.parentElement){
-                const label=(related.querySelector('h3,h4,[class*="name"],[data-testid*="name"]')
-                  ?.textContent||related.textContent||'').trim();
-                const normalized=normalizeArtist(label);
-                if(normalized===expected || (normalized.startsWith(expected+' ')&&
-                    normalized.length<expected.length+22)) {
-                  if(related.querySelectorAll('img').length<=4 &&
-                      label.length<120){matched=true;element=related;}
-                }
+          const artistUrl=v=>/^https:\\/\\/open\\.spotify\\.com\\/(?:intl-[a-z]{2}\\/)?artist\\/[a-zA-Z0-9]{22}\\/?(?:[?#].*)?$/i.test(v||'');
+          const picture=element=>{
+            if(!element)return '';
+            const found=[];
+            const read=el=>{
+              if(!el)return;
+              for(const attr of ['currentSrc','src','data-src','data-lazy-src','data-original','data-image']){
+                const raw=el[attr]||el.getAttribute?.(attr);
+                if(typeof raw==='string'&&raw)found.push(raw);
               }
-              if(!matched)continue;
-              const card=element||img.closest('a,article,li')||img.parentElement;
-              const spotifyLink=card?.querySelector('a[href*="open.spotify.com/artist/"]')?.href||'';
-              const pageLink=card?.closest('a[href*="/artist"]')?.href||
-                card?.querySelector('a[href*="/artist"]')?.href||'';
-              upsertArtist(artistName,source,spotifyLink,pageLink);
+              const set=el.getAttribute?.('srcset')||'';
+              if(set)for(const candidate of set.split(',')){
+                const u=candidate.trim().split(/\\s+/)[0];
+                if(u)found.push(u);
+              }
+              try{
+                const css=getComputedStyle(el).backgroundImage||'';
+                if(css&&css!=='none'){
+                  const matches=css.match(/url\\(([^)]+)\\)/g)||[];
+                  for(const match of matches)found.push(match.slice(4,-1).replace(/^["']|["']$/g,''));
+                }
+              }catch(_){}
+            };
+            read(element);
+            for(const img of element.querySelectorAll?.('img,source,[style*="background"],[style*="image"]')||[]){
+              read(img);
+              if(found.length>32)break;
+            }
+            for(const candidate of found) {
+              const u=absolute(candidate);
+              if(u && u!==result.poster && !/transparent|placeholder|blank\\.gif/i.test(u))
+                return u;
+            }
+            return '';
+          };
+          const take=(name,photo,shotgunUrl,spotify)=>{
+            name=(name||'').toString().trim().replace(/\\s+/g,' ');
+            if(name.length<2||name.length>100)return;
+            const key=norm(name);
+            if(!key)return;
+            if(!artistsByName.has(key)){
+              if(profiles.length>=55)return;
+              const entry={name,photo:'',shotgunUrl:'',spotify:''};
+              artistsByName.set(key,entry);
+              profiles.push(entry);
+            }
+            const p=artistsByName.get(key);
+            const img=absolute(photo),sg=absolute(shotgunUrl),sp=absolute(spotify);
+            if(img && !p.photo)p.photo=img;
+            if(sg&&/(^|\\.)shotgun\\.live$/i.test(new URL(sg).hostname) &&
+               /\\/artists?\\//i.test(new URL(sg).pathname) && !p.shotgunUrl)p.shotgunUrl=sg;
+            if(artistUrl(sp)&&!p.spotify)p.spotify=sp;
+          };
+          const performers=node?Array.isArray(node.performer)?node.performer:
+            [node.performer]:[];
+          for(const artist of performers){
+            if(typeof artist==='string'){take(artist,'','','');continue;}
+            if(!artist||typeof artist!=='object')continue;
+            const image=artist.image;
+            const imageUrl=typeof image==='string'?image:
+              Array.isArray(image)?(typeof image[0]==='string'?image[0]:image[0]?.url):
+              image&&typeof image==='object'?image.url:'';
+            const urls=Array.isArray(artist.sameAs)?artist.sameAs:[artist.sameAs];
+            take(artist.name,imageUrl||'',artist.url,
+              urls.find(u=>artistUrl(u))||'');
+          }
+          for(const name of (result.artists||'').split(',')){
+            if(name.trim())take(name,'','','');
+          }
+          const headings=[...document.querySelectorAll(
+            'main h1,main h2,main h3,main h4,section h2,section h3')];
+          const lineHeading=headings.find(h=>
+            /^(line[\\s-]?up|programmation|artistes|artists)$/i.test(
+              (h.textContent||'').trim()));
+          let lineArea=null;
+          if(lineHeading){
+            let container=lineHeading.parentElement;
+            for(let k=0;k<5&&container;k++,container=container.parentElement){
+              const names=[...container.querySelectorAll('a,h3,h4,p,span')]
+                .filter(el=>el.children.length<3 &&
+                  artistsByName.has(norm(el.textContent||''))).length;
+              if(names>=2 && container.querySelectorAll('img').length>=2){
+                lineArea=container;break;
+              }
+            }
+          }
+          if(!lineArea)lineArea=document.querySelector('main')||document.body;
+          // Les cartes sont parfois des <button> / div React, pas des liens.
+          const candidateText=[...lineArea.querySelectorAll(
+            'a,button,h3,h4,p,span,strong,[data-testid*="artist"]')];
+          for(const label of candidateText){
+            const labelText=(label.textContent||'').trim();
+            if(labelText.length<2||labelText.length>95||
+               label.children.length>3)continue;
+            const key=norm(labelText);
+            if(!artistsByName.has(key))continue;
+            const entry=artistsByName.get(key);
+            let container=label.parentElement;
+            for(let depth=0;depth<5&&container;depth++,container=container.parentElement){
+              if((container.textContent||'').length>350)break;
+              const portrait=picture(container);
+              if(!portrait)continue;
+              const anchor=container.closest('a[href*="/artists/"],a[href*="/artist/"]')||
+                container.querySelector('a[href*="/artists/"],a[href*="/artist/"]');
+              const social=container.querySelector(
+                'a[href*="open.spotify.com/artist/"]');
+              take(entry.name,portrait,anchor?.href||'',social?.href||'');
               break;
             }
           }
-          // Préserver les profils sans portrait : il s'agit d'une information
-          // manquante, et non d'une image supposée de l'artiste.
-          // Parcourir également les portraits Shotgun rendus en CSS, les
-          // vignettes lazy-loadées et les cartes sans lien <a>.
-          // N'associer une image qu'à un bloc portant exactement le nom attendu.
-          const simple=s=>(s||'').normalize('NFD').toLowerCase()
-             .replace(/[^a-z0-9]/g,'');
-          const asUrl=v=>{
-             try{const u=new URL(v,location.href);return u.protocol==='https:'?u.href:'';}
-             catch(_){return '';}
-          };
-          const imageOf=element=>{
-             if(!element)return '';
-             const img=element.tagName==='IMG'?element:
-               element.querySelector('img');
-             if(img){
-               const url=img.currentSrc||img.getAttribute('data-src')||
-                 img.getAttribute('data-lazy-src')||img.getAttribute('src')||
-                 img.getAttribute('srcset')?.split(',')[0]?.trim().split(' ')[0]||'';
-               const found=asUrl(url);
-               if(found&&!found.startsWith('data:'))return found;
-             }
-             const candidates=[element,...element.querySelectorAll(
-               '[style*="background"],[style*="image"],[data-src]')].slice(0,12);
-             for(const node of candidates){
-               const css=getComputedStyle(node).backgroundImage||
-                 node.style?.backgroundImage||'';
-               const start=css.indexOf('url(');
-               if(start<0)continue;
-               const raw=css.substring(start+4).split(')')[0]
-                 .replaceAll('"','').replaceAll("'","");
-               const found=asUrl(raw);
-               if(found)return found;
-             }
-             return '';
-          };
-          const names=profiles.map(p=>p.name).filter(Boolean);
-          const textCandidates=[...document.querySelectorAll(
-            'main h2,main h3,main h4,main p,main span,main a,main strong,main [data-testid*="artist"]')];
-          for(const artistName of names){
-            const wantedName=simple(artistName);
-            if(!wantedName)continue;
-            const existing=seenArtists.get(artistName.toLocaleLowerCase());
-            if(existing?.photo)continue;
-            let found='';
-            let parentCard=null;
-            // Priorité à un alt exact : association beaucoup plus fiable.
-            for(const img of document.querySelectorAll('main img,article img')){
-              if(simple(img.getAttribute('alt'))!==wantedName)continue;
-              found=imageOf(img);
-              if(found){parentCard=img.closest('article,a,li')||img.parentElement;break;}
+          for(const img of lineArea.querySelectorAll('img')){
+            const alt=norm(img.getAttribute('alt')||'');
+            if(!artistsByName.has(alt))continue;
+            const card=img.closest('a,button,article,li,[class*="artist"],[class*="Artist"]')||
+              img.parentElement;
+            const social=card?.querySelector('a[href*="open.spotify.com/artist/"]');
+            const link=card?.closest('a[href*="/artists/"]')||
+              card?.querySelector('a[href*="/artists/"]');
+            take(artistsByName.get(alt).name,picture(img)||picture(card),
+              link?.href||'',social?.href||'');
+          }
+          // Données publiques structurées : Next.js, application/json ou LD+JSON.
+          // Limites de taille/profondeur pour ne pas ralentir le téléphone.
+          let examined=0;
+          const walk=(object,level)=>{
+            if(!object || typeof object!=='object'||level>16||examined++>12000)return;
+            if(Array.isArray(object)){
+              for(let i=0;i<Math.min(object.length,250);i++)walk(object[i],level+1);
+              return;
             }
-            if(!found){
-              for(const el of textCandidates){
-                if((el.textContent||'').length>100 ||
-                   simple(el.textContent)!==wantedName)continue;
-                let node=el.parentElement;
-                for(let level=0;level<4 && node;level++,node=node.parentElement){
-                  if((node.textContent||'').length>240 ||
-                     node.querySelectorAll('img').length>6)continue;
-                  const candidate=imageOf(node);
-                  if(candidate && candidate!==result.poster) {
-                    found=candidate;parentCard=node;break;
-                  }
-                }
-                if(found)break;
-              }
+            const candidate=object.name||object.stageName||object.artistName||
+              object.displayName;
+            const name=typeof candidate==='string'?candidate:'';
+            if(name&&artistsByName.has(norm(name))){
+              const image=object.profilePicture||object.avatar||object.image||
+                object.picture||object.profileImage||object.photo||
+                object.imageUrl||object.avatarUrl||object.profilePictureUrl;
+              const unbox=x=>typeof x==='string'?x:
+                x&&typeof x==='object'?(x.url||x.src||x.original||x.medium||''):'';
+              const artistLink=object.url||object.profileUrl||object.shotgunUrl||'';
+              const spotify=object.spotifyUrl||object.spotify||'';
+              take(artistsByName.get(norm(name)).name,unbox(image),unbox(artistLink),
+                unbox(spotify));
             }
-            if(found){
-              const sourceSpotify=parentCard?.querySelector(
-                'a[href*="open.spotify.com/artist/"]')?.href||'';
-              const sourceShotgun=parentCard?.querySelector(
-                'a[href*="/artists/"],a[href*="/artist/"]')?.href||'';
-              upsertArtist(artistName,found,sourceSpotify,sourceShotgun);
+            for(const [key,value] of Object.entries(object)){
+              if(key==='description'||key==='html'||key==='content'||key==='body')continue;
+              if(typeof value==='object'&&value)walk(value,level+1);
+            }
+          };
+          for(const script of document.querySelectorAll(
+            'script#__NEXT_DATA__,script[type="application/json"],script[type="application/ld+json"]')){
+            const raw=script.textContent||'';
+            if(!raw||raw.length>2200000)continue;
+            try{walk(JSON.parse(raw),0);}catch(_){}
+          }
+          // En l'absence de nom structuré, récupérer les liens de profils
+          // présents dans les cartes du line-up, sans déduire de Spotify au hasard.
+          for(const anchor of lineArea.querySelectorAll(
+            'a[href*="/artists/"],a[href*="/artist/"]')){
+            const name=(anchor.querySelector('h3,h4')?.textContent||
+              anchor.textContent||anchor.querySelector('img')?.alt||'').trim();
+            if(artistsByName.has(norm(name))){
+              take(artistsByName.get(norm(name)).name,picture(anchor),
+                anchor.href,
+                anchor.querySelector('a[href*="open.spotify.com/artist/"]')?.href||'');
             }
           }
           if(profiles.length)result.artistProfiles=profiles;

@@ -58,6 +58,7 @@ public final class MainActivity extends Activity {
     private LinearLayout page;
     private long currentEventId = 0;
     private Runnable backAction;
+    private ShotgunArtistAutoRefresh artistAutoRefresh;
     private boolean homeScreen=false;
     private boolean eventScreen=false;
     private long renderedEventRevision=-1L;
@@ -135,6 +136,7 @@ public final class MainActivity extends Activity {
         return l;
     }
     private void screen(String title, Runnable back) {
+        if(artistAutoRefresh!=null){artistAutoRefresh.stop();artistAutoRefresh=null;}
         homeScreen=back==null;
         eventScreen=false;
         backAction=back;
@@ -580,7 +582,41 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Supprimer",(d,w)->{store.deleteEvent(id);showHome();})
             .show()),0);
+        tryAutoRefreshArtists(event);
     }
+    private void tryAutoRefreshArtists(JSONObject event){
+        String url=event.optString("url");
+        if(!ShotgunArtistAutoRefresh.trusted(url))return;
+        String names=event.optString("artists");
+        if(names.trim().isEmpty())return;
+        JSONArray artists=event.optJSONArray("artistProfiles");
+        int withPhotos=0;
+        if(artists!=null)for(int i=0;i<artists.length();i++){
+            JSONObject p=artists.optJSONObject(i);
+            if(p!=null && p.optString("photo").startsWith("https://"))withPhotos++;
+        }
+        if(withPhotos>=names.split(",").length)return;
+        long eventId=event.optLong("id");
+        String key="artist_refresh_v014_"+eventId;
+        android.content.SharedPreferences prefs=getSharedPreferences(
+            "afterlog_artists",MODE_PRIVATE);
+        long now=System.currentTimeMillis();
+        if(now-prefs.getLong(key,0)<12L*60*60*1000)return;
+        prefs.edit().putLong(key,now).apply();
+        artistAutoRefresh=new ShotgunArtistAutoRefresh(this,page,url,extracted->{
+            if(!eventScreen || currentEventId!=eventId || isFinishing())return;
+            try {
+                AppStore currentStore=new AppStore(this);
+                JSONObject saved=currentStore.event(eventId);
+                if(saved!=null && mergeShotgunFields(saved,extracted)){
+                    currentStore.saveEvent(saved);
+                    store=currentStore;
+                    showEvent(eventId);
+                }
+            }catch(Exception ignored){}
+        });
+    }
+
     private String primaryQuantity(JSONObject entry) {
         JSONObject parts=entry.optJSONObject("parts");
         if(parts!=null){
@@ -628,116 +664,107 @@ public final class MainActivity extends Activity {
     private void renderJournalFirst(long id) {
         List<JSONObject> entries=store.entries(id);
         add(page,text("Mon journal de soirée",21,Color.WHITE,true),12);
-        if(entries.isEmpty()) {
+        if(entries.isEmpty()){
             add(page,button("＋ Ajouter une consommation",true,
                 ()->editEntry(new JSONObject(),id)),13);
-        } else {
-            final int circleDp=Math.min(174,Math.max(118,
-                (int)(getResources().getDisplayMetrics().widthPixels/
-                    getResources().getDisplayMetrics().density-49)/2));
-            int total=entries.size()+1;
-            for(int offset=0;offset<total;offset+=2){
+        }else{
+            // Trois vrais cercles plus petits par rangée, + après la dernière prise.
+            // La taille s'adapte à la largeur sans étirer les cercles en ovales.
+            final int columns=3;
+            int availableDp=getResources().getConfiguration().screenWidthDp-42;
+            final int circleDp=Math.min(124,Math.max(92,(availableDp-8)/columns));
+            final int count=entries.size()+1;
+            for(int offset=0;offset<count;offset+=columns){
                 LinearLayout row=new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
-                add(page,row,9);
-                for(int slot=0;slot<2;slot++){
-                    int index=offset+slot;
-                    FrameLayout cell=new FrameLayout(this);
+                row.setGravity(Gravity.TOP);
+                add(page,row,10);
+                for(int slot=0;slot<columns;slot++){
+                    int position=offset+slot;
                     LinearLayout.LayoutParams cellLayout=
                         new LinearLayout.LayoutParams(0,dp(circleDp),1f);
-                    cellLayout.setMargins(dp(2),0,dp(2),0);
+                    cellLayout.setMargins(dp(3),0,dp(3),0);
+                    FrameLayout cell=new FrameLayout(this);
                     row.addView(cell,cellLayout);
-                    if(index>=total)continue;
-                    if(index==entries.size()){
-                        TextView plus=text("+",42,BG,true);
+                    if(position>=count)continue;
+                    if(position==entries.size()){
+                        TextView plus=text("+",31,BG,true);
                         plus.setGravity(Gravity.CENTER);
-                        GradientDrawable plusBackground=new GradientDrawable();
-                        plusBackground.setShape(GradientDrawable.OVAL);
-                        plusBackground.setColor(ACCENT);
-                        plus.setBackground(plusBackground);
+                        GradientDrawable circle=new GradientDrawable();
+                        circle.setShape(GradientDrawable.OVAL);
+                        circle.setColor(ACCENT);
+                        plus.setBackground(circle);
                         plus.setContentDescription("Ajouter une consommation");
                         plus.setElevation(dp(2));
-                        plus.setOnClickListener(v->editEntry(new JSONObject(),id));
                         cell.addView(plus,new FrameLayout.LayoutParams(
                             dp(circleDp),dp(circleDp),Gravity.CENTER));
+                        plus.setOnClickListener(v->editEntry(new JSONObject(),id));
                         continue;
                     }
-                    JSONObject entry=entries.get(index);
+                    JSONObject entry=entries.get(position);
                     LinearLayout bubble=column();
                     bubble.setGravity(Gravity.CENTER);
-                    bubble.setPadding(dp(11),dp(13),dp(11),dp(13));
+                    bubble.setPadding(dp(10),dp(10),dp(10),dp(10));
                     GradientDrawable circle=new GradientDrawable(
                         GradientDrawable.Orientation.TL_BR,
-                        new int[]{Color.rgb(46,40,70),Color.rgb(28,29,46)});
+                        new int[]{Color.rgb(46,40,70),Color.rgb(27,27,44)});
                     circle.setShape(GradientDrawable.OVAL);
-                    circle.setStroke(dp(1),Color.rgb(89,75,119));
+                    circle.setStroke(dp(1),Color.rgb(82,70,115));
                     bubble.setBackground(circle);
                     bubble.setElevation(dp(2));
                     cell.addView(bubble,new FrameLayout.LayoutParams(
                         dp(circleDp),dp(circleDp),Gravity.CENTER));
                     String icon=ConsumptionActivity.iconFor(
                         entry.optString("category"),entry.optString("name"));
-                    TextView emoji=text(icon,25,Color.WHITE,true);
-                    emoji.setGravity(Gravity.CENTER);
-                    add(bubble,emoji,3);
-                    TextView name=text(entry.optString("name","Consommation"),
-                        14,Color.WHITE,true);
+                    TextView picture=text(icon,22,Color.WHITE,false);
+                    picture.setGravity(Gravity.CENTER);
+                    add(bubble,picture,2);
+                    TextView name=text(entry.optString("name","Prise"),
+                        12,Color.WHITE,true);
                     name.setGravity(Gravity.CENTER);
                     name.setMaxLines(1);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,name,4);
-                    TextView summary=text(primaryQuantity(entry),11,ACCENT,true);
+                    add(bubble,name,3);
+                    TextView summary=text(primaryQuantity(entry),10,ACCENT,true);
                     summary.setGravity(Gravity.CENTER);
                     summary.setMaxLines(2);
                     summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,summary,3);
+                    add(bubble,summary,0);
                     String when=timeDescription(entry);
                     if(!when.isEmpty()){
-                        TextView time=text(when,10,SOFT,false);
+                        TextView time=text(when,9,SOFT,false);
                         time.setGravity(Gravity.CENTER);
                         time.setMaxLines(1);
                         time.setEllipsize(android.text.TextUtils.TruncateAt.END);
                         add(bubble,time,0);
                     }
-                    bubble.setContentDescription("Voir "+entry.optString("name")+
-                        ", "+primaryQuantity(entry));
+                    bubble.setContentDescription("Voir la prise : "+
+                        entry.optString("name")+", "+primaryQuantity(entry));
                     bubble.setOnClickListener(v->showEntryDetails(entry,id));
                 }
             }
         }
         add(page,text("Informations de l'événement",21,Color.WHITE,true),13);
     }
+
     private void renderRdrAlerts(long eventId) {
         List<RiskGuidance.Warning> risks=RiskGuidance.forEvent(store.entries(eventId));
         if(risks.isEmpty())return;
         boolean high=false;
         for(RiskGuidance.Warning item:risks)
             if(item.title.contains("GHB")||item.title.contains("Kétamine et alcool"))high=true;
-        final boolean urgentMix=high;
-        TextView chip=text((high?"● ":"● ")+risks.size()+
-            " vigilance"+(risks.size()>1?"s":"")+" RDR  ›",13,
+        TextView chip=text("● "+risks.size()+" vigilance"+
+            (risks.size()>1?"s":"")+" RDR  ›",13,
             high?Color.rgb(255,153,153):Color.rgb(255,190,127),true);
         chip.setGravity(Gravity.CENTER_VERTICAL);
         chip.setPadding(dp(15),dp(10),dp(15),dp(10));
         GradientDrawable chipBg=new GradientDrawable();
-        chipBg.setColor(Color.rgb(34,30,43));chipBg.setCornerRadius(dp(17));
+        chipBg.setColor(Color.rgb(34,30,43));
+        chipBg.setCornerRadius(dp(16));
         chipBg.setStroke(dp(1),high?Color.rgb(169,93,93):Color.rgb(137,103,74));
         chip.setBackground(chipBg);
         add(page,chip,12);
-        chip.setOnClickListener(v->{
-            LinearLayout detail=column();
-            detail.setPadding(dp(16),dp(12),dp(16),dp(8));
-            for(RiskGuidance.Warning warning:risks){
-                add(detail,text(warning.title,15,Color.WHITE,true),5);
-                add(detail,text(warning.detail,13,SOFT,false),13);
-            }
-            new AlertDialog.Builder(this)
-                .setTitle(urgentMix?"Vigilance RDR":"Prévention et réduction des risques")
-                .setView(detail)
-                .setNeutralButton("Voir le suivi",(d,w)->
-                    startActivity(new Intent(this,SuiviActivity.class)))
-                .setPositiveButton("Fermer",null).show();
-        });
+        chip.setOnClickListener(v->new RdrWarningDialog(this,risks).show());
     }
 
     private void showEntryDetails(JSONObject entry,long eventId){
@@ -780,120 +807,162 @@ public final class MainActivity extends Activity {
     private void renderArtistProfiles(JSONObject event) {
         JSONArray profiles=event.optJSONArray("artistProfiles");
         if(profiles==null)profiles=new JSONArray();
-        // Même sans métadonnée/photo structurée, garder tous les artistes du line-up.
-        java.util.HashSet<String> names=new java.util.HashSet<>();
+        java.util.HashSet<String> seen=new java.util.HashSet<>();
         JSONArray ordered=new JSONArray();
         for(int i=0;i<profiles.length();i++){
             JSONObject p=profiles.optJSONObject(i);
             if(p==null||p.optString("name").trim().isEmpty())continue;
             String key=p.optString("name").trim().toLowerCase(Locale.ROOT);
-            if(names.add(key))ordered.put(p);
+            if(seen.add(key))ordered.put(p);
         }
         for(String artist:event.optString("artists").split(",")){
             String name=artist.trim();
-            if(name.isEmpty() || !names.add(name.toLowerCase(Locale.ROOT)))continue;
+            if(name.isEmpty()||!seen.add(name.toLowerCase(Locale.ROOT)))continue;
             JSONObject profile=new JSONObject();
             try{profile.put("name",name);}catch(Exception ignored){}
             ordered.put(profile);
         }
         if(ordered.length()==0)return;
-        for(int index=0;index<ordered.length();index+=3) {
+
+        add(page,text("Artistes · "+ordered.length(),13,SOFT,false),8);
+        for(int index=0;index<ordered.length();index+=3){
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.TOP);
-            add(page,row,14);
+            add(page,row,12);
             for(int slot=0;slot<3;slot++){
                 int i=index+slot;
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);
-                lp.setMargins(dp(4),0,dp(4),0);
-                if(i>=ordered.length()){
-                    row.addView(new View(this),lp);
-                    continue;
-                }
+                lp.setMargins(dp(3),0,dp(3),0);
+                if(i>=ordered.length()){row.addView(new View(this),lp);continue;}
                 JSONObject artist=ordered.optJSONObject(i);
                 if(artist==null)continue;
                 String name=artist.optString("name").trim();
                 String photo=artist.optString("photo");
                 String candidate=artist.optString("spotify");
+                String shotgun=artist.optString("shotgunUrl");
                 String search="https://open.spotify.com/search/"+Uri.encode(name);
                 final String[] target={search};
+
                 LinearLayout tile=column();
-                tile.setPadding(dp(7),dp(12),dp(7),dp(12));
+                tile.setPadding(dp(6),dp(11),dp(6),dp(10));
                 tile.setGravity(Gravity.CENTER_HORIZONTAL);
-                tile.setBackground(rounded(PANEL,16));
+                tile.setBackground(rounded(PANEL,19));
                 row.addView(tile,lp);
 
+                FrameLayout frame=new FrameLayout(this);
+                LinearLayout.LayoutParams portraitLp=new LinearLayout.LayoutParams(
+                    dp(80),dp(80));
+                portraitLp.gravity=Gravity.CENTER_HORIZONTAL;
+                portraitLp.bottomMargin=dp(9);
+                tile.addView(frame,portraitLp);
                 ImageView portrait=new ImageView(this);
                 portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                android.graphics.drawable.GradientDrawable circle=
-                    new android.graphics.drawable.GradientDrawable();
-                circle.setColor(Color.rgb(48,43,72));
-                circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                GradientDrawable circle=new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(84,66,127),Color.rgb(48,42,75)});
+                circle.setShape(GradientDrawable.OVAL);
                 portrait.setBackground(circle);
                 portrait.setClipToOutline(true);
-                portrait.setContentDescription("Photo de "+name);
-                LinearLayout.LayoutParams imageLp=new LinearLayout.LayoutParams(dp(85),dp(85));
-                imageLp.gravity=Gravity.CENTER_HORIZONTAL;
-                imageLp.bottomMargin=dp(10);
-                tile.addView(portrait,imageLp);
-                if(photo.startsWith("https://"))loadImage(portrait,photo);
-                else portrait.setImageResource(android.R.drawable.ic_menu_myplaces);
-                TextView label=text(name,13,Color.WHITE,true);
-                label.setGravity(Gravity.CENTER);
-                label.setMaxLines(2);
-                add(tile,label,7);
+                frame.addView(portrait,new FrameLayout.LayoutParams(-1,-1));
+                TextView fallback=text(name.isEmpty()?"♪":
+                    name.substring(0,1).toUpperCase(Locale.ROOT),
+                    30,Color.rgb(222,207,255),true);
+                fallback.setGravity(Gravity.CENTER);
+                frame.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+                if(photo.startsWith("https://"))
+                    loadImage(portrait,photo,()->fallback.setVisibility(View.GONE));
+
+                TextView title=text(name,13,Color.WHITE,true);
+                title.setGravity(Gravity.CENTER);
+                title.setMaxLines(2);
+                add(tile,title,8);
+
                 SpotifyMarkView spotifyMark=new SpotifyMarkView(this);
                 spotifyMark.setVerified(false);
                 spotifyMark.setContentDescription("Spotify : recherche de "+name);
-                LinearLayout.LayoutParams badgeLp=new LinearLayout.LayoutParams(dp(28),dp(28));
-                badgeLp.gravity=Gravity.CENTER_HORIZONTAL;
-                badgeLp.bottomMargin=dp(5);
-                tile.addView(spotifyMark,badgeLp);
+                LinearLayout.LayoutParams iconLp=new LinearLayout.LayoutParams(dp(27),dp(27));
+                iconLp.gravity=Gravity.CENTER_HORIZONTAL;
+                tile.addView(spotifyMark,iconLp);
                 TextView destination=text("Recherche Spotify",11,ACCENT,false);
                 destination.setGravity(Gravity.CENTER);
                 destination.setMaxLines(2);
-                add(tile,destination,0);
-                tile.setContentDescription(name+" · Recherche Spotify");
-                tile.setOnClickListener(v->{
-                    try {startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target[0])));}
+                add(tile,destination,3);
+
+                Runnable openSpotify=()->{
+                    try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target[0])));}
                     catch(Exception e){message("Impossible d'ouvrir Spotify.");}
-                });
-                // Seul un lien artiste explicitement publié par Shotgun peut être
-                // validé. Vérifier nom officiel ET correspondance des portraits.
-                if(photo.startsWith("https://")){
-                    destination.setText("Recherche du profil…");
-                    new Thread(()->{
-                        String verifiedLink=SpotifyArtistFinder.resolve(
-                            getApplicationContext(),name,photo,candidate);
-                        runOnUiThread(()->{
-                            if(isFinishing())return;
-                            boolean matched=SpotifyArtistVerifier.isArtistUrl(verifiedLink);
-                            if(matched) {
-                                target[0]=verifiedLink;
-                                spotifyMark.setVerified(true);
-                                spotifyMark.setContentDescription("Spotify vérifié : "+name);
-                                destination.setText("Profil Spotify");
-                                destination.setTextColor(Color.rgb(30,215,96));
-                                tile.setContentDescription(name+" · Profil Spotify vérifié");
-                            } else {
-                                destination.setText("Recherche Spotify");
-                            }
-                        });
-                    },"AfterLog-spotify-check").start();
+                };
+                spotifyMark.setOnClickListener(v->openSpotify.run());
+                destination.setOnClickListener(v->openSpotify.run());
+                if(shotgun.startsWith("https://")&&
+                    (shotgun.contains("shotgun.live/"))) {
+                    frame.setContentDescription("Profil Shotgun de "+name);
+                    frame.setOnClickListener(v->{
+                        try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(shotgun)));}
+                        catch(Exception e){openSpotify.run();}
+                    });
+                }else {
+                    frame.setContentDescription("Artiste "+name+" : ouvrir Spotify");
+                    frame.setOnClickListener(v->openSpotify.run());
                 }
+                title.setOnClickListener(v->{
+                    if(shotgun.startsWith("https://")&&shotgun.contains("shotgun.live/")){
+                        try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(shotgun)));}
+                        catch(Exception e){openSpotify.run();}
+                    }else openSpotify.run();
+                });
+
+                // Vérification sur une source officielle :
+                // lien explicite Shotgun, sinon relation MusicBrainz puis nom Spotify.
+                destination.setText("Vérification…");
+                new Thread(()->{
+                    String verified=SpotifyArtistFinder.resolve(
+                        getApplicationContext(),name,photo,candidate);
+                    String thumbnail="";
+                    if(SpotifyArtistVerifier.isArtistUrl(verified) && photo.isEmpty())
+                        thumbnail=SpotifyArtistVerifier.verifiedThumbnail(verified,name);
+                    final String imageUrl=thumbnail,link=verified;
+                    runOnUiThread(()->{
+                        if(isFinishing()||tile.getParent()==null)return;
+                        if(SpotifyArtistVerifier.isArtistUrl(link)){
+                            target[0]=link;
+                            spotifyMark.setVerified(true);
+                            spotifyMark.setContentDescription("Profil Spotify vérifié de "+name);
+                            destination.setText("Profil Spotify");
+                            destination.setTextColor(Color.rgb(30,215,96));
+                        }else destination.setText("Recherche Spotify");
+                        // Image Spotify vérifiée : utile quand Shotgun ne fournit pas
+                        // de portrait, sans prétendre qu'il provient de Shotgun.
+                        if(!imageUrl.isEmpty())
+                            loadImage(portrait,imageUrl,
+                                ()->fallback.setVisibility(View.GONE));
+                    });
+                },"AfterLog-spotify-artist").start();
             }
         }
         String eventUrl=event.optString("url");
-        if(eventUrl.startsWith("https://shotgun.live/")){
-            add(page,button("↻ Actualiser les portraits depuis Shotgun",false,()->{
-                Intent browser=new Intent(this,ShotgunBrowserActivity.class);
-                browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,eventUrl);
-                browser.putExtra("afterlog_auto_extract",true);
-                startActivityForResult(browser,SHOTGUN_EVENT_REFRESH);
-            }),13);
+        if(eventUrl.startsWith("https://shotgun.live/")||
+            eventUrl.startsWith("https://r.shotgun.live/")){
+            int missing=0;
+            for(int i=0;i<ordered.length();i++){
+                JSONObject p=ordered.optJSONObject(i);
+                if(p!=null&&p.optString("photo").isEmpty())missing++;
+            }
+            if(missing>0){
+                add(page,text(missing+" portrait(s) non extraits de Shotgun. "+
+                    "Une recherche Spotify est tentée en complément.",12,SOFT,false),9);
+                add(page,button("↻ Récupérer les portraits sur Shotgun",false,()->{
+                    Intent browser=new Intent(this,ShotgunBrowserActivity.class);
+                    browser.putExtra(ShotgunBrowserActivity.EXTRA_URL,eventUrl);
+                    browser.putExtra("afterlog_auto_extract",true);
+                    startActivityForResult(browser,SHOTGUN_EVENT_REFRESH);
+                }),12);
+            }
         }
-        add(page,text("Icône verte : profil Spotify vérifié avec le nom et la photo. Icône violette : recherche Spotify (correspondance non confirmée).",
-            12,SOFT,false),12);
+        add(page,text("Spotify vert : vrai profil vérifié. Violet : recherche. "+
+            "Les portraits peuvent provenir de Shotgun ou d'un profil Spotify vérifié.",
+            11,SOFT,false),13);
     }
 
     private void renderFailedEvents(LinearLayout panel) {
@@ -1439,21 +1508,32 @@ public final class MainActivity extends Activity {
         else super.onBackPressed();
     }
     private void loadImage(ImageView image,String url) {
-        if(!url.startsWith("https://"))return;
+        loadImage(image,url,null);
+    }
+    private void loadImage(ImageView image,String url,Runnable onLoaded) {
+        if(url==null||!url.startsWith("https://"))return;
         new Thread(()->{
             HttpURLConnection connection=null;
             try {
                 connection=(HttpURLConnection)new URL(url).openConnection();
-                connection.setConnectTimeout(8000);connection.setReadTimeout(10000);
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(10000);
                 connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("Accept","image/avif,image/webp,image/*");
+                if(connection.getResponseCode()!=200)return;
                 try(InputStream in=connection.getInputStream()) {
                     BitmapFactory.Options opts=new BitmapFactory.Options();
-                    opts.inSampleSize=4;
+                    opts.inSampleSize=2;
                     Bitmap bmp=BitmapFactory.decodeStream(in,null,opts);
-                    if(bmp!=null)runOnUiThread(()->image.setImageBitmap(bmp));
+                    if(bmp!=null)runOnUiThread(()->{
+                        if(isFinishing())return;
+                        image.setImageBitmap(bmp);
+                        if(onLoaded!=null)onLoaded.run();
+                    });
                 }
             }catch(Exception ignored){}
             finally {if(connection!=null)connection.disconnect();}
-        }).start();
+        },"AfterLog-photo").start();
     }
+
 }

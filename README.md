@@ -1,4 +1,15 @@
-# AfterLog — Application Android
+# AfterLog — Android
+
+## Version 0.14.0 — Correctifs de l'interface et des artistes
+
+- **Bulles de prises plus petites** : trois vrais cercles de diamètre identique par rangée, bouton ＋ dans la dernière cellule.
+- **Fiche RDR sur mesure** : une fenêtre sombre arrondie, défilante et cohérente avec AfterLog ; détails des vigilances, liens de sources, accès au suivi.
+- **Line-up Shotgun** : lecture élargie aux cartes interactives, aux images différées, aux arrière-plans CSS et aux données publiques structurées de la page.
+- **Récupération automatique des portraits** lorsqu'une fiche événement Shotgun contient des artistes sans photos, avec une seule tentative temporaire afin d'éviter les requêtes répétées.
+- **Spotify** : vérification du nom officiel et des relations musicales publiques, avec un vrai lien direct lorsqu'il est confirmé ; sinon recherche Spotify. En l'absence de photo Shotgun, affichage d'un portrait provenant d'un profil Spotify vérifié, s'il est disponible.
+- **Ce qui reste à confirmer sur ton téléphone :** l'extraction des images Shotgun et la correspondance réelle des comptes Spotify. Le fonctionnement n'est pas prouvé par la compilation.
+
+La mise à jour est construite via la **clé permanente GitHub** configurée précédemment.
 
 ## Nouveautés 0.13.0
 - **Bulles en vrais cercles** et bouton + de même taille.

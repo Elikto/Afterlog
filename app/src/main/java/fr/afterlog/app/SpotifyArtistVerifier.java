@@ -22,7 +22,38 @@ final class SpotifyArtistVerifier {
     private static final int LIMIT=1_500_000;
     static boolean isArtistUrl(String url) {
         return url != null && url.matches(
-            "^https://open\\.spotify\\.com/artist/[A-Za-z0-9]{22}/?(?:[?#].*)?$");
+            "^https://open\\.spotify\\.com/(?:intl-[a-z]{2}/)?artist/[A-Za-z0-9]{22}/?(?:[?#].*)?$");
+    }
+    // Vérifie l'identité affichée par Spotify (pas une recherche sur le nom).
+    // L'oEmbed d'un artiste peut exposer une image différente de celle de Shotgun :
+    // une image non identique n'invalide pas un lien officiel explicite.
+    static boolean matchesName(String spotifyUrl,String expectedName){
+        if(!isArtistUrl(spotifyUrl)||expectedName==null||expectedName.trim().isEmpty())
+            return false;
+        try{
+            JSONObject metadata=oembed(spotifyUrl);
+            if(!"Spotify".equalsIgnoreCase(metadata.optString("provider_name")))return false;
+            String official=metadata.optString("title").replaceAll(
+                "(?i)\\s*[|·–-]\\s*(spotify|artist|artiste)\\s*$","");
+            return normalize(expectedName).equals(normalize(official));
+        }catch(Exception ignored){return false;}
+    }
+    static String verifiedThumbnail(String spotifyUrl,String expectedName){
+        if(!isArtistUrl(spotifyUrl)||expectedName==null)return "";
+        try {
+            JSONObject metadata=oembed(spotifyUrl);
+            if(!"Spotify".equalsIgnoreCase(metadata.optString("provider_name")))return "";
+            String title=metadata.optString("title").replaceAll(
+                "(?i)\\s*[|·–-]\\s*(spotify|artist|artiste)\\s*$","");
+            if(!normalize(expectedName).equals(normalize(title)))return "";
+            String image=metadata.optString("thumbnail_url");
+            return safeImageUrl(image)?image:"";
+        }catch(Exception ignored){return "";}
+    }
+    private static JSONObject oembed(String spotifyUrl)throws Exception{
+        String endpoint="https://open.spotify.com/oembed?url="+
+            URLEncoder.encode(spotifyUrl,StandardCharsets.UTF_8.name());
+        return new JSONObject(new String(get(endpoint,180000),StandardCharsets.UTF_8));
     }
     static boolean verify(String spotifyUrl,String expectedName,String shotgunPhoto) {
         if(!isArtistUrl(spotifyUrl) || !safeImageUrl(shotgunPhoto))return false;

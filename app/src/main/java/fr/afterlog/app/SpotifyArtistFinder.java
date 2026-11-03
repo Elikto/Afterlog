@@ -16,7 +16,7 @@ import java.util.Locale;
 /** Résolution prudente du véritable profil Spotify, sans deviner un ID. */
 final class SpotifyArtistFinder {
     private static long lastMusicBrainzCall=0L;
-    private static final String PREFS="afterlog_artist_lookup";
+    private static final String PREFS="afterlog_artist_lookup_v2";
 
     /**
      * Un candidat explicite ou une relation officielle MusicBrainz peut être
@@ -24,51 +24,66 @@ final class SpotifyArtistFinder {
      * Sinon renvoie la chaîne vide et l'interface reste sur "Recherche Spotify".
      */
     static String resolve(Context ctx,String artistName,String shotgunPortrait,String explicitLink){
-        if(artistName==null||artistName.trim().isEmpty() ||
-            shotgunPortrait==null||!shotgunPortrait.startsWith("https://"))
-            return "";
+        if(artistName==null||artistName.trim().isEmpty())return "";
+        // Le profil officiel Shotgun peut pointer vers Spotify : vérifier le nom
+        // affiché par Spotify, sans imposer que les deux portraits soient identiques.
         if(SpotifyArtistVerifier.isArtistUrl(explicitLink) &&
-            SpotifyArtistVerifier.verify(explicitLink,artistName,shotgunPortrait))
+            SpotifyArtistVerifier.matchesName(explicitLink,artistName))
             return explicitLink;
         String cacheKey=normalize(artistName)+"|"+
-            Integer.toHexString(shotgunPortrait.hashCode());
+            Integer.toHexString((shotgunPortrait==null?"":shotgunPortrait).hashCode());
         SharedPreferences cache=ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         long now=System.currentTimeMillis();
         String answer=cache.getString(cacheKey,"");
         long stamp=cache.getLong(cacheKey+"_at",0);
-        if(now-stamp<3L*24*60*60*1000){
+        if(now-stamp<12L*60*60*1000)
             return SpotifyArtistVerifier.isArtistUrl(answer)?answer:"";
-        }
         String verified="";
         try {
             String query="artist:\""+artistName.replace("\"","").trim()+"\"";
             String path="https://musicbrainz.org/ws/2/artist/?query="+
-                URLEncoder.encode(query,"UTF-8")+"&fmt=json&limit=8";
+                URLEncoder.encode(query,"UTF-8")+"&fmt=json&limit=12";
             JSONObject response=new JSONObject(musicBrainzGet(path));
             JSONArray artists=response.optJSONArray("artists");
-            int attempted=0;
-            if(artists!=null)for(int i=0;i<artists.length()&&attempted<3;i++){
+            java.util.ArrayList<String> mbids=new java.util.ArrayList<>();
+            if(artists!=null)for(int i=0;i<artists.length();i++){
                 JSONObject artist=artists.optJSONObject(i);
                 if(artist==null)continue;
                 if(!normalize(artistName).equals(normalize(artist.optString("name"))))continue;
                 String mbid=artist.optString("id");
-                if(!mbid.matches("[a-f0-9-]{36}"))continue;
-                attempted++;
-                JSONObject relations=new JSONObject(musicBrainzGet(
-                    "https://musicbrainz.org/ws/2/artist/"+mbid+"?inc=url-rels&fmt=json"));
-                JSONArray urls=relations.optJSONArray("relations");
-                if(urls==null)continue;
-                for(int j=0;j<urls.length();j++){
-                    JSONObject rel=urls.optJSONObject(j);
-                    if(rel==null)continue;
-                    JSONObject urlObj=rel.optJSONObject("url");
-                    String candidate=urlObj==null?"":urlObj.optString("resource");
-                    if(SpotifyArtistVerifier.isArtistUrl(candidate) &&
-                        SpotifyArtistVerifier.verify(candidate,artistName,shotgunPortrait)){
-                        verified=candidate;break;
+                if(mbid.matches("[a-f0-9-]{36}"))mbids.add(mbid);
+            }
+            if(!mbids.isEmpty()&&mbids.size()<=4){
+                java.util.ArrayList<String> candidates=new java.util.ArrayList<>();
+                for(String mbid:mbids){
+                    JSONObject relations=new JSONObject(musicBrainzGet(
+                        "https://musicbrainz.org/ws/2/artist/"+mbid+"?inc=url-rels&fmt=json"));
+                    JSONArray urls=relations.optJSONArray("relations");
+                    if(urls==null)continue;
+                    for(int j=0;j<urls.length();j++){
+                        JSONObject rel=urls.optJSONObject(j);
+                        JSONObject urlObj=rel==null?null:rel.optJSONObject("url");
+                        String candidate=urlObj==null?"":urlObj.optString("resource");
+                        if(SpotifyArtistVerifier.isArtistUrl(candidate)&&
+                            !candidates.contains(candidate)&&
+                            SpotifyArtistVerifier.matchesName(candidate,artistName))
+                            candidates.add(candidate);
                     }
                 }
-                if(!verified.isEmpty())break;
+                if(candidates.size()==1){
+                    // Une seule identité officielle liée depuis MusicBrainz,
+                    // avec même nom confirmé par Spotify : profil direct.
+                    verified=candidates.get(0);
+                }else if(candidates.size()>1 && shotgunPortrait!=null &&
+                    shotgunPortrait.startsWith("https://")){
+                    // Si plusieurs homonymes, ne retenir que la photo vérifiée.
+                    for(String candidate:candidates){
+                        if(SpotifyArtistVerifier.verify(candidate,artistName,shotgunPortrait)){
+                            if(!verified.isEmpty()){verified="";break;}
+                            verified=candidate;
+                        }
+                    }
+                }
             }
         }catch(Exception ignored){}
         cache.edit().putString(cacheKey,verified).putLong(cacheKey+"_at",now).apply();
@@ -83,7 +98,7 @@ final class SpotifyArtistFinder {
             connection.setConnectTimeout(6500);connection.setReadTimeout(6500);
             connection.setRequestProperty("Accept","application/json");
             connection.setRequestProperty("User-Agent",
-                "AfterLog/0.10 (https://github.com/Elikto/Afterlog)");
+                "AfterLog/0.14 (https://github.com/Elikto/Afterlog)");
             if(connection.getResponseCode()!=200)throw new Exception("MusicBrainz indisponible");
             ByteArrayOutputStream result=new ByteArrayOutputStream();
             try(InputStream in=connection.getInputStream()){
