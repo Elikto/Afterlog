@@ -613,7 +613,7 @@ public final class MainActivity extends Activity {
             add(personal,text(event.optString("notes"),15,Color.WHITE,false),0);
             add(page,personal,12);
         }
-        add(page,button("Supprimer cette soirée",false,()->new AlertDialog.Builder(this)
+        add(page,button("Supprimer cette soirée",false,()->NeonDialog.builder(this)
             .setTitle("Supprimer la soirée ?")
             .setMessage("Les consommations associées seront également supprimées.")
             .setNegativeButton("Annuler",null)
@@ -927,7 +927,7 @@ public final class MainActivity extends Activity {
                         field.setSingleLine(true);
                         field.setInputType(android.text.InputType.TYPE_CLASS_TEXT |
                             android.text.InputType.TYPE_TEXT_VARIATION_URI);
-                        new AlertDialog.Builder(this)
+                        NeonDialog.builder(this)
                             .setTitle("Profil Spotify de "+name)
                             .setMessage("Aucun compte Spotify direct n'a été confirmé automatiquement. Tu peux associer son vrai lien si tu le connais.")
                             .setView(field)
@@ -1193,7 +1193,7 @@ public final class MainActivity extends Activity {
         input.setTextColor(BG);
         input.setHint("https://shotgun.live/...");
         input.setPadding(dp(16),dp(10),dp(16),dp(10));
-        new AlertDialog.Builder(this)
+        NeonDialog.builder(this)
             .setTitle("Importer via le site Shotgun")
             .setMessage("L'ancien téléchargement direct est supprimé (erreur HTTP 429). Le lien s'ouvre maintenant dans le navigateur Shotgun intégré.")
             .setView(input)
@@ -1241,7 +1241,7 @@ public final class MainActivity extends Activity {
             }
             showHome();
             SpotifyArtistBackfillWorker.schedule(this);
-            new AlertDialog.Builder(this).setTitle("Import Shotgun terminé")
+            NeonDialog.builder(this).setTitle("Import Shotgun terminé")
                 .setMessage(added+" soirée(s) ajoutée(s)\n"+
                     updated+" soirée(s) complétée(s) avec leurs informations\n"+
                     unchanged+" déjà à jour, "+ignored+" ignorée(s).\n\n"+
@@ -1423,7 +1423,7 @@ public final class MainActivity extends Activity {
                     message(imported+" média(s) ajouté(s)"+
                         (rejected>0?" · "+rejected+" non importé(s) : "+errorText:""));
                     if(imported>0 && !shareFilename.isEmpty()){
-                        new AlertDialog.Builder(this)
+                        NeonDialog.builder(this)
                             .setTitle("Médias ajoutés")
                             .setMessage("Partager le dernier média sur Instagram, dans les messages ou une autre application compatible ?")
                             .setNegativeButton("Plus tard",null)
@@ -1516,7 +1516,7 @@ public final class MainActivity extends Activity {
                     }
                 }
                 String content=json.toString();
-                new AlertDialog.Builder(this).setTitle("Remplacer les données ?")
+                NeonDialog.builder(this).setTitle("Remplacer les données ?")
                     .setMessage("Cette sauvegarde remplacera entièrement ton journal actuel.")
                     .setNegativeButton("Annuler",null)
                     .setPositiveButton("Importer",(d,w)->{
