@@ -22,7 +22,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.UUID;
 
-/** Vidéos privées de la soirée, accessibles et lisibles hors ligne dans NØCTIS. */
+/** Vidéos privées de la soirée, accessibles et lisibles hors ligne dans NØCTARIA. */
 final class EventVideos {
     static final long MAX_BYTES=1024L*1024*1024;
     static final int MAX_COUNT=30;
