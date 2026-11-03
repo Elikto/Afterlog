@@ -33,6 +33,21 @@ final class SpotifyArtistFinder {
             default:return "";
         }
     }
+    // A user-triggered rescan can revisit previously unmatched names without
+    // discarding confirmed links or blindly assigning another artist.
+    static void clearNegativeCache(Context context){
+        SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        SharedPreferences.Editor changes=prefs.edit();
+        for(String key:prefs.getAll().keySet()){
+            if(!key.endsWith("_at") || key.length()<=3)continue;
+            String candidate=key.substring(0,key.length()-3);
+            if(prefs.getString(candidate,"").isEmpty()){
+                changes.remove(candidate);
+                changes.remove(key);
+            }
+        }
+        changes.apply();
+    }
     static String savedProfile(Context context,String name){
         String profile=context.getSharedPreferences("afterlog_spotify_links",Context.MODE_PRIVATE)
             .getString(normalize(name),"");
