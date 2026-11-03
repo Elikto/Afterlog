@@ -1,3 +1,14 @@
+# NØCTARIA 0.18.3 — Portraits Spotify dans toutes les soirées
+
+- Si Spotify ne fournit pas `thumbnail_url` via oEmbed, NØCTARIA cherche désormais le **portrait de l'artiste sur les pages officielles Spotify et son lecteur intégré**, en vérifiant le nom. Aucune photo arbitraire n'est attribuée à un homonyme.
+- La récupération des **photos manquantes pour les comptes Spotify déjà identifiés** passe avant la découverte de nouveaux profils.
+- La mise à jour relance automatiquement un balayage sur **tous les événements sauvegardés**, même si d'anciens échecs étaient encore en cache. Le bouton « Compléter les artistes » permet aussi un nouvel essai immédiat.
+- Lorsqu'une URL Spotify ne renvoie pas d'image affichable, l'application privilégie le portrait Shotgun existant s'il est disponible.
+- Les photos chargées sont gardées brièvement en mémoire pour éviter que l'écran ne revienne aux initiales durant les mises à jour du journal.
+- Il reste possible qu'un artiste ne possède pas de portrait public accessible. L'application ne marque pas une photo non confirmée comme officielle.
+
+---
+
 # NØCTARIA v0.18.2 — Recherche de structures par adresse
 
 - La section **Structures et associations** ne dépend plus d'une liste fixe limitée à Arles. Une adresse, une ville ou un code postal est géocodé avec le service public **Géoplateforme/IGN**.
