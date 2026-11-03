@@ -302,7 +302,7 @@ public final class EventEditorActivity extends Activity {
                 Bitmap thumb=EventPhotos.preview(this,file,200);
                 if(thumb!=null)image.setImageBitmap(thumb);
                 image.setOnClickListener(v->previewMedia(index));
-                add(frame,button("Retirer",false,()->new AlertDialog.Builder(this)
+                add(frame,button("Retirer",false,()->NeonDialog.builder(this)
                     .setTitle("Retirer cette photo ?")
                     .setNegativeButton("Annuler",null)
                     .setPositiveButton("Retirer",(d,w)->{
@@ -333,7 +333,7 @@ public final class EventEditorActivity extends Activity {
             }
             add(item,button("▶ Lire dans la galerie "+(index+1),false,
                 ()->previewMedia(EventPhotos.gallery(event).length()+position)),7);
-            add(item,button("Retirer la vidéo",false,()->new AlertDialog.Builder(this)
+            add(item,button("Retirer la vidéo",false,()->NeonDialog.builder(this)
                 .setTitle("Supprimer cette vidéo ?")
                 .setMessage("Elle sera supprimée du stockage d'NØCTIS.")
                 .setNegativeButton("Annuler",null)
