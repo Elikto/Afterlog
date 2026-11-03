@@ -407,9 +407,11 @@ public final class ConsumptionActivity extends Activity {
                 LinearLayout tile=column();
                 tile.setGravity(Gravity.CENTER);
                 tile.setPadding(dp(4),dp(8),dp(4),dp(6));
-                tile.setBackground(shape(TILE,18,false));
+                int shade=ConsumptionPalette.forEntry(choice.category,choice.name);
+                tile.setBackground(ConsumptionPalette.tile(shade,false,18,
+                    getResources().getDisplayMetrics().density));
                 tile.setContentDescription("Choisir "+choice.name);
-                TextView picture=text(choice.icon,29,WHITE,false);
+                TextView picture=text(choice.icon,29,shade,false);
                 picture.setGravity(Gravity.CENTER);
                 add(tile,picture,6);
                 TextView name=text(choice.name,12,WHITE,true);
@@ -491,12 +493,16 @@ public final class ConsumptionActivity extends Activity {
         for(int i=0;i<tiles.size();i++) {
             Choice c=tileChoices.get(i);
             boolean active=selected!=null && c==selected;
-            tiles.get(i).setBackground(shape(active?Color.rgb(51,45,81):TILE,18,active));
+            int shade=ConsumptionPalette.forEntry(c.category,
+                "Autre".equals(c.name)&&!customName.isEmpty()?customName:c.name);
+            tiles.get(i).setBackground(ConsumptionPalette.tile(shade,active,18,
+                getResources().getDisplayMetrics().density));
         }
         if(selected==null){details.setVisibility(View.GONE);return;}
         details.setVisibility(View.VISIBLE);
         String label="Autre".equals(selected.name)&&!customName.isEmpty()?customName:selected.name;
         heading.setText(selected.icon+"  "+label);
+        heading.setTextColor(ConsumptionPalette.forEntry(selected.category,label));
         configureSubstanceOptions();
         refreshCounter();
         scroll.post(()->scroll.smoothScrollTo(0,details.getTop()));
