@@ -33,7 +33,7 @@ public final class SpotifyArtistBackfillWorker extends Worker {
     private static final String JOB="afterlog-spotify-artists-backfill-v3";
     private static final String PERIODIC="afterlog-spotify-artists-daily-v3";
     private static final String PREFS="afterlog_spotify_backfill_v3";
-    private static final int MAX_LOOKUPS=16;
+    private static final int MAX_LOOKUPS=8; // Keep each background batch under Android's worker deadline.
     private static final long FAILED_RETRY=6L*60*60*1000;
     private static final long QUEUE_COOLDOWN=2L*60*1000;
 
@@ -159,7 +159,22 @@ public final class SpotifyArtistBackfillWorker extends Worker {
                 if(attempted%4==0)updateStatus(ctx,"running");
             }
             updateStatus(ctx,pending?"partial":"complete");
-            return pending?Result.retry():Result.success();
+            if(pending){
+                // Do NOT use Result.retry() here: WorkManager increases its
+                // backoff delay (15, 30, 45... minutes) across large line-ups.
+                // Chain a fresh network-limited chunk instead, until all unique
+                // artists have been attempted across EVERY saved event.
+                Constraints online=new Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED).build();
+                OneTimeWorkRequest chunk=new OneTimeWorkRequest.Builder(
+                    SpotifyArtistBackfillWorker.class)
+                    .setConstraints(online)
+                    .setInitialDelay(45,TimeUnit.SECONDS)
+                    .build();
+                WorkManager.getInstance(ctx).enqueueUniqueWork(
+                    JOB,ExistingWorkPolicy.APPEND_OR_REPLACE,chunk);
+            }
+            return Result.success();
         }catch(Exception failure){
             prefs.edit().putString("state","partial").apply();
             return Result.retry();
