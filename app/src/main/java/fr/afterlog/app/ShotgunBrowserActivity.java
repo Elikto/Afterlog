@@ -27,7 +27,7 @@ import java.util.Locale;
 
 /**
  * Navigateur dédié au site officiel Shotgun.
- * Aucune donnée de mot de passe, cookie, token, requête ou QR code n'est lue par AfterLog.
+ * Aucune donnée de mot de passe, cookie, token, requête ou QR code n'est lue par NØCTIS.
  * Seuls les champs des pages d'événements ou les liens explicitement affichés sont importés,
  * à la demande de l'utilisateur, via evaluateJavascript.
  */
@@ -246,8 +246,8 @@ public final class ShotgunBrowserActivity extends Activity {
     }
     private void confirmLogout() {
         new AlertDialog.Builder(this)
-            .setTitle("Déconnecter Shotgun d'AfterLog ?")
-            .setMessage("Les cookies de connexion enregistrés dans le navigateur intégré seront supprimés. Tes soirées AfterLog resteront intactes.")
+            .setTitle("Déconnecter Shotgun d'NØCTIS ?")
+            .setMessage("Les cookies de connexion enregistrés dans le navigateur intégré seront supprimés. Tes soirées NØCTIS resteront intactes.")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Déconnecter",(d,w)->{
                 AutoSyncScheduler.disable(this);
@@ -257,7 +257,7 @@ public final class ShotgunBrowserActivity extends Activity {
                     CookieManager.getInstance().flush();
                     web.clearHistory();web.clearCache(true);
                     web.loadUrl(SHOTGUN_LOGIN);
-                    toast("Session effacée du navigateur AfterLog");
+                    toast("Session effacée du navigateur NØCTIS");
                 });
             }).show();
     }
