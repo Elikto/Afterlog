@@ -27,52 +27,115 @@ final class SpotifyArtistVerifier {
         return url != null && url.matches(
             "^https://open\\.spotify\\.com/(?:intl-[a-z]{2}/)?artist/[A-Za-z0-9]{22}/?(?:[?#].*)?$");
     }
-    // Vérifie l'identité affichée par Spotify (pas une recherche sur le nom).
-    // L'oEmbed d'un artiste peut exposer une image différente de celle de Shotgun :
-    // une image non identique n'invalide pas un lien officiel explicite.
+    // First verify the oEmbed artist name. If Spotify omits the image or
+    // temporarily fails to serve oEmbed, try the public artist and embed pages.
     static boolean matchesName(String spotifyUrl,String expectedName){
         if(!isArtistUrl(spotifyUrl)||expectedName==null||expectedName.trim().isEmpty())
             return false;
         try{
             JSONObject metadata=oembed(spotifyUrl);
-            if(!"Spotify".equalsIgnoreCase(metadata.optString("provider_name")))return false;
-            String official=metadata.optString("title").replaceAll(
-                "(?i)\\s*[|·–-]\\s*(spotify|artist|artiste)\\s*$","");
-            return normalize(expectedName).equals(normalize(official));
+            if("Spotify".equalsIgnoreCase(metadata.optString("provider_name")) &&
+               sameArtist(metadata.optString("title"),expectedName))return true;
+        }catch(Exception ignored){}
+        return !spotifyPageThumbnail(spotifyUrl,expectedName).isEmpty();
+    }
+
+    static String verifiedThumbnail(String spotifyUrl,String expectedName){
+        if(!isArtistUrl(spotifyUrl)||expectedName==null||expectedName.trim().isEmpty())
+            return "";
+        try{
+            JSONObject metadata=oembed(spotifyUrl);
+            if("Spotify".equalsIgnoreCase(metadata.optString("provider_name")) &&
+                sameArtist(metadata.optString("title"),expectedName)){
+                String image=metadata.optString("thumbnail_url");
+                if(safeSpotifyPortrait(image))return image;
+            }
+        }catch(Exception ignored){}
+        // Do not require an oEmbed thumbnail. Spotify has omitted it for
+        // some artist responses. Check the official page AND the embed player,
+        // using an explicit matching title / artist image alt text.
+        return spotifyPageThumbnail(spotifyUrl,expectedName);
+    }
+
+    private static boolean sameArtist(String source,String expected){
+        if(source==null||expected==null)return false;
+        String title=source.trim()
+            .replaceFirst("(?i)^Spotify Embed:\\s*","")
+            .replaceFirst("(?i)^Listen to\\s+","")
+            .replaceFirst("(?i)\\s+Songs\\s*\\|\\s*Spotify\\s*$","")
+            .replaceFirst("(?i)\\s*[|·–-]\\s*Spotify\\s*$","")
+            .replaceFirst("(?i)\\s*[|·–-]\\s*(artist|artiste)\\s*$","")
+            .replaceFirst("(?i)\\s*·\\s*Top tracks\\s*$","");
+        return !title.isEmpty()&&normalize(title).equals(normalize(expected));
+    }
+
+    private static boolean safeSpotifyPortrait(String image){
+        if(!safeImageUrl(image))return false;
+        try{
+            URL url=new URL(image);
+            String host=url.getHost().toLowerCase(Locale.ROOT);
+            if(!host.equals("i.scdn.co") &&
+                !host.equals("mosaic.scdn.co") &&
+                !host.endsWith(".spotifycdn.com"))return false;
+            return url.getPath().contains("/image/") ||
+                host.equals("i.scdn.co") || host.equals("mosaic.scdn.co");
         }catch(Exception ignored){return false;}
     }
-    static String verifiedThumbnail(String spotifyUrl,String expectedName){
-        if(!isArtistUrl(spotifyUrl)||expectedName==null)return "";
-        try {
-            JSONObject metadata=oembed(spotifyUrl);
-            if(!"Spotify".equalsIgnoreCase(metadata.optString("provider_name")))return "";
-            String title=metadata.optString("title").replaceAll(
-                "(?i)\\s*[|·–-]\\s*(spotify|artist|artiste)\\s*$","");
-            if(!normalize(expectedName).equals(normalize(title)))return "";
-            String image=metadata.optString("thumbnail_url");
-            if(safeImageUrl(image))return image;
-            // Certains oEmbed n’exposent plus de vignette : lire og:image
-            // sur la page Spotify officielle uniquement.
-            return spotifyPageThumbnail(spotifyUrl);
-        }catch(Exception ignored){return "";}
+
+    private static String spotifyPageThumbnail(String artistUrl,String artistName){
+        String id=artistUrl.replaceFirst(
+            "^https://open\\.spotify\\.com/(?:intl-[a-z]{2}/)?artist/","")
+            .replaceFirst("[/?#].*$","");
+        if(!id.matches("[A-Za-z0-9]{22}"))return "";
+        String[] sources={
+            "https://open.spotify.com/artist/"+id,
+            "https://open.spotify.com/embed/artist/"+id
+        };
+        for(String source:sources){
+            try{
+                Document document=Jsoup.connect(source)
+                    .userAgent("Mozilla/5.0 (compatible; NOCTARIA/0.18)")
+                    .referrer("https://open.spotify.com/")
+                    .timeout(11000).maxBodySize(2200000).get();
+                String ogTitle=document.select("meta[property=og:title]")
+                    .attr("content");
+                String twitterTitle=document.select("meta[name=twitter:title]")
+                    .attr("content");
+                boolean matching=sameArtist(ogTitle,artistName) ||
+                    sameArtist(twitterTitle,artistName) ||
+                    sameArtist(document.title(),artistName);
+                // On some Spotify embeds, the actual artist portrait is an
+                // <img alt="Astrix cover">, even when og:image is missing.
+                Element artistImage=null;
+                for(Element img:document.select("img[alt]")){
+                    String alt=img.attr("alt").trim();
+                    if(sameArtist(alt.replaceFirst("(?i)\\s+(cover|photo|image)$",""),
+                        artistName)){
+                        artistImage=img;matching=true;break;
+                    }
+                }
+                if(!matching)continue;
+                if(artistImage!=null){
+                    String src=artistImage.absUrl("src");
+                    if(safeSpotifyPortrait(src))return src;
+                    String sourceSet=artistImage.attr("srcset");
+                    for(String item:sourceSet.split(",")){
+                        String candidate=item.trim().split("\\s+")[0];
+                        if(safeSpotifyPortrait(candidate))return candidate;
+                    }
+                }
+                for(Element meta:document.select(
+                    "meta[property=og:image],meta[name=twitter:image]")){
+                    String candidate=meta.attr("content");
+                    if(safeSpotifyPortrait(candidate))return candidate;
+                }
+                // If metadata is absent, inspect only explicitly named
+                // artist artwork, never unrelated album/track pictures.
+            }catch(Exception ignored){}
+        }
+        return "";
     }
-    private static String spotifyPageThumbnail(String spotifyUrl){
-        if(!isArtistUrl(spotifyUrl))return "";
-        try{
-            Document document=Jsoup.connect(spotifyUrl)
-                .userAgent("Mozilla/5.0 (compatible; AfterLog/0.17)")
-                .timeout(9000).maxBodySize(1600000).get();
-            Element tag=document.selectFirst(
-                "meta[property=og:image][content],meta[name=twitter:image][content]");
-            String value=tag==null?"":tag.attr("content");
-            if(!safeImageUrl(value))return "";
-            URL u=new URL(value);
-            String host=u.getHost().toLowerCase(Locale.ROOT);
-            // Exclusivement un visuel fourni par l'hôte Spotify.
-            return host.equals("i.scdn.co")||host.endsWith(".spotifycdn.com")
-                ?value:"";
-        }catch(Exception ignored){return "";}
-    }
+
     private static JSONObject oembed(String spotifyUrl)throws Exception{
         String endpoint="https://open.spotify.com/oembed?url="+
             URLEncoder.encode(spotifyUrl,StandardCharsets.UTF_8.name());
