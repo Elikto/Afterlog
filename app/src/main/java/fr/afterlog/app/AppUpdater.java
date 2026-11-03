@@ -59,17 +59,17 @@ final class AppUpdater {
                 JSONObject release=latestRelease();
                 if(release==null) {
                     if(automatic)return;
-                    ui(()->new AlertDialog.Builder(activity)
-                        .setTitle("AfterLog est à jour")
+                    ui(()->NeonDialog.builder(activity)
+                        .setTitle("NØCTIS est à jour")
                         .setMessage("Tu utilises déjà la dernière version disponible sur GitHub.")
                         .setPositiveButton("OK",null).show());
                     return;
                 }
                 final String signer=release.optString("signerSha256");
                 if(!signer.isEmpty() && !signer.equals(installedSignerSha256())){
-                    ui(()->new AlertDialog.Builder(activity)
+                    ui(()->NeonDialog.builder(activity)
                         .setTitle("Migration de signature nécessaire")
-                        .setMessage("AfterLog utilise maintenant une clé permanente comme CyberQuiz, mais cette installation utilise une ancienne clé de test. Android ne permet pas de la remplacer directement.\n\nN'efface pas cette application sans avoir sauvegardé tes consommations et tes médias. Cette transition est nécessaire une seule fois ; ensuite, le bouton MAJ fonctionnera sur les prochaines versions.")
+                        .setMessage("NØCTIS utilise maintenant une clé permanente comme CyberQuiz, mais cette installation utilise une ancienne clé de test. Android ne permet pas de la remplacer directement.\n\nN'efface pas cette application sans avoir sauvegardé tes consommations et tes médias. Cette transition est nécessaire une seule fois ; ensuite, le bouton MAJ fonctionnera sur les prochaines versions.")
                         .setNegativeButton("Fermer",null)
                         .setPositiveButton("Paramètres et sauvegarde",(d,w)->{
                             if(activity instanceof MainActivity)
@@ -99,7 +99,7 @@ final class AppUpdater {
                 final String notes=release.optString("body","").trim();
                 final String details=notes.isEmpty() ? "Une nouvelle version est disponible."
                     : notes.length()>600 ? notes.substring(0,600)+"…" : notes;
-                ui(()->new AlertDialog.Builder(activity)
+                ui(()->NeonDialog.builder(activity)
                     .setTitle("Nouvelle version : "+tag)
                     .setMessage(details+"\n\nTélécharger l'APK depuis les Releases GitHub et lancer l'installation Android ?")
                     .setNegativeButton("Plus tard",null)
@@ -107,7 +107,7 @@ final class AppUpdater {
                     .show());
             }catch(Exception e) {
                 if(automatic)return;
-                ui(()->new AlertDialog.Builder(activity).setTitle("Vérification impossible")
+                ui(()->NeonDialog.builder(activity).setTitle("Vérification impossible")
                     .setMessage("Impossible de consulter les versions GitHub.\n\n"+e.getMessage())
                     .setPositiveButton("OK",null).show());
             }
@@ -128,7 +128,7 @@ final class AppUpdater {
             conn.setRequestProperty("User-Agent","AfterLog-Android-updater");
             int status=conn.getResponseCode();
             if(status==404)
-                throw new Exception("La distribution AfterLog avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
+                throw new Exception("La distribution NØCTIS avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
             if(status!=200)throw new Exception("GitHub HTTP "+status);
             JSONObject json;
             try(InputStream in=conn.getInputStream()) {
@@ -163,7 +163,7 @@ final class AppUpdater {
             apk.put("size",size);
             JSONObject release=new JSONObject();
             release.put("tag_name","v"+version);
-            release.put("body","Version stable signée pour les mises à jour AfterLog sans réinstallation.");
+            release.put("body","Version stable signée pour les mises à jour NØCTIS sans réinstallation.");
             release.put("signerSha256",signer);
             release.put("assets",new JSONArray().put(apk));
             return release;
@@ -190,17 +190,18 @@ final class AppUpdater {
         holder.setOrientation(LinearLayout.VERTICAL);
         holder.setPadding(dp(20),dp(18),dp(20),dp(8));
         ProgressBar progress=new ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.rgb(194,174,255)));
         progress.setMax(100);
         holder.addView(progress);
         TextView label=new TextView(activity);
         label.setText("Téléchargement en cours…");
-        label.setTextColor(Color.DKGRAY);
+        label.setTextColor(Color.rgb(210,205,226));
         label.setTextSize(13);
         label.setGravity(Gravity.CENTER);
         label.setPadding(0,dp(12),0,0);
         holder.addView(label);
-        AlertDialog dialog=new AlertDialog.Builder(activity)
-            .setTitle("Mise à jour AfterLog")
+        AlertDialog dialog=NeonDialog.builder(activity)
+            .setTitle("Mise à jour NØCTIS")
             .setView(holder)
             .setNegativeButton("Annuler",(d,w)->canceled.set(true))
             .create();
@@ -259,7 +260,7 @@ final class AppUpdater {
                 part.delete();
                 ui(()->{
                     dialog.dismiss();
-                    if(!canceled.get()) new AlertDialog.Builder(activity)
+                    if(!canceled.get()) NeonDialog.builder(activity)
                         .setTitle("Mise à jour non installée")
                         .setMessage(e.getMessage())
                         .setPositiveButton("OK",null).show();
@@ -277,7 +278,7 @@ final class AppUpdater {
             PackageInfo current=pm.getPackageInfo(activity.getPackageName(),flags);
             if(candidate==null)return "APK illisible.";
             if(!activity.getPackageName().equals(candidate.packageName))
-                return "Cet APK n'appartient pas à AfterLog.";
+                return "Cet APK n'appartient pas à NØCTIS.";
             if(candidate.versionCode<=current.versionCode)
                 return "La version téléchargée n'est pas plus récente.";
             Signature[] ours=signatures(current);
@@ -285,7 +286,7 @@ final class AppUpdater {
             if(ours==null || theirs==null || ours.length==0 || theirs.length==0 ||
                !Arrays.equals(ours,theirs)) {
                 return "Signature Android différente. Cette version ne peut pas remplacer directement l'application installée. "
-                    +"Exporte d'abord ta sauvegarde JSON dans AfterLog → Réglages, puis installe la nouvelle version depuis GitHub. "
+                    +"Exporte d'abord ta sauvegarde JSON dans NØCTIS → Réglages, puis installe la nouvelle version depuis GitHub. "
                     +"La mise à jour automatique nécessite une signature stable.";
             }
             return "";
@@ -318,8 +319,8 @@ final class AppUpdater {
     private void installOrAskPermission(){
         if(pendingApk==null||!pendingApk.isFile()){showStatus("APK introuvable");return;}
         if(Build.VERSION.SDK_INT>=26&&!activity.getPackageManager().canRequestPackageInstalls()){
-            new AlertDialog.Builder(activity).setTitle("Autoriser les mises à jour")
-                .setMessage("Android doit autoriser AfterLog à proposer l'installation de son APK. Autorise « Installer des applications inconnues » pour AfterLog, puis reviens dans l'application.")
+            NeonDialog.builder(activity).setTitle("Autoriser les mises à jour")
+                .setMessage("Android doit autoriser NØCTIS à proposer l'installation de son APK. Autorise « Installer des applications inconnues » pour NØCTIS, puis reviens dans l'application.")
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Ouvrir les paramètres",(d,w)->{
                     waitingForPermission=true;
@@ -335,7 +336,7 @@ final class AppUpdater {
             intent.setDataAndType(UpdateFileProvider.uri(activity.getPackageName()),MIME);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setClipData(ClipData.newUri(activity.getContentResolver(),
-                "Mise à jour AfterLog",UpdateFileProvider.uri(activity.getPackageName())));
+                "Mise à jour NØCTIS",UpdateFileProvider.uri(activity.getPackageName())));
             if(intent.resolveActivity(activity.getPackageManager())==null)
                 throw new Exception("Installateur Android introuvable");
             activity.startActivity(intent);
