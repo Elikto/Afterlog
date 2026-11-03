@@ -1,4 +1,4 @@
-name: Compiler NØCTIS APK
+name: Compiler NØCTARIA APK
 on:
   push:
     branches: [main]
@@ -6,7 +6,7 @@ on:
       - README.md
   workflow_dispatch:
 concurrency:
-  group: noctis-android-release
+  group: noctaria-android-release
   cancel-in-progress: true
 permissions:
   contents: write
@@ -108,17 +108,18 @@ jobs:
           else
             SOURCE=app/build/outputs/apk/debug/app-debug.apk
           fi
-          cp "$SOURCE" "NOCTIS-v${VERSION}.apk"
+          cp "$SOURCE" "NOCTARIA-v${VERSION}.apk"
+          cp "$SOURCE" "NOCTIS-v${VERSION}.apk"  # Ancien nom d’application
           cp "$SOURCE" "AfterLog-v${VERSION}.apk"  # Alias historique, anciennes versions
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "NOCTIS-v${VERSION}.apk" > "$RUNNER_TEMP/signing-report.txt"
+          "$APKSIGNER" verify --verbose --print-certs "NOCTARIA-v${VERSION}.apk" > "$RUNNER_TEMP/signing-report.txt"
           SIGNER="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/signing-report.txt" | head -n 1 | tr '[:upper:]' '[:lower:]')"
           test -n "$SIGNER"
           if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
             EXPECTED="0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
             if [[ "$SIGNER" != "$EXPECTED" ]]; then
-              echo "::error::Le certificat Android ne correspond pas à la clé permanente NØCTIS."
+              echo "::error::Le certificat Android ne correspond pas à la clé permanente NØCTARIA."
               exit 1
             fi
           fi
@@ -127,8 +128,8 @@ jobs:
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: NOCTIS-Android-APK
-          path: NOCTIS-v*.apk
+          name: NOCTARIA-Android-APK
+          path: NOCTARIA-v*.apk
           if-no-files-found: error
           retention-days: 30
       - name: Publier l'APK dans GitHub Releases
@@ -151,24 +152,25 @@ jobs:
               exit 0
             fi
           fi
-          APK="NOCTIS-v${VERSION}.apk"
+          APK="NOCTARIA-v${VERSION}.apk"
           if [[ "$PERSISTENT" == "true" ]]; then
             TAG="v${VERSION}"
-            NOTE="APK NØCTIS signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
+            NOTE="APK NØCTARIA signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
             test "$SIGNER" = "0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
           else
             TAG="v${VERSION}-debug"
             NOTE="Version bêta signée temporairement. Les mises à jour en place ne fonctionnent pas lorsque les clés changent."
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" "AfterLog-v${VERSION}.apk" --clobber
+            gh release upload "$TAG" "$APK" "NOCTIS-v${VERSION}.apk" "AfterLog-v${VERSION}.apk" --clobber
           elif [[ "$PERSISTENT" == "true" ]]; then
-            gh release create "$TAG" "$APK" "AfterLog-v${VERSION}.apk" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION}" --notes "$NOTE"
+            gh release create "$TAG" "$APK" "NOCTIS-v${VERSION}.apk" "AfterLog-v${VERSION}.apk" --target "$GITHUB_SHA" --title "NØCTARIA v${VERSION}" --notes "$NOTE"
           else
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION} (test)" --notes "$NOTE" --prerelease
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTARIA v${VERSION} (test)" --notes "$NOTE" --prerelease
           fi
           if [[ "$PERSISTENT" == "true" ]]; then
             cp "$APK" AfterLog.apk
+            cp "$APK" NOCTARIA.apk
             cp "$APK" NOCTIS.apk
             export APK_SHA256="$(sha256sum AfterLog.apk | awk '{print $1}')"
             export APK_SIZE="$(stat -c%s AfterLog.apk)"
@@ -188,11 +190,11 @@ jobs:
               json.dump(data,fp,ensure_ascii=False,indent=2)
           PY
             if gh release view apk-latest >/dev/null 2>&1; then
-              gh release upload apk-latest AfterLog.apk NOCTIS.apk update.json --clobber
-              gh release edit apk-latest --title "NØCTIS — dernière version stable" --notes "$NOTE"
+              gh release upload apk-latest AfterLog.apk NOCTARIA.apk NOCTIS.apk update.json --clobber
+              gh release edit apk-latest --title "NØCTARIA — dernière version stable" --notes "$NOTE"
             else
-              gh release create apk-latest AfterLog.apk NOCTIS.apk update.json --target "$GITHUB_SHA" \
-                --title "NØCTIS — dernière version stable" --notes "$NOTE"
+              gh release create apk-latest AfterLog.apk NOCTARIA.apk NOCTIS.apk update.json --target "$GITHUB_SHA" \
+                --title "NØCTARIA — dernière version stable" --notes "$NOTE"
             fi
           fi
           echo "published=true" >> "$GITHUB_OUTPUT"
@@ -215,16 +217,16 @@ jobs:
           suffix = "" if os.environ.get("SIGNED") == "true" else "-debug"
           new_url = (
               f"https://github.com/Elikto/Afterlog/releases/download/"
-              f"v{version}{suffix}/NOCTIS-v{version}.apk"
+              f"v{version}{suffix}/NOCTARIA-v{version}.apk"
           )
           current = re.sub(
               r"https://github\.com/Elikto/Afterlog/releases/download/"
-              r"v\d+\.\d+\.\d+(?:-debug)?/(?:AfterLog|NOCTIS)-v\d+\.\d+\.\d+\.apk",
+              r"v\d+\.\d+\.\d+(?:-debug)?/(?:AfterLog|NOCTIS|NOCTARIA)-v\d+\.\d+\.\d+\.apk",
               new_url,
               current,
           )
           current = re.sub(r"Bêta v\d+\.\d+\.\d+", f"Bêta v{version}", current)
-          current = re.sub(r"(?:AfterLog|NOCTIS)-v\d+\.\d+\.\d+\.apk", f"NOCTIS-v{version}.apk", current)
+          current = re.sub(r"(?:AfterLog|NOCTIS|NOCTARIA)-v\d+\.\d+\.\d+\.apk", f"NOCTARIA-v{version}.apk", current)
           readme.write_text(current, encoding="utf-8")
           PY
           if ! git diff --quiet -- README.md; then
