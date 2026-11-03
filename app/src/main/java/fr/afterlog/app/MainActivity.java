@@ -869,7 +869,22 @@ public final class MainActivity extends Activity {
         }
         if(ordered.length()==0)return;
 
-        add(page,text("Artistes · "+ordered.length(),13,SOFT,false),8);
+        int linkedCount=0,photoCount=0;
+        for(int k=0;k<ordered.length();k++){
+            JSONObject item=ordered.optJSONObject(k);
+            if(item==null)continue;
+            if(SpotifyArtistVerifier.isArtistUrl(item.optString("spotify")))linkedCount++;
+            if(item.optString("spotifyPhoto").startsWith("https://"))photoCount++;
+        }
+        add(page,text("Artistes · "+ordered.length(),13,SOFT,false),6);
+        add(page,text("Spotify : "+linkedCount+"/"+ordered.length()+
+            " profils · "+photoCount+" photos officielles",12,SOFT,false),10);
+        if(linkedCount<ordered.length()||photoCount<ordered.length()){
+            add(page,button("↻ Rechercher Spotify dans toutes mes soirées",false,()->{
+                SpotifyArtistBackfillWorker.refreshAll(this);
+                message("Recherche des profils et portraits de tous les événements relancée.");
+            }),12);
+        }
         for(int index=0;index<ordered.length();index+=3){
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1559,6 +1574,15 @@ public final class MainActivity extends Activity {
         subtitle("Les consommations sont stockées localement sur cet appareil. Aucun compte Shotgun ou Gmail n'est nécessaire.");
         add(page,button("↻ Rechercher une mise à jour",false,()->updater.check()),10);
         add(page,button("Importer une soirée par lien Shotgun",false,this::importShotgun),10);
+        add(page,text("ARTISTES ET SPOTIFY",13,ACCENT,true),7);
+        add(page,text(SpotifyArtistBackfillWorker.status(this),13,SOFT,false),10);
+        add(page,button("↻ Rechercher tous les artistes Spotify",false,()->{
+            SpotifyArtistBackfillWorker.refreshAll(this);
+            NeonDialog.builder(this)
+                .setTitle("Recherche Spotify relancée")
+                .setMessage("NØCTIS parcourt tous les événements enregistrés, y compris les anciens. Les comptes et photos confirmés seront ajoutés progressivement et conservés. Les homonymes non fiables resteront à associer manuellement.")
+                .setPositiveButton("Compris",null).show();
+        }),13);
         add(page,button("Exporter toutes mes données (JSON)",true,()->{
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -1596,6 +1620,7 @@ public final class MainActivity extends Activity {
         }
         if(requestCode==EVENT_EDITOR_REQUEST) {
             if(resultCode==RESULT_OK && data!=null) {
+                SpotifyArtistBackfillWorker.schedule(this);
                 long id=data.getLongExtra(EventEditorActivity.EXTRA_SAVED_ID,0);
                 store=new AppStore(this);
                 if(id>0)showEvent(id);else showHome();
