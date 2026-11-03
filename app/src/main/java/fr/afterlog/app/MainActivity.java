@@ -572,7 +572,9 @@ public final class MainActivity extends Activity {
             add(about,text(description,15,Color.WHITE,false),0);
             add(page,about,23);
         }
-        if(!event.optString("artists").isEmpty()) {
+        if(!event.optString("artists").isEmpty() ||
+           (event.optJSONArray("artistProfiles")!=null &&
+            event.optJSONArray("artistProfiles").length()>0)) {
             add(page,text("Line-up",21,Color.WHITE,true),9);
             renderArtistProfiles(event);
         }
@@ -845,7 +847,8 @@ public final class MainActivity extends Activity {
                 JSONObject artist=ordered.optJSONObject(i);
                 if(artist==null)continue;
                 String name=artist.optString("name").trim();
-                String photo=artist.optString("photo");
+                String photo=artist.optString("spotifyPhoto");
+                if(photo.isEmpty())photo=artist.optString("photo");
                 String candidate=artist.optString("spotify");
                 String shotgun=artist.optString("shotgunUrl");
                 String direct=SpotifyArtistFinder.savedProfile(this,name);
@@ -928,6 +931,7 @@ public final class MainActivity extends Activity {
                                     return;
                                 }
                                 SpotifyArtistFinder.saveProfile(this,name,link);
+                                SpotifyArtistBackfillWorker.schedule(this);
                                 target[0]=link;
                                 spotifyMark.setVerified(true);
                                 destination.setText("Ouvrir Spotify");
@@ -949,34 +953,11 @@ public final class MainActivity extends Activity {
                     destination.setText("Ouvrir Spotify");
                     destination.setTextColor(Color.rgb(30,215,96));
                 }
-                // Vérification sur une source officielle :
-                // lien explicite Shotgun, sinon relation MusicBrainz puis nom Spotify.
+                // Les profils et les photos sont enrichis dans un seul travail
+                // WorkManager couvrant toutes les soirées, plutôt qu'un réseau
+                // d'appels concurrents pour chaque carte à chaque affichage.
                 if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
-                    destination.setText("Vérification…");
-                new Thread(()->{
-                    String verified=SpotifyArtistFinder.resolve(
-                        getApplicationContext(),name,photo,candidate);
-                    String thumbnail="";
-                    if(SpotifyArtistVerifier.isArtistUrl(verified) && photo.isEmpty())
-                        thumbnail=SpotifyArtistVerifier.verifiedThumbnail(verified,name);
-                    final String imageUrl=thumbnail,link=verified;
-                    runOnUiThread(()->{
-                        if(isFinishing()||tile.getParent()==null)return;
-                        if(SpotifyArtistVerifier.isArtistUrl(link)){
-                            target[0]=link;
-                            spotifyMark.setVerified(true);
-                            spotifyMark.setContentDescription("Profil Spotify vérifié de "+name);
-                            destination.setText("Profil Spotify");
-                            destination.setTextColor(Color.rgb(30,215,96));
-                        }else if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
-                            destination.setText("Associer Spotify");
-                        // Image Spotify vérifiée : utile quand Shotgun ne fournit pas
-                        // de portrait, sans prétendre qu'il provient de Shotgun.
-                        if(!imageUrl.isEmpty())
-                            loadImage(portrait,imageUrl,
-                                ()->fallback.setVisibility(View.GONE));
-                    });
-                },"AfterLog-spotify-artist").start();
+                    destination.setText("Associer Spotify");
             }
         }
         String eventUrl=event.optString("url");
@@ -1251,6 +1232,7 @@ public final class MainActivity extends Activity {
                 } else unchanged++;
             }
             showHome();
+            SpotifyArtistBackfillWorker.schedule(this);
             new AlertDialog.Builder(this).setTitle("Import Shotgun terminé")
                 .setMessage(added+" soirée(s) ajoutée(s)\n"+
                     updated+" soirée(s) complétée(s) avec leurs informations\n"+
@@ -1318,6 +1300,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         if(updater!=null){updater.onResume();updater.checkAutomatically();}
         AutoSyncScheduler.schedule(this);
+        SpotifyArtistBackfillWorker.schedule(this);
         syncActiveView=true;
         syncHandler.removeCallbacks(syncTicker);
         syncHandler.post(syncTicker);
