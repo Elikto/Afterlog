@@ -16,7 +16,7 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import java.util.Locale;
 
-/** Détails et modification d'une prise dans le style NØCTIS. */
+/** Détails et modification d'une prise dans le style NØCTARIA. */
 final class EntryDetailsDialog {
     private final Activity activity;
     private final Dialog dialog;
