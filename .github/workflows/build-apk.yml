@@ -1,4 +1,4 @@
-name: Compiler AfterLog APK
+name: Compiler NØCTIS APK
 on:
   push:
     branches: [main]
@@ -114,7 +114,7 @@ jobs:
           if [[ "${{ steps.signing.outputs.persistent }}" == "true" ]]; then
             EXPECTED="0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
             if [[ "$SIGNER" != "$EXPECTED" ]]; then
-              echo "::error::Le certificat Android ne correspond pas à la clé permanente AfterLog."
+              echo "::error::Le certificat Android ne correspond pas à la clé permanente NØCTIS."
               exit 1
             fi
           fi
@@ -123,7 +123,7 @@ jobs:
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: AfterLog-Android-APK
+          name: NØCTIS-Android-APK
           path: AfterLog-v*.apk
           if-no-files-found: error
           retention-days: 30
@@ -141,7 +141,7 @@ jobs:
           APK="AfterLog-v${VERSION}.apk"
           if [[ "$PERSISTENT" == "true" ]]; then
             TAG="v${VERSION}"
-            NOTE="APK AfterLog signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
+            NOTE="APK NØCTIS signé avec la clé permanente. Installation en place possible si la clé de l'ancienne version est identique."
             test "$SIGNER" = "0eae222a3b88b93b56e3d6b4bbd7f991e65b88030ae3e0f4245662e3f80d4772"
           else
             TAG="v${VERSION}-debug"
@@ -150,9 +150,9 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
           elif [[ "$PERSISTENT" == "true" ]]; then
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION}" --notes "$NOTE"
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION}" --notes "$NOTE"
           else
-            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "$NOTE" --prerelease
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "NØCTIS v${VERSION} (test)" --notes "$NOTE" --prerelease
           fi
           if [[ "$PERSISTENT" == "true" ]]; then
             cp "$APK" AfterLog.apk
@@ -175,10 +175,10 @@ jobs:
           PY
             if gh release view apk-latest >/dev/null 2>&1; then
               gh release upload apk-latest AfterLog.apk update.json --clobber
-              gh release edit apk-latest --title "AfterLog — dernière version stable" --notes "$NOTE"
+              gh release edit apk-latest --title "NØCTIS — dernière version stable" --notes "$NOTE"
             else
               gh release create apk-latest AfterLog.apk update.json --target "$GITHUB_SHA" \
-                --title "AfterLog — dernière version stable" --notes "$NOTE"
+                --title "NØCTIS — dernière version stable" --notes "$NOTE"
             fi
           fi
       - name: Garder le bouton de téléchargement du README à jour
