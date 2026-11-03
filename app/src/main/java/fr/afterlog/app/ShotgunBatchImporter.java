@@ -72,7 +72,7 @@ final class ShotgunBatchImporter {
                     pending.add(event);
                 }
                 if(pending.isEmpty()) {missingLinks();return;}
-                new AlertDialog.Builder(host)
+                NeonDialog.builder(host)
                     .setTitle("Compléter "+pending.size()+" soirée(s)")
                     .setMessage("NØCTIS va ouvrir chaque fiche Shotgun, suivre « Voir l'événement » si nécessaire, puis collecter les informations publiques (affiche, dates, lieu, description, artistes).\n\nLes pages seront ouvertes une par une. Garde NØCTIS au premier plan. Les billets et QR codes ne seront pas enregistrés.")
                     .setNegativeButton("Annuler",null)
@@ -82,7 +82,7 @@ final class ShotgunBatchImporter {
         });
     }
     private void missingLinks() {
-        new AlertDialog.Builder(host).setTitle("Aucune soirée détectée")
+        NeonDialog.builder(host).setTitle("Aucune soirée détectée")
             .setMessage("Ouvre « Mes billets → Passés », puis assure-toi que les événements sont chargés. Si Shotgun ne présente pas de lien exploitable, ouvre chaque billet puis « Voir l'événement » pour l'importer individuellement.")
             .setPositiveButton("OK",null).show();
     }
@@ -212,7 +212,7 @@ final class ShotgunBatchImporter {
     }
     void askCancel() {
         if(!active)return;
-        new AlertDialog.Builder(host).setTitle("Arrêter l'import ?")
+        NeonDialog.builder(host).setTitle("Arrêter l'import ?")
             .setMessage(succeeded+" fiche(s) déjà récupérée(s) seront conservées. Les autres resteront à compléter.")
             .setNegativeButton("Continuer",null)
             .setPositiveButton("Arrêter",(d,w)->finish("Import interrompu"))
@@ -227,7 +227,7 @@ final class ShotgunBatchImporter {
             +(rateLimited?"\n\nShotgun a répondu HTTP 429 : aucune nouvelle tentative automatique ne sera faite.":"")
             +(lastError.isEmpty()?"":"\nDernier problème : "+lastError)
             +"\n\nLes données privées des billets et QR codes ne sont pas enregistrées.";
-        new AlertDialog.Builder(host).setTitle(title).setMessage(msg)
+        NeonDialog.builder(host).setTitle(title).setMessage(msg)
             .setNegativeButton("Rester sur Shotgun",(d,w)->{})
             .setPositiveButton(done>0?"Enregistrer les fiches":"OK",(d,w)->{
                 if(done>0)completedCallback.accept(collected);
