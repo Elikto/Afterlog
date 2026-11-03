@@ -185,7 +185,7 @@ public final class ShotgunBrowserActivity extends Activity {
     private void importCurrent() {
         String url=web.getUrl();
         if(!isEventUrl(url)) {
-            new AlertDialog.Builder(this)
+            NeonDialog.builder(this)
                 .setTitle("Ouvre la fiche d'une soirée")
                 .setMessage("Dans Shotgun, ouvre un événement (page /events/ ou /festivals/). Puis appuie sur « Importer cet événement ». Aucun mot de passe ni billet n'est lu.")
                 .setPositiveButton("Compris",null).show();
@@ -245,7 +245,7 @@ public final class ShotgunBrowserActivity extends Activity {
         finish();
     }
     private void confirmLogout() {
-        new AlertDialog.Builder(this)
+        NeonDialog.builder(this)
             .setTitle("Déconnecter Shotgun d'NØCTIS ?")
             .setMessage("Les cookies de connexion enregistrés dans le navigateur intégré seront supprimés. Tes soirées NØCTIS resteront intactes.")
             .setNegativeButton("Annuler",null)
