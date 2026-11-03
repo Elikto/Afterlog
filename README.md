@@ -42,7 +42,7 @@ Avant cette configuration, aucune release stable n'est annoncée au téléphone.
 
 **Version 0.11.0 (bêta expérimentale)**
 
-[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.11.0-debug/AfterLog-v0.11.0.apk)
+[![Télécharger AfterLog](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-AfterLog%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.13.0/AfterLog-v0.13.0.apk)
 
 ## Mise à jour 0.11.0 — Galerie et Suivi
 
