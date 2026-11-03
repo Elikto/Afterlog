@@ -144,7 +144,7 @@ public final class RdrActivity extends Activity {
         EditText city=new EditText(this);
         city.setSingleLine(true);city.setText(town);
         LinearLayout space=col();space.setPadding(dp(18),0,dp(18),0);space.addView(city);
-        new AlertDialog.Builder(this).setTitle("Changer de ville ou d'adresse")
+        NeonDialog.builder(this).setTitle("Changer de ville ou d'adresse")
             .setMessage("Aucune autorisation GPS n'est nécessaire. L'adresse sert uniquement à ouvrir une recherche autour du lieu choisi.")
             .setView(space).setNegativeButton("Annuler",null)
             .setPositiveButton("Valider",(d,w)->{
