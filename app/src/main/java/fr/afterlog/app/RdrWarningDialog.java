@@ -24,7 +24,6 @@ final class RdrWarningDialog {
     private static final int ACCENT=Color.rgb(189,162,255);
     private final Activity activity;
     private final Dialog dialog;
-    private final int density;
     private final LinearLayout content;
     private int dp(float value) {
         return Math.round(value*activity.getResources().getDisplayMetrics().density);
