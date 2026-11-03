@@ -109,6 +109,19 @@ public final class SpotifyArtistBackfillWorker extends Worker {
             // "artists" string and no "artistProfiles" objects.
             ensureProfiles(ctx);
             LinkedHashMap<String,Artist> artists=collect(new AppStore(ctx).events());
+            // First propagate every already-confirmed direct link across ALL events.
+            // This is fast and does not consume a slow network lookup slot.
+            for(Map.Entry<String,Artist> row:artists.entrySet()){
+                Artist artist=row.getValue();
+                if(artist.ambiguous)continue;
+                String known=SpotifyArtistFinder.savedProfile(ctx,artist.name);
+                if(known.isEmpty())known=SpotifyArtistFinder.trustedProfile(artist.name);
+                if(!SpotifyArtistVerifier.isArtistUrl(known))continue;
+                if(!artist.spotifyLink.isEmpty()&&!artist.spotifyLink.equals(known))
+                    continue; // A namesake in the journal might use another ID.
+                apply(ctx,row.getKey(),known,"");
+                artist.spotifyLink=known;
+            }
             updateStatus(ctx,"running");
             int attempted=0;
             boolean pending=false;
