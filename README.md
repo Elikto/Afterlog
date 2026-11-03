@@ -1,4 +1,19 @@
-# AfterLog v0.16.0 — Risques visibles et fiche soirée épurée
+# NØCTIS v0.17.0 — Nouvelle identité
+
+AfterLog devient **NØCTIS**, le journal personnel des soirées, festivals et souvenirs.
+La nouvelle identité conserve l'icône rave/cyberpunk rose et cyan. Le nom de l'application
+(Android et interface), les notifications et les dialogues personnalisés adoptent
+NØCTIS. L'identifiant Android `fr.afterlog.app` et les chemins de mise à jour
+historiques restent inchangés pour préserver les installations et les données.
+
+**Mise à jour :** le numéro de version passe à 0.17.0 (code 17).
+L'APK stable reste distribué à l'adresse historique `AfterLog.apk`
+par compatibilité avec les versions déjà installées ; ce nom technique
+ne correspond plus au nom affiché par l'application.
+
+---
+
+# Historique — AfterLog v0.16.0 — Risques visibles et fiche soirée épurée
 
 - **Cartes des soirées :** les pictogrammes des substances restent affichés sans légende ; un petit **⚠ orange** apparaît quand le journal contient une situation de vigilance documentée, **⚠ rouge** uniquement lorsque l'horaire déclaré est compatible avec un chevauchement de GHB/GBL et d'alcool. Un simple enregistrement sans horaire ne suffit pas à attribuer un danger rouge.
 - Un appui sur le triangle affiche la **fiche RDR détaillée**, avec les sources officielles. Ces couleurs **ne constituent ni diagnostic ni mesure de surdosage**.
