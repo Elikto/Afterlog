@@ -17,6 +17,9 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
+import android.text.TextWatcher;
+import android.text.Editable;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -35,6 +38,7 @@ public final class EventEditorActivity extends Activity {
     private static final int PICK_IMAGES=704;
     private static final int PICK_VIDEOS=705;
     private static final int PICK_MEDIA=706;
+    private static final int PICK_POSTER=707;
     private static final int BG=Color.rgb(12,14,24),CARD=Color.rgb(25,28,44);
     private static final int TILE=Color.rgb(38,41,64),ACCENT=Color.rgb(186,166,255);
     private static final int WHITE=Color.WHITE,SOFT=Color.rgb(185,190,205);
@@ -43,6 +47,7 @@ public final class EventEditorActivity extends Activity {
     private final LinkedHashMap<String,EditText> inputs=new LinkedHashMap<>();
     private LinearLayout images,videoItems,details,extra;
     private TextView videoCount;
+    private FrameLayout posterPreview;
     private TextView dateButton,startButton,endButton,photoCount;
     private boolean advanced=false;
 
@@ -120,7 +125,15 @@ public final class EventEditorActivity extends Activity {
         scroll.addView(content);
         inputs.clear();
         LinearLayout basic=group("✨ L'essentiel","Nom, date et horaires",content);
-        field(basic,"title","Nom de l'événement","Ex. : Festival, concert, soirée…",false);
+        EditText titleField=field(basic,"title","Nom de l'événement",
+            "Ex. : Soirée chez Alex, festival, concert…",false);
+        titleField.addTextChangedListener(new TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence s,int start,int before,int count){
+                refreshPosterPreview();
+            }
+            @Override public void afterTextChanged(Editable e){}
+        });
         dateButton=button("📅 Choisir une date",false,this::chooseDate);
         add(basic,dateButton,11);
         startButton=button("🕒 Heure de début",false,()->chooseTime("start"));
@@ -128,6 +141,21 @@ public final class EventEditorActivity extends Activity {
         endButton=button("🕔 Heure de fin",false,()->chooseTime("end"));
         add(basic,endButton,0);
         refreshDate();
+
+        LinearLayout posterSection=group("Affiche de ma soirée",
+            "Une affiche NØCTARIA est fournie automatiquement, même pour une soirée chez un ami.",content);
+        posterPreview=new FrameLayout(this);
+        add(posterSection,posterPreview,11);
+        posterPreview.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(210)));
+        add(posterSection,button("Choisir ma propre photo",false,this::pickPoster),9);
+        add(posterSection,button("Revenir à l'affiche NØCTARIA",false,()->{
+            event.remove("posterLocal");
+            try{event.put("poster","");}catch(Exception ignored){}
+            EditText url=inputs.get("poster");
+            if(url!=null)url.setText("");
+            refreshPosterPreview();
+        }),0);
+        refreshPosterPreview();
 
         LinearLayout gallery=group("Galerie de la soirée",
             "Photos et vidéos, visibles dans une galerie plein écran.",content);
@@ -195,6 +223,24 @@ public final class EventEditorActivity extends Activity {
             refreshDate();
         },time.getHour(),time.getMinute(),true).show();
     }
+    private void refreshPosterPreview(){
+        if(posterPreview==null)return;
+        try{
+            JSONObject preview=new JSONObject(event.toString());
+            EditText input=inputs.get("title");
+            if(input!=null)preview.put("title",input.getText().toString().trim());
+            posterPreview.removeAllViews();
+            posterPreview.addView(EventPoster.create(this,preview),
+                new FrameLayout.LayoutParams(-1,-1));
+        }catch(Exception ignored){}
+    }
+    private void pickPoster(){
+        Intent intent=new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(Intent.createChooser(intent,"Choisir une affiche"),
+            PICK_POSTER);
+    }
     private void pickMedia() {
         startActivityForResult(MediaPicker.photosAndVideos(),PICK_MEDIA);
     }
@@ -221,6 +267,19 @@ public final class EventEditorActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(result!=RESULT_OK || data==null)return;
+        if(request==PICK_POSTER){
+            try{
+                Uri uri=data.getData();
+                if(uri==null)throw new Exception("Aucune image sélectionnée");
+                String filename=EventPhotos.importUri(this,uri);
+                event.put("posterLocal",filename);
+                refreshPosterPreview();
+            }catch(Exception error){
+                Toast.makeText(this,"Impossible d'utiliser cette affiche : "+
+                    error.getMessage(),Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if(request==PICK_MEDIA) {
             int success=0,errors=0;
             java.util.ArrayList<Uri> selected=new java.util.ArrayList<>();
