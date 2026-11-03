@@ -1616,8 +1616,6 @@ public final class MainActivity extends Activity {
             new Thread(()->{
                 int added=0,errors=0;
                 String failure="";
-                String lastFilename="";
-                boolean lastVideo=false;
                 try{
                     AppStore localStore=new AppStore(getApplicationContext());
                     JSONObject event=localStore.event(target);
@@ -1628,15 +1626,13 @@ public final class MainActivity extends Activity {
                             if(mime!=null&&mime.startsWith("image/")){
                                 if(EventPhotos.gallery(event).length()>=40)
                                     throw new Exception("40 photos maximum");
-                                lastFilename=EventPhotos.importUri(this,uri);
-                                EventPhotos.append(event,lastFilename);
-                                lastVideo=false;
+                                String savedName=EventPhotos.importUri(this,uri);
+                                EventPhotos.append(event,savedName);
                             }else{
                                 if(EventVideos.list(event).length()>=EventVideos.MAX_COUNT)
                                     throw new Exception("30 vidéos maximum");
-                                lastFilename=EventVideos.importVideo(this,uri);
-                                EventVideos.append(event,lastFilename);
-                                lastVideo=true;
+                                String savedName=EventVideos.importVideo(this,uri);
+                                EventVideos.append(event,savedName);
                             }
                             added++;
                         }catch(Exception e){
@@ -1647,26 +1643,15 @@ public final class MainActivity extends Activity {
                     if(added>0)localStore.saveEvent(event);
                 }catch(Exception e){errors++;failure=e.getMessage();}
                 final int imported=added,rejected=errors;
-                final String errorText=failure,shareFilename=lastFilename;
-                final boolean shareIsVideo=lastVideo;
+                final String errorText=failure;
                 runOnUiThread(()->{
                     if(isFinishing())return;
                     store=new AppStore(this);
                     if(eventScreen&&currentEventId==target)showEvent(target);
                     message(imported+" média(s) ajouté(s)"+
-                        (rejected>0?" · "+rejected+" non importé(s) : "+errorText:""));
-                    if(imported>0 && !shareFilename.isEmpty()){
-                        NeonDialog.builder(this)
-                            .setTitle("Médias ajoutés")
-                            .setMessage("Partager le dernier média sur Instagram, dans les messages ou une autre application compatible ?")
-                            .setNegativeButton("Plus tard",null)
-                            .setPositiveButton("Partager",(dialog,which)->{
-                                java.io.File file=shareIsVideo?
-                                    EventVideos.file(this,shareFilename):
-                                    EventPhotos.file(this,shareFilename);
-                                EventGalleryActivity.shareFile(this,file,shareIsVideo,false);
-                            }).show();
-                    }
+                        (rejected>0?" · "+rejected+" non importé(s) : "+errorText:
+                         imported>0?" · utilise « Sélectionner » pour partager plusieurs médias.":""));
+
                 });
             },"NØCTIS-media-import").start();
             return;
