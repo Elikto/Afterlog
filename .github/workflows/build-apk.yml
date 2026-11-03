@@ -2,6 +2,8 @@ name: Compiler AfterLog APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - README.md
   workflow_dispatch:
 permissions:
   contents: write
@@ -27,24 +29,70 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           test -n "$SDKMANAGER" || { echo "sdkmanager introuvable"; exit 1; }
           "$SDKMANAGER" --install 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Identifier la version Android
+        id: appversion
+        shell: bash
+        run: |
+          VERSION="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION" || { echo "Version Android introuvable"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Construire l'APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Préparer le téléchargement
-        run: cp app/build/outputs/apk/debug/app-debug.apk AfterLog-v0.6.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk "AfterLog-v${{ steps.appversion.outputs.version }}.apk"
       - name: Conserver l'APK dans GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: AfterLog-Android-APK
-          path: AfterLog-v0.6.0.apk
+          path: AfterLog-v*.apk
           if-no-files-found: error
           retention-days: 30
       - name: Publier l'APK dans GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.appversion.outputs.version }}
         shell: bash
         run: |
-          if gh release view v0.6.0-debug >/dev/null 2>&1; then
-            gh release upload v0.6.0-debug AfterLog-v0.6.0.apk --clobber
+          TAG="v${VERSION}-debug"
+          APK="AfterLog-v${VERSION}.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
           else
-            gh release create v0.6.0-debug AfterLog-v0.6.0.apk --target "$GITHUB_SHA" --title "AfterLog v0.6.0 (test)" --notes "Version 0.6 : import Shotgun à venir et passés, progression d'accueil, vérifications périodiques et fiche événement enrichie. APK de debug. Données enregistrées localement. Sauvegarder au format JSON avant une réinstallation : la signature de debug peut changer." --prerelease
+            gh release create "$TAG" "$APK" --target "$GITHUB_SHA" --title "AfterLog v${VERSION} (test)" --notes "Version Android de test. Données enregistrées localement. Avant une désinstallation, exporter une sauvegarde JSON ; les APK debug peuvent être signés avec des clés différentes." --prerelease
+          fi
+      - name: Garder le bouton de téléchargement du README à jour
+        if: success()
+        continue-on-error: true
+        env:
+          VERSION: ${{ steps.appversion.outputs.version }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          readme = pathlib.Path("README.md")
+          current = readme.read_text(encoding="utf-8")
+          new_url = (
+              f"https://github.com/Elikto/Afterlog/releases/download/"
+              f"v{version}-debug/AfterLog-v{version}.apk"
+          )
+          current = re.sub(
+              r"https://github\.com/Elikto/Afterlog/releases/download/"
+              r"v\d+\.\d+\.\d+-debug/AfterLog-v\d+\.\d+\.\d+\.apk",
+              new_url,
+              current,
+          )
+          current = re.sub(r"Bêta v\d+\.\d+\.\d+", f"Bêta v{version}", current)
+          current = re.sub(r"AfterLog-v\d+\.\d+\.\d+\.apk", f"AfterLog-v{version}.apk", current)
+          readme.write_text(current, encoding="utf-8")
+          PY
+          if ! git diff --quiet -- README.md; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add README.md
+            git commit -m "docs: actualiser le bouton APK [skip ci]"
+            git push origin HEAD:main
           fi
