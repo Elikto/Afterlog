@@ -87,7 +87,12 @@ public final class ShotgunScheduledWorker extends Worker {
             for(JSONObject item:found) {
                 JSONObject existing=match(item);
                 if(TicketSelectionStore.isExcluded(ctx,item.optString("url")))continue;
-                if(existing==null || needsDetails(existing))missing.add(item);
+                boolean lineupIncomplete=existing!=null && needsArtistRefresh(existing);
+                long previous=existing==null?0:prefs.getLong(
+                    "artistRefresh_"+existing.optLong("id"),0);
+                if(existing==null || needsDetails(existing) ||
+                   (lineupIncomplete && now-previous>24L*60*60*1000))
+                    missing.add(item);
             }
             // Cap par contrôle pour ménager Shotgun et conserver une exécution brève.
             int total=Math.min(12,missing.size());
@@ -125,6 +130,10 @@ public final class ShotgunScheduledWorker extends Worker {
                 if(extracted.optString("poster").isEmpty())
                     extracted.put("poster",item.optString("poster"));
                 persist(extracted);
+                JSONObject saved=match(extracted);
+                if(saved!=null)
+                    prefs.edit().putLong("artistRefresh_"+saved.optLong("id"),
+                        System.currentTimeMillis()).apply();
                 countAdded++;
                 SyncState.save(ctx,SyncState.RUNNING,"Vérification périodique",
                     i+1,total,-1,"Nouvelles soirées et mises à jour");
@@ -235,7 +244,10 @@ public final class ShotgunScheduledWorker extends Worker {
     private JSONObject match(JSONObject incoming) {
         String url=normalize(incoming.optString("url"));
         for(JSONObject e:store.events()) {
-            if(!url.isEmpty()&&url.equals(normalize(e.optString("url"))))return e;
+            if(!url.isEmpty()&&
+               (url.equals(normalize(e.optString("url"))) ||
+                url.equals(normalize(e.optString("ticketUrl")))))
+                return e;
         }
         return null;
     }
@@ -243,6 +255,20 @@ public final class ShotgunScheduledWorker extends Worker {
         return entry.optString("poster").isEmpty() || entry.optString("date").isEmpty()||
             entry.optString("description").isEmpty() || entry.optString("venue").isEmpty();
     }
+    private static boolean needsArtistRefresh(JSONObject event){
+        JSONArray profiles=event.optJSONArray("artistProfiles");
+        if(event.optString("artists").trim().isEmpty() &&
+           (profiles==null||profiles.length()==0))return true;
+        if(profiles==null||profiles.length()==0)return true;
+        for(int i=0;i<profiles.length();i++){
+            JSONObject artist=profiles.optJSONObject(i);
+            if(artist==null)continue;
+            if(artist.optString("photo").isEmpty() &&
+               artist.optString("spotifyPhoto").isEmpty())return true;
+        }
+        return false;
+    }
+
     private void persist(JSONObject incoming) throws Exception {
         JSONObject old=match(incoming);
         if(old==null){store.saveEvent(incoming);SpotifyArtistBackfillWorker.schedule(getApplicationContext());return;}
