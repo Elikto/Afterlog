@@ -60,7 +60,7 @@ final class AppUpdater {
                 if(release==null) {
                     if(automatic)return;
                     ui(()->NeonDialog.builder(activity)
-                        .setTitle("NØCTIS est à jour")
+                        .setTitle("NØCTARIA est à jour")
                         .setMessage("Tu utilises déjà la dernière version disponible sur GitHub.")
                         .setPositiveButton("OK",null).show());
                     return;
@@ -69,7 +69,7 @@ final class AppUpdater {
                 if(!signer.isEmpty() && !signer.equals(installedSignerSha256())){
                     ui(()->NeonDialog.builder(activity)
                         .setTitle("Migration de signature nécessaire")
-                        .setMessage("NØCTIS utilise maintenant une clé permanente comme CyberQuiz, mais cette installation utilise une ancienne clé de test. Android ne permet pas de la remplacer directement.\n\nN'efface pas cette application sans avoir sauvegardé tes consommations et tes médias. Cette transition est nécessaire une seule fois ; ensuite, le bouton MAJ fonctionnera sur les prochaines versions.")
+                        .setMessage("NØCTARIA utilise maintenant une clé permanente comme CyberQuiz, mais cette installation utilise une ancienne clé de test. Android ne permet pas de la remplacer directement.\n\nN'efface pas cette application sans avoir sauvegardé tes consommations et tes médias. Cette transition est nécessaire une seule fois ; ensuite, le bouton MAJ fonctionnera sur les prochaines versions.")
                         .setNegativeButton("Fermer",null)
                         .setPositiveButton("Paramètres et sauvegarde",(d,w)->{
                             if(activity instanceof MainActivity)
@@ -128,7 +128,7 @@ final class AppUpdater {
             conn.setRequestProperty("User-Agent","AfterLog-Android-updater");
             int status=conn.getResponseCode();
             if(status==404)
-                throw new Exception("La distribution NØCTIS avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
+                throw new Exception("La distribution NØCTARIA avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
             if(status!=200)throw new Exception("GitHub HTTP "+status);
             JSONObject json;
             try(InputStream in=conn.getInputStream()) {
@@ -163,7 +163,7 @@ final class AppUpdater {
             apk.put("size",size);
             JSONObject release=new JSONObject();
             release.put("tag_name","v"+version);
-            release.put("body","Version stable signée pour les mises à jour NØCTIS sans réinstallation.");
+            release.put("body","Version stable signée pour les mises à jour NØCTARIA sans réinstallation.");
             release.put("signerSha256",signer);
             release.put("assets",new JSONArray().put(apk));
             return release;
@@ -201,7 +201,7 @@ final class AppUpdater {
         label.setPadding(0,dp(12),0,0);
         holder.addView(label);
         AlertDialog dialog=NeonDialog.builder(activity)
-            .setTitle("Mise à jour NØCTIS")
+            .setTitle("Mise à jour NØCTARIA")
             .setView(holder)
             .setNegativeButton("Annuler",(d,w)->canceled.set(true))
             .create();
@@ -278,7 +278,7 @@ final class AppUpdater {
             PackageInfo current=pm.getPackageInfo(activity.getPackageName(),flags);
             if(candidate==null)return "APK illisible.";
             if(!activity.getPackageName().equals(candidate.packageName))
-                return "Cet APK n'appartient pas à NØCTIS.";
+                return "Cet APK n'appartient pas à NØCTARIA.";
             if(candidate.versionCode<=current.versionCode)
                 return "La version téléchargée n'est pas plus récente.";
             Signature[] ours=signatures(current);
@@ -286,7 +286,7 @@ final class AppUpdater {
             if(ours==null || theirs==null || ours.length==0 || theirs.length==0 ||
                !Arrays.equals(ours,theirs)) {
                 return "Signature Android différente. Cette version ne peut pas remplacer directement l'application installée. "
-                    +"Exporte d'abord ta sauvegarde JSON dans NØCTIS → Réglages, puis installe la nouvelle version depuis GitHub. "
+                    +"Exporte d'abord ta sauvegarde JSON dans NØCTARIA → Réglages, puis installe la nouvelle version depuis GitHub. "
                     +"La mise à jour automatique nécessite une signature stable.";
             }
             return "";
@@ -320,7 +320,7 @@ final class AppUpdater {
         if(pendingApk==null||!pendingApk.isFile()){showStatus("APK introuvable");return;}
         if(Build.VERSION.SDK_INT>=26&&!activity.getPackageManager().canRequestPackageInstalls()){
             NeonDialog.builder(activity).setTitle("Autoriser les mises à jour")
-                .setMessage("Android doit autoriser NØCTIS à proposer l'installation de son APK. Autorise « Installer des applications inconnues » pour NØCTIS, puis reviens dans l'application.")
+                .setMessage("Android doit autoriser NØCTARIA à proposer l'installation de son APK. Autorise « Installer des applications inconnues » pour NØCTARIA, puis reviens dans l'application.")
                 .setNegativeButton("Annuler",null)
                 .setPositiveButton("Ouvrir les paramètres",(d,w)->{
                     waitingForPermission=true;
@@ -336,7 +336,7 @@ final class AppUpdater {
             intent.setDataAndType(UpdateFileProvider.uri(activity.getPackageName()),MIME);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setClipData(ClipData.newUri(activity.getContentResolver(),
-                "Mise à jour NØCTIS",UpdateFileProvider.uri(activity.getPackageName())));
+                "Mise à jour NØCTARIA",UpdateFileProvider.uri(activity.getPackageName())));
             if(intent.resolveActivity(activity.getPackageManager())==null)
                 throw new Exception("Installateur Android introuvable");
             activity.startActivity(intent);
