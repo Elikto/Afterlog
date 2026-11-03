@@ -17,9 +17,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * One consistent AfterLog dialog for every app-owned confirmation or input.
+ * One consistent NØCTIS dialog for every app-owned confirmation or input.
  * The Android AlertDialog is only a window host: all visible content and
- * buttons are drawn by AfterLog instead of the platform's grey dialog UI.
+ * buttons are drawn by NØCTIS instead of the platform's grey dialog UI.
  */
 final class NeonDialog {
     private static final int BG=Color.rgb(20,20,34);
@@ -86,7 +86,7 @@ final class NeonDialog {
             panel.setElevation(dp(context,18));
 
             TextView eyebrow=new TextView(context);
-            eyebrow.setText("✦  AFTERLOG");
+            eyebrow.setText("✦  NØCTIS");
             eyebrow.setTextColor(LILAC);
             eyebrow.setTextSize(10);
             eyebrow.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
