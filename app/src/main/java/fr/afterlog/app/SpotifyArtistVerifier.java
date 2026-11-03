@@ -75,7 +75,7 @@ final class SpotifyArtistVerifier {
         }catch(Exception ignored){return false;}
     }
     private static String normalize(String text){
-        String normalized=Normalizer.normalize(text.toLowerCase(Locale.ROOT),
+        String normalized=Normalizer.normalize(text.toLowerCase(Locale.ROOT).replace("ø","o").replace("Ø","o"),
             Normalizer.Form.NFD).replaceAll("\\p{M}","");
         return normalized.replaceAll("[^a-z0-9]+"," ").trim();
     }
