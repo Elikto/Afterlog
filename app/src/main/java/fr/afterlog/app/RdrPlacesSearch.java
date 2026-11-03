@@ -88,10 +88,7 @@ final class RdrPlacesSearch {
             lon=coordinates.getDouble(0);lat=coordinates.getDouble(1);
             location=feature.optJSONObject("properties")==null?query:
                 feature.getJSONObject("properties").optString("label",query);
-            if(lat<40||lat>52||lon<-6||lon>12)
-                return new Result(query,location,new ArrayList<>(),lat,lon,
-                    "La recherche des structures est disponible pour la France.");
-        }catch(Exception error){
+            }catch(Exception error){
             return new Result(query,"",new ArrayList<>(),Double.NaN,Double.NaN,
                 "Impossible de localiser cette adresse. Vérifie la connexion ou précise la ville.");
         }
@@ -180,7 +177,7 @@ final class RdrPlacesSearch {
         Exception last=null;
         for(String endpoint:new String[]{
             "https://overpass-api.de/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter"}){
+            "https://overpass.private.coffee/api/interpreter"}){
             try{return post(endpoint,query);}
             catch(Exception error){last=error;}
         }
