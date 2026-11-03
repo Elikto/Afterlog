@@ -162,6 +162,9 @@ public final class MainActivity extends Activity {
             logo.setContentDescription("Logo NØCTIS");
             branding.addView(logo,new LinearLayout.LayoutParams(dp(40),dp(40)));
             TextView brand=text("NØCTIS",26,Color.WHITE,true);
+            brand.getPaint().setShader(new android.graphics.LinearGradient(0,0,dp(125),0,
+                new int[]{Color.rgb(255,72,187),Color.rgb(203,177,255),Color.rgb(0,226,235)},
+                null,android.graphics.Shader.TileMode.CLAMP));
             brand.setGravity(Gravity.CENTER_VERTICAL);
             branding.addView(brand,new LinearLayout.LayoutParams(-2,dp(48)));
             bar.addView(branding,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -1330,7 +1333,7 @@ public final class MainActivity extends Activity {
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
-            intent.putExtra(Intent.EXTRA_TITLE,"afterlog-sauvegarde.json");
+            intent.putExtra(Intent.EXTRA_TITLE,"noctis-sauvegarde.json");
             startActivityForResult(intent,EXPORT);
         }),10);
         add(page,button("Importer une sauvegarde JSON",false,()->{
