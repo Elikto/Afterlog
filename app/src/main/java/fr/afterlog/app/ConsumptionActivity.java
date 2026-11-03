@@ -475,7 +475,7 @@ public final class ConsumptionActivity extends Activity {
         LinearLayout holder=column();
         holder.setPadding(dp(20),0,dp(20),0);
         holder.addView(name);
-        new AlertDialog.Builder(this)
+        NeonDialog.builder(this)
             .setTitle("Autre consommation")
             .setMessage("Indique son nom pour ton journal.")
             .setView(holder)
@@ -708,7 +708,7 @@ public final class ConsumptionActivity extends Activity {
     private void selectEcstasyPart(String part) {
         if(!editingPart.isEmpty() && !editingPart.equals(part) &&
             count!=savedPartCount(editingPart)){
-            new AlertDialog.Builder(this)
+            NeonDialog.builder(this)
                 .setTitle("Modification non validée")
                 .setMessage("Tu as modifié "+partName(editingPart)+
                     " sans appuyer sur ✓ OK. Abandonner cette modification ?")
@@ -936,7 +936,7 @@ public final class ConsumptionActivity extends Activity {
         }
     }
     private void confirmDelete(){
-        new AlertDialog.Builder(this)
+        NeonDialog.builder(this)
             .setTitle("Supprimer cette consommation ?")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Supprimer",(dialog,which)->{
