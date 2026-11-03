@@ -1,6 +1,7 @@
 package fr.afterlog.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
@@ -32,6 +33,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 /** Galerie privée plein écran : images avec zoom et vidéos Media3. */
 public final class EventGalleryActivity extends Activity {
@@ -46,6 +49,8 @@ public final class EventGalleryActivity extends Activity {
     }
     private final ArrayList<Item> items=new ArrayList<>();
     private int currentIndex=0;
+    private long eventId=0;
+    private final Set<String> selected=new HashSet<>();
     private FrameLayout root,stage;
     private LinearLayout bottom;
     private TextView position,type,external;
@@ -74,6 +79,7 @@ public final class EventGalleryActivity extends Activity {
             if(json!=null)event=new JSONObject(json);
             else event=new AppStore(this).event(getIntent().getLongExtra(EXTRA_EVENT_ID,0));
             if(event==null)throw new Exception("Soirée introuvable");
+            eventId=event.optLong("id",0);
             JSONArray photos=EventPhotos.gallery(event);
             for(int i=0;i<photos.length();i++){
                 String filename=photos.optString(i);
@@ -107,7 +113,7 @@ public final class EventGalleryActivity extends Activity {
         position=new TextView(this);position.setTextColor(Color.WHITE);
         position.setTextSize(16);position.setGravity(Gravity.CENTER);
         top.addView(position,new LinearLayout.LayoutParams(0,dp(52),1));
-        top.addView(control("↗",21,this::shareCurrent),
+        top.addView(control("✓",21,this::toggleSelection),
             new LinearLayout.LayoutParams(dp(52),dp(52)));
 
         bottom=new LinearLayout(this);
@@ -129,7 +135,7 @@ public final class EventGalleryActivity extends Activity {
         TextView spacer=new TextView(this);nav.addView(spacer,new LinearLayout.LayoutParams(0,dp(58),1));
         TextView next=control("›",34,()->navigate(1));
         nav.addView(next,new LinearLayout.LayoutParams(dp(65),dp(58)));
-        external=control("Partager sur les réseaux / messages",13,this::shareCurrent);
+        external=control("Sélectionner / partager les médias",13,this::shareSelected);
         LinearLayout.LayoutParams extLp=new LinearLayout.LayoutParams(-1,dp(46));
         extLp.topMargin=dp(10);
         bottom.addView(external,extLp);
@@ -138,9 +144,9 @@ public final class EventGalleryActivity extends Activity {
         LinearLayout.LayoutParams extraLp=new LinearLayout.LayoutParams(-1,dp(47));
         extraLp.topMargin=dp(7);
         bottom.addView(extras,extraLp);
-        TextView story=control("Story Instagram",12,this::shareInstagramStory);
+        TextView story=control("Story Instagram (sélection)",12,this::shareInstagramStory);
         extras.addView(story,new LinearLayout.LayoutParams(0,-1,1));
-        TextView other=control("Lecteur / Cast externe",12,this::openExternally);
+        TextView other=control("Supprimer ce média",12,this::confirmDelete);
         LinearLayout.LayoutParams otherLp=new LinearLayout.LayoutParams(0,-1,1);
         otherLp.leftMargin=dp(7);extras.addView(other,otherLp);
     }
@@ -156,7 +162,7 @@ public final class EventGalleryActivity extends Activity {
         releasePlayer();
         stage.removeAllViews();
         Item item=items.get(currentIndex);
-        position.setText((currentIndex+1)+" / "+items.size());
+        position.setText((currentIndex+1)+" / "+items.size()+(selected.contains(item.name)?"  ✓":"")+(selected.size()>0?"  · "+selected.size()+" choisi(s)":""));
         type.setText(item.video?"▶ VIDÉO":"PHOTO · pincer pour zoomer · glisser pour changer");
         if(!item.video){
             File photo=EventPhotos.file(this,item.name);
@@ -211,13 +217,95 @@ public final class EventGalleryActivity extends Activity {
         }
         shareFile(this,file,item.video,false);
     }
-    private void shareInstagramStory(){
-        Item item=items.get(currentIndex);
-        File file=currentFile();
-        if(file==null||!file.isFile()){
-            Toast.makeText(this,"Média introuvable",Toast.LENGTH_LONG).show();return;
+    private void toggleSelection(){
+        String name=items.get(currentIndex).name;
+        if(!selected.add(name))selected.remove(name);
+        showItem();
+    }
+    private void confirmDelete(){
+        if(eventId<=0){
+            Toast.makeText(this,"Suppression indisponible pour cette soirée non enregistrée.",
+                Toast.LENGTH_LONG).show();return;
         }
-        shareFile(this,file,item.video,true);
+        new AlertDialog.Builder(this).setTitle("Supprimer ce média ?")
+            .setMessage("La photo ou vidéo sera définitivement retirée de la soirée.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Supprimer",(dialog,which)->deleteCurrent()).show();
+    }
+    private void deleteCurrent(){
+        Item item=items.get(currentIndex);
+        try{
+            AppStore store=new AppStore(this);
+            JSONObject event=store.event(eventId);
+            if(event==null)throw new Exception("Soirée introuvable");
+            JSONArray old=item.video?EventVideos.list(event):EventPhotos.gallery(event);
+            JSONArray updated=new JSONArray();
+            boolean found=false;
+            for(int i=0;i<old.length();i++){
+                String name=old.optString(i);
+                if(name.equals(item.name)){found=true;continue;}
+                updated.put(name);
+            }
+            if(!found)throw new Exception("Média déjà supprimé");
+            event.put(item.video?"videos":"photos",updated);
+            store.saveEvent(event); // Enregistrer avant de supprimer le fichier local.
+            File file=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
+            if(file!=null)file.delete();
+            selected.remove(item.name);
+            items.remove(currentIndex);
+            if(items.isEmpty()){finish();return;}
+            currentIndex=Math.min(currentIndex,items.size()-1);
+            showItem();
+        }catch(Exception e){
+            Toast.makeText(this,"Suppression impossible : "+e.getMessage(),
+                Toast.LENGTH_LONG).show();
+        }
+    }
+    private ArrayList<Item> chosenItems(){
+        ArrayList<Item> chosen=new ArrayList<>();
+        for(Item item:items)if(selected.contains(item.name))chosen.add(item);
+        if(chosen.isEmpty())chosen.add(items.get(currentIndex));
+        return chosen;
+    }
+    private void shareSelected(){shareGroup(false);}
+    private void shareInstagramStory(){shareGroup(true);}
+    private void shareGroup(boolean instagram){
+        ArrayList<Item> chosen=chosenItems();
+        if(chosen.size()==1){
+            Item item=chosen.get(0);
+            File f=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
+            shareFile(this,f,item.video,instagram);return;
+        }
+        try{
+            ArrayList<Uri> uris=new ArrayList<>();
+            ClipData clip=null;
+            boolean hasPhotos=false,hasVideos=false;
+            for(Item item:chosen){
+                File f=item.video?EventVideos.file(this,item.name):EventPhotos.file(this,item.name);
+                if(f==null||!f.isFile())continue;
+                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".media",f);
+                uris.add(uri);
+                if(clip==null)clip=ClipData.newUri(getContentResolver(),"Médias AfterLog",uri);
+                else clip.addItem(new ClipData.Item(uri));
+                if(item.video)hasVideos=true;else hasPhotos=true;
+            }
+            if(uris.isEmpty())throw new Exception("Aucun fichier disponible");
+            Intent send=new Intent(Intent.ACTION_SEND_MULTIPLE);
+            send.setType(hasVideos?(hasPhotos?"*/*":"video/*"):"image/jpeg");
+            send.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
+            send.setClipData(clip);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if(instagram){
+                // L'API ADD_TO_STORY n'accepte qu'un média : pour plusieurs,
+                // utiliser le partage multiple et laisser Instagram les importer.
+                send.setPackage("com.instagram.android");
+                startActivity(send);
+            }else startActivity(Intent.createChooser(send,"Partager les médias sélectionnés"));
+        }catch(Exception e){
+            Toast.makeText(this,instagram?
+                "Instagram ne prend pas en charge ce partage multiple. Essaie le partage classique.":
+                "Impossible de partager les médias.",Toast.LENGTH_LONG).show();
+        }
     }
     static void shareFile(Activity activity,File file,boolean video,boolean instagramStory){
         if(file==null||!file.isFile()){
