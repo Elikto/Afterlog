@@ -661,85 +661,98 @@ public final class MainActivity extends Activity {
             return entry.optString("time")+" – "+entry.optString("timeEnd");
         return entry.optString("time");
     }
-    private void renderJournalFirst(long id) {
+    private String compactQuantity(JSONObject entry){
+        JSONObject parts=entry.optJSONObject("parts");
+        if(parts!=null){
+            int quarter=parts.optInt("quart"),half=parts.optInt("demi"),
+                whole=parts.optInt("entier");
+            StringBuilder quantity=new StringBuilder();
+            if(whole>0)quantity.append(whole).append(" entier");
+            if(half>0)quantity.append(quantity.length()>0?" + ":"").append(half).append(" demi");
+            if(quarter>0)quantity.append(quantity.length()>0?" + ":"").append(quarter).append(" quart");
+            if(quantity.length()>0)return quantity.toString();
+        }
+        JSONArray portions=entry.optJSONArray("portions");
+        if(portions!=null&&portions.length()>0){
+            int count=0;
+            for(int i=0;i<portions.length();i++){
+                JSONObject p=portions.optJSONObject(i);
+                if(p!=null)count+=p.optInt("count",0);
+            }
+            JSONObject first=portions.optJSONObject(0);
+            String size=first==null?"":first.optString("size");
+            return count+" "+(size.isEmpty()?"prise"+(count>1?"s":""):size.toLowerCase(Locale.FRANCE));
+        }
+        return entry.optString("quantity","1")+" "+entry.optString("unit","prise");
+    }
+    private void renderJournalFirst(long id){
         List<JSONObject> entries=store.entries(id);
         add(page,text("Mon journal de soirée",21,Color.WHITE,true),12);
         if(entries.isEmpty()){
             add(page,button("＋ Ajouter une consommation",true,
                 ()->editEntry(new JSONObject(),id)),13);
         }else{
-            // Trois vrais cercles plus petits par rangée, + après la dernière prise.
-            // La taille s'adapte à la largeur sans étirer les cercles en ovales.
-            final int columns=3;
+            // Cinq petites bulles rondes par rangée (~la moitié du diamètre initial).
+            final int columns=5;
             int availableDp=getResources().getConfiguration().screenWidthDp-42;
-            final int circleDp=Math.min(124,Math.max(92,(availableDp-8)/columns));
+            final int circleDp=Math.min(72,Math.max(56,(availableDp-20)/columns));
             final int count=entries.size()+1;
             for(int offset=0;offset<count;offset+=columns){
                 LinearLayout row=new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.TOP);
-                add(page,row,10);
+                add(page,row,8);
                 for(int slot=0;slot<columns;slot++){
                     int position=offset+slot;
                     LinearLayout.LayoutParams cellLayout=
                         new LinearLayout.LayoutParams(0,dp(circleDp),1f);
-                    cellLayout.setMargins(dp(3),0,dp(3),0);
+                    cellLayout.setMargins(dp(2),0,dp(2),0);
                     FrameLayout cell=new FrameLayout(this);
                     row.addView(cell,cellLayout);
                     if(position>=count)continue;
                     if(position==entries.size()){
-                        TextView plus=text("+",31,BG,true);
+                        TextView plus=text("+",27,BG,true);
                         plus.setGravity(Gravity.CENTER);
                         GradientDrawable circle=new GradientDrawable();
                         circle.setShape(GradientDrawable.OVAL);
                         circle.setColor(ACCENT);
                         plus.setBackground(circle);
                         plus.setContentDescription("Ajouter une consommation");
-                        plus.setElevation(dp(2));
+                        plus.setOnClickListener(v->editEntry(new JSONObject(),id));
                         cell.addView(plus,new FrameLayout.LayoutParams(
                             dp(circleDp),dp(circleDp),Gravity.CENTER));
-                        plus.setOnClickListener(v->editEntry(new JSONObject(),id));
                         continue;
                     }
                     JSONObject entry=entries.get(position);
                     LinearLayout bubble=column();
                     bubble.setGravity(Gravity.CENTER);
-                    bubble.setPadding(dp(10),dp(10),dp(10),dp(10));
+                    bubble.setPadding(dp(3),dp(5),dp(3),dp(5));
                     GradientDrawable circle=new GradientDrawable(
                         GradientDrawable.Orientation.TL_BR,
-                        new int[]{Color.rgb(46,40,70),Color.rgb(27,27,44)});
+                        new int[]{Color.rgb(47,41,70),Color.rgb(28,27,44)});
                     circle.setShape(GradientDrawable.OVAL);
-                    circle.setStroke(dp(1),Color.rgb(82,70,115));
+                    circle.setStroke(dp(1),Color.rgb(88,75,120));
                     bubble.setBackground(circle);
-                    bubble.setElevation(dp(2));
                     cell.addView(bubble,new FrameLayout.LayoutParams(
                         dp(circleDp),dp(circleDp),Gravity.CENTER));
                     String icon=ConsumptionActivity.iconFor(
                         entry.optString("category"),entry.optString("name"));
-                    TextView picture=text(icon,22,Color.WHITE,false);
+                    TextView picture=text(icon,21,Color.WHITE,false);
                     picture.setGravity(Gravity.CENTER);
-                    add(bubble,picture,2);
-                    TextView name=text(entry.optString("name","Prise"),
-                        12,Color.WHITE,true);
+                    add(bubble,picture,0);
+                    TextView name=text(entry.optString("name","Prise"),10,Color.WHITE,true);
                     name.setGravity(Gravity.CENTER);
-                    name.setMaxLines(1);
+                    name.setSingleLine(true);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,name,3);
-                    TextView summary=text(primaryQuantity(entry),10,ACCENT,true);
-                    summary.setGravity(Gravity.CENTER);
-                    summary.setMaxLines(2);
-                    summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    add(bubble,summary,0);
-                    String when=timeDescription(entry);
-                    if(!when.isEmpty()){
-                        TextView time=text(when,9,SOFT,false);
-                        time.setGravity(Gravity.CENTER);
-                        time.setMaxLines(1);
-                        time.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                        add(bubble,time,0);
-                    }
-                    bubble.setContentDescription("Voir la prise : "+
-                        entry.optString("name")+", "+primaryQuantity(entry));
+                    add(bubble,name,0);
+                    TextView quantity=text(compactQuantity(entry),9,ACCENT,true);
+                    quantity.setGravity(Gravity.CENTER);
+                    quantity.setSingleLine(true);
+                    quantity.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    add(bubble,quantity,0);
+                    bubble.setContentDescription("Détails "+entry.optString("name")+
+                        " · "+primaryQuantity(entry)+
+                        (timeDescription(entry).isEmpty()?"":" · "+timeDescription(entry)));
                     bubble.setOnClickListener(v->showEntryDetails(entry,id));
                 }
             }
@@ -768,40 +781,11 @@ public final class MainActivity extends Activity {
     }
 
     private void showEntryDetails(JSONObject entry,long eventId){
-        LinearLayout content=column();
-        content.setPadding(dp(18),dp(13),dp(18),dp(6));
-        add(content,text(ConsumptionActivity.iconFor(entry.optString("category"),
-            entry.optString("name"))+"  "+entry.optString("name"),
-            20,Color.WHITE,true),13);
-        add(content,text(primaryQuantity(entry),16,ACCENT,true),12);
-        add(content,text("Date : "+entry.optString("date"),14,SOFT,false),9);
-        String time=timeDescription(entry);
-        if(!time.isEmpty())add(content,text("Heure : "+time,14,SOFT,false),8);
-        String route=entry.optString("route");
-        if(!route.isEmpty() && (entry.optJSONArray("portions")==null ||
-            entry.optJSONArray("portions").length()==0))
-            add(content,text("Mode : "+("Autre".equals(route)?
-                entry.optString("routeOther"):route),14,SOFT,false),8);
-        if(entry.optDouble("cost",0)>0)
-            add(content,text(String.format(Locale.FRANCE,"Prix : %.2f €",
-                entry.optDouble("cost")),14,SOFT,false),8);
-        if(!entry.optString("notes").isEmpty())
-            add(content,text("Notes : "+entry.optString("notes"),14,SOFT,false),8);
-        AlertDialog popup=new AlertDialog.Builder(this)
-            .setTitle("Détails de la prise")
-            .setView(content)
-            .setPositiveButton("Modifier",(d,w)->editEntry(entry,eventId))
-            .setNeutralButton("Supprimer",(d,w)->new AlertDialog.Builder(this)
-                .setTitle("Supprimer cette prise ?")
-                .setMessage("Cette suppression est définitive.")
-                .setNegativeButton("Annuler",null)
-                .setPositiveButton("Supprimer",(a,b)->{
-                    store.deleteEntry(entry.optLong("id"));
-                    showEvent(eventId);
-                }).show())
-            .setNegativeButton("Fermer",null)
-            .create();
-        popup.show();
+        new EntryDetailsDialog(this,entry,primaryQuantity(entry),
+            timeDescription(entry),()->editEntry(entry,eventId),()->{
+                store.deleteEntry(entry.optLong("id"));
+                showEvent(eventId);
+            }).show();
     }
 
     private void renderArtistProfiles(JSONObject event) {
@@ -841,8 +825,11 @@ public final class MainActivity extends Activity {
                 String photo=artist.optString("photo");
                 String candidate=artist.optString("spotify");
                 String shotgun=artist.optString("shotgunUrl");
-                String search="https://open.spotify.com/search/"+Uri.encode(name);
-                final String[] target={search};
+                String direct=SpotifyArtistFinder.savedProfile(this,name);
+                if(direct.isEmpty())direct=SpotifyArtistFinder.trustedProfile(name);
+                if(direct.isEmpty() && SpotifyArtistVerifier.isArtistUrl(candidate))
+                    direct=candidate;
+                final String[] target={direct};
 
                 LinearLayout tile=column();
                 tile.setPadding(dp(6),dp(11),dp(6),dp(10));
@@ -890,32 +877,59 @@ public final class MainActivity extends Activity {
                 add(tile,destination,3);
 
                 Runnable openSpotify=()->{
-                    try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target[0])));}
-                    catch(Exception e){message("Impossible d'ouvrir Spotify.");}
+                    if(SpotifyArtistVerifier.isArtistUrl(target[0])){
+                        try{
+                            // App Spotify intercepte ce lien s'il est installé,
+                            // sinon Android ouvre la page de l'artiste sur le web.
+                            startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse(target[0])));
+                        }catch(Exception ignored){
+                            message("Impossible d'ouvrir ce profil Spotify.");
+                        }
+                    }else{
+                        // Ne pas rediriger vers Shotgun ou vers une recherche.
+                        android.widget.EditText field=new android.widget.EditText(this);
+                        field.setHint("https://open.spotify.com/artist/…");
+                        field.setSingleLine(true);
+                        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT |
+                            android.text.InputType.TYPE_TEXT_VARIATION_URI);
+                        new AlertDialog.Builder(this)
+                            .setTitle("Profil Spotify de "+name)
+                            .setMessage("Aucun compte Spotify direct n'a été confirmé automatiquement. Tu peux associer son vrai lien si tu le connais.")
+                            .setView(field)
+                            .setNegativeButton("Fermer",null)
+                            .setPositiveButton("Associer",(dialog,which)->{
+                                String link=field.getText().toString().trim();
+                                if(!SpotifyArtistVerifier.isArtistUrl(link)){
+                                    message("Il faut un lien direct open.spotify.com/artist/…");
+                                    return;
+                                }
+                                SpotifyArtistFinder.saveProfile(this,name,link);
+                                target[0]=link;
+                                spotifyMark.setVerified(true);
+                                destination.setText("Ouvrir Spotify");
+                                destination.setTextColor(Color.rgb(30,215,96));
+                                try{
+                                    startActivity(new Intent(Intent.ACTION_VIEW,
+                                        Uri.parse(link)));
+                                }catch(Exception ignored){}
+                            }).show();
+                    }
                 };
                 spotifyMark.setOnClickListener(v->openSpotify.run());
                 destination.setOnClickListener(v->openSpotify.run());
-                if(shotgun.startsWith("https://")&&
-                    (shotgun.contains("shotgun.live/"))) {
-                    frame.setContentDescription("Profil Shotgun de "+name);
-                    frame.setOnClickListener(v->{
-                        try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(shotgun)));}
-                        catch(Exception e){openSpotify.run();}
-                    });
-                }else {
-                    frame.setContentDescription("Artiste "+name+" : ouvrir Spotify");
-                    frame.setOnClickListener(v->openSpotify.run());
+                frame.setContentDescription("Profil Spotify de "+name);
+                frame.setOnClickListener(v->openSpotify.run());
+                title.setOnClickListener(v->openSpotify.run());
+                if(SpotifyArtistVerifier.isArtistUrl(target[0])){
+                    spotifyMark.setVerified(true);
+                    destination.setText("Ouvrir Spotify");
+                    destination.setTextColor(Color.rgb(30,215,96));
                 }
-                title.setOnClickListener(v->{
-                    if(shotgun.startsWith("https://")&&shotgun.contains("shotgun.live/")){
-                        try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(shotgun)));}
-                        catch(Exception e){openSpotify.run();}
-                    }else openSpotify.run();
-                });
-
                 // Vérification sur une source officielle :
                 // lien explicite Shotgun, sinon relation MusicBrainz puis nom Spotify.
-                destination.setText("Vérification…");
+                if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
+                    destination.setText("Vérification…");
                 new Thread(()->{
                     String verified=SpotifyArtistFinder.resolve(
                         getApplicationContext(),name,photo,candidate);
@@ -931,7 +945,8 @@ public final class MainActivity extends Activity {
                             spotifyMark.setContentDescription("Profil Spotify vérifié de "+name);
                             destination.setText("Profil Spotify");
                             destination.setTextColor(Color.rgb(30,215,96));
-                        }else destination.setText("Recherche Spotify");
+                        }else if(!SpotifyArtistVerifier.isArtistUrl(target[0]))
+                            destination.setText("Associer Spotify");
                         // Image Spotify vérifiée : utile quand Shotgun ne fournit pas
                         // de portrait, sans prétendre qu'il provient de Shotgun.
                         if(!imageUrl.isEmpty())
@@ -1013,13 +1028,7 @@ public final class MainActivity extends Activity {
     }
     private void pickMedia(long id){
         currentEventId=id;
-        Intent chooser=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        chooser.addCategory(Intent.CATEGORY_OPENABLE);
-        chooser.setType("*/*");
-        chooser.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
-        chooser.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivityForResult(Intent.createChooser(chooser,"Photos et vidéos"),EVENT_MEDIA_REQUEST);
+        startActivityForResult(MediaPicker.photosAndVideos(),EVENT_MEDIA_REQUEST);
     }
     private void renderEventPhotos(JSONObject event) {
         long eventId=event.optLong("id");

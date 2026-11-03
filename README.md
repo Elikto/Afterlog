@@ -1,3 +1,16 @@
+# AfterLog v0.15.0 — Galerie, bulles et Spotify
+
+**Mises à jour de cette version :**
+
+- Le bouton **+ Médias** ouvre le sélecteur de **photos et vidéos** Android avec sa galerie et ses albums, à la place de l'explorateur de fichiers. Sélection multiple.
+- **Bulles du journal** : vrais cercles de ~56–72 dp, cinq par rangée sur écran mobile, avec un court résumé. Les détails complets et l'heure restent visibles au toucher.
+- **Fiche de prise moderne** : fenêtre sombre et arrondie, liste des prises détaillées, actions Modifier / Supprimer avec confirmation personnalisée.
+- **Artistes Spotify** : tous les clics dans une carte visent désormais uniquement un profil **Spotify direct** confirmé, jamais Shotgun ou une recherche. Liens directement confirmés pour Perceval, Acidpach, Amygdala (DJ espagnol), Lekkerfaces et ZAPRAVKA.
+- Si un lien n'a pas été identifié avec certitude, la carte propose d'associer une adresse directe d'artiste Spotify plutôt que d'ouvrir une recherche ou de pointer vers le mauvais homonyme. La résolution automatique MusicBrainz reste active.
+- L'extraction des portraits Shotgun demeure indépendante et peut toujours être incomplète selon le site : il n'est pas garanti que les huit portraits soient présents.
+
+**Sauvegardes et mises à jour :** l'APK est conçu pour être signé avec la clé Android permanente configurée dans les secrets du dépôt. Conserver les photos et vidéos originales : elles ne sont pas comprises dans l'export JSON.
+
 # AfterLog — Android
 
 ## Version 0.14.0 — Correctifs de l'interface et des artistes

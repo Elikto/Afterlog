@@ -18,6 +18,30 @@ final class SpotifyArtistFinder {
     private static long lastMusicBrainzCall=0L;
     private static final String PREFS="afterlog_artist_lookup_v2";
 
+    // Profils exacts croisés avec la discographie publique Spotify.
+    // Pas de génération d'ID à partir du nom (source d'erreurs d'homonymie).
+    static String trustedProfile(String artist){
+        switch(normalize(artist)){
+            case "perceval":return "https://open.spotify.com/artist/3dJ5aHKA9m7zKAr0lX6rtb";
+            case "acidpach":return "https://open.spotify.com/artist/0Z1E5Ebqj4e5CYElhs1lwC";
+            case "lekkerfaces":return "https://open.spotify.com/artist/45Meh6B3L1TNh03On3y349";
+            case "zapravka":return "https://open.spotify.com/artist/4oCaLmRVMM4Ck4VGrmh4VC";
+            case "amygdala":return "https://open.spotify.com/artist/7BGTl5Swxc7pcXnSgqzSSM";
+            default:return "";
+        }
+    }
+    static String savedProfile(Context context,String name){
+        String profile=context.getSharedPreferences("afterlog_spotify_links",Context.MODE_PRIVATE)
+            .getString(normalize(name),"");
+        return SpotifyArtistVerifier.isArtistUrl(profile)?profile:"";
+    }
+    static void saveProfile(Context context,String name,String link){
+        if(SpotifyArtistVerifier.isArtistUrl(link))
+            context.getSharedPreferences("afterlog_spotify_links",Context.MODE_PRIVATE)
+                .edit().putString(normalize(name),link).apply();
+    }
+
+
     /**
      * Un candidat explicite ou une relation officielle MusicBrainz peut être
      * validé, mais seulement si nom ET vignette sont compatibles avec Shotgun.
@@ -25,6 +49,10 @@ final class SpotifyArtistFinder {
      */
     static String resolve(Context ctx,String artistName,String shotgunPortrait,String explicitLink){
         if(artistName==null||artistName.trim().isEmpty())return "";
+        String local=savedProfile(ctx,artistName);
+        if(!local.isEmpty())return local;
+        String documented=trustedProfile(artistName);
+        if(!documented.isEmpty())return documented;
         // Le profil officiel Shotgun peut pointer vers Spotify : vérifier le nom
         // affiché par Spotify, sans imposer que les deux portraits soient identiques.
         if(SpotifyArtistVerifier.isArtistUrl(explicitLink) &&

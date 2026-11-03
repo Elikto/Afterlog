@@ -196,12 +196,7 @@ public final class EventEditorActivity extends Activity {
         },time.getHour(),time.getMinute(),true).show();
     }
     private void pickMedia() {
-        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        startActivityForResult(Intent.createChooser(intent,"Photos et vidéos"),PICK_MEDIA);
+        startActivityForResult(MediaPicker.photosAndVideos(),PICK_MEDIA);
     }
     private void previewMedia(int index) {
         Intent intent=new Intent(this,EventGalleryActivity.class);
