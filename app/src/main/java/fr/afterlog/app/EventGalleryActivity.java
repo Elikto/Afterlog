@@ -285,7 +285,7 @@ public final class EventGalleryActivity extends Activity {
                 if(f==null||!f.isFile())continue;
                 Uri uri=FileProvider.getUriForFile(this,getPackageName()+".media",f);
                 uris.add(uri);
-                if(clip==null)clip=ClipData.newUri(getContentResolver(),"Médias AfterLog",uri);
+                if(clip==null)clip=ClipData.newUri(getContentResolver(),"Médias NØCTIS",uri);
                 else clip.addItem(new ClipData.Item(uri));
                 if(item.video)hasVideos=true;else hasPhotos=true;
             }
@@ -326,7 +326,7 @@ public final class EventGalleryActivity extends Activity {
             }
             share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             share.setClipData(ClipData.newUri(activity.getContentResolver(),
-                "AfterLog — média personnel",uri));
+                "NØCTIS — média personnel",uri));
             if(instagramStory)activity.startActivity(share);
             else activity.startActivity(Intent.createChooser(share,
                 "Partager la photo ou la vidéo"));
@@ -349,7 +349,7 @@ public final class EventGalleryActivity extends Activity {
             String mime=item.video?EventVideos.mimeFor(item.name):"image/jpeg";
             view.setDataAndType(uri,mime);
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            view.setClipData(ClipData.newUri(getContentResolver(),"AfterLog",uri));
+            view.setClipData(ClipData.newUri(getContentResolver(),"NØCTIS",uri));
             startActivity(Intent.createChooser(view,"Ouvrir ou diffuser avec une application compatible"));
         }catch(Exception e){
             Toast.makeText(this,"Aucune application disponible pour ouvrir ce média.",
