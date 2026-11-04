@@ -358,9 +358,7 @@ public final class MainActivity extends Activity {
         String mode=state.optString("state",SyncState.IDLE);
         // Seules les erreurs concernant les billets cochés sont pertinentes.
         // Ne pas réafficher un ancien compteur de "fiche non récupérée".
-        if(SyncState.IDLE.equals(mode) ||
-            (SyncState.DONE.equals(mode) &&
-             (allSelectedEventsPresent() || visibleFailureCount()==0))) {
+        if(SyncState.IDLE.equals(mode)) {
             syncPanel.removeAllViews();
             syncPanel.setVisibility(View.GONE);
             syncLastSignature="";
@@ -368,7 +366,8 @@ public final class MainActivity extends Activity {
         }
         syncPanel.setVisibility(View.VISIBLE);
         String signature=mode+"|"+state.optString("phase")+"|"+state.optInt("done")+
-            "|"+state.optInt("total")+"|"+state.optString("detail");
+            "|"+state.optInt("total")+"|"+state.optString("detail")+
+            "|"+state.optLong("eta");
         if(signature.equals(syncLastSignature))return;
         syncLastSignature=signature;
         syncPanel.removeAllViews();
@@ -406,19 +405,26 @@ public final class MainActivity extends Activity {
             return;
         }
         String heading=SyncState.RUNNING.equals(mode)?"Synchronisation Shotgun":
-            SyncState.DONE.equals(mode)?"Synchronisation terminée":
+            SyncState.DONE.equals(mode)?"Synchronisation complète":
+            SyncState.PARTIAL.equals(mode)?"Synchronisation incomplète":
             SyncState.BLOCKED.equals(mode)?"Synchronisation à reprendre":
             "Synchronisation interrompue";
         add(panel,text("↻  "+heading,17,Color.WHITE,true),8);
         add(panel,text(state.optString("phase"),14,SOFT,false),9);
         int done=state.optInt("done"),total=state.optInt("total");
+        int percent=total>0?(int)(100L*Math.max(0,done)/total):0;
+        // Only a final verified DONE can display 100% — no invisible or
+        // missing artist portrait is counted as a completed stage.
+        if(!SyncState.DONE.equals(mode))percent=Math.min(99,percent);
         ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-        bar.setMax(total>0?total:100);
+        bar.setMax(100);
         bar.setIndeterminate(total==0&&SyncState.RUNNING.equals(mode));
-        bar.setProgress(Math.min(Math.max(0,done),bar.getMax()));
+        bar.setProgress(percent);
         add(panel,bar,7);
-        String amount=total>0?done+" / "+total+" événements récupérés":
-            "Recherche de tous tes billets Shotgun…";
+        add(panel,text(percent+" %",18,ACCENT,true),4);
+        String amount=total>0?done+" / "+total+
+            " étapes validées (soirées + profils d'artistes)":
+            "Recherche de tes billets Shotgun…";
         add(panel,text(amount,13,ACCENT,true),5);
         long remaining=state.optLong("eta",-1);
         if(remaining>=0&&SyncState.RUNNING.equals(mode)&&total>0) {
@@ -438,7 +444,14 @@ public final class MainActivity extends Activity {
         }
         if(SyncState.RUNNING.equals(mode))
             add(panel,button("Arrêter la synchronisation",false,()->ShotgunSyncService.cancel(this)),0);
-        else if(!SyncState.DONE.equals(mode))
+        else if(SyncState.PARTIAL.equals(mode)){
+            add(panel,button("↻ Compléter les profils Spotify",false,()->{
+                SpotifyArtistBackfillWorker.refreshAll(this);
+                message("Recherche des artistes manquants lancée.");
+            }),8);
+            if(visibleFailureCount()>0)
+                add(panel,button("Rechercher à nouveau les soirées",false,this::connectShotgun),8);
+        }else if(!SyncState.DONE.equals(mode))
             add(panel,button("Reconnecter Shotgun",false,this::connectShotgun),0);
         if(!SyncState.RUNNING.equals(mode) && !SyncState.SELECTION.equals(mode))
             renderFailedEvents(panel);
