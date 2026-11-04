@@ -889,7 +889,7 @@ public final class MainActivity extends Activity {
         store=new AppStore(this);
         screen("Tous les artistes",this::showHome);
         add(page,text("Tous les artistes de tes soirées",20,Color.WHITE,true),7);
-        add(page,text("Photos des artistes et pages Spotify vérifiées. Les profils "+
+        add(page,text("Photos des artistes et comptes Spotify ou SoundCloud vérifiés. Les profils "+
             "introuvables restent signalés, sans attribuer le compte d'un homonyme.",
             13,SOFT,false),14);
         java.util.LinkedHashMap<String,JSONObject> indexed=new java.util.LinkedHashMap<>();
@@ -905,7 +905,7 @@ public final class MainActivity extends Activity {
                 if(current==null){
                     try{current=new JSONObject(original.toString());}catch(Exception ignored){continue;}
                     indexed.put(key,current);
-                }else for(String field:new String[]{"photo","spotify","spotifyPhoto","shotgunUrl","previewUrl"}){
+                }else for(String field:new String[]{"photo","spotify","soundcloud","spotifyPhoto","shotgunUrl","previewUrl"}){
                     String value=original.optString(field);
                     if(current.optString(field).isEmpty()&&!value.isEmpty())
                         try{current.put(field,value);}catch(Exception ignored){}
@@ -976,12 +976,13 @@ public final class MainActivity extends Activity {
         for(int k=0;k<ordered.length();k++){
             JSONObject item=ordered.optJSONObject(k);
             if(item==null)continue;
-            if(SpotifyArtistVerifier.isArtistUrl(item.optString("spotify")))linkedCount++;
+            if(SpotifyArtistVerifier.isArtistUrl(item.optString("spotify"))||
+                SoundCloudArtistFinder.validProfile(item.optString("soundcloud")))linkedCount++;
             if(item.optString("spotifyPhoto").startsWith("https://"))photoCount++;
         }
         add(page,text("Artistes · "+ordered.length(),14,SOFT,false),5);
         if(linkedCount<ordered.length()||photoCount<ordered.length()){
-            add(page,text(linkedCount+" profils Spotify · "+photoCount+
+            add(page,text(linkedCount+" profils Spotify/SoundCloud · "+photoCount+
                 " photos · recherche sur toutes les soirées",12,SOFT,false),6);
             add(page,button("↻ Compléter les artistes",false,()->{
                 SpotifyArtistBackfillWorker.refreshAll(this);
@@ -1017,6 +1018,7 @@ public final class MainActivity extends Activity {
                 if(direct.isEmpty()&&SpotifyArtistVerifier.isArtistUrl(candidate))
                     direct=candidate;
                 final String[] target={direct};
+                final String soundcloud=artist.optString("soundcloud");
 
                 FrameLayout tile=new FrameLayout(this);
                 GradientDrawable base=new GradientDrawable(
@@ -1090,6 +1092,10 @@ public final class MainActivity extends Activity {
                         }catch(Exception ignored){
                             message("Impossible d'ouvrir ce profil Spotify.");
                         }
+                    }else if(SoundCloudArtistFinder.validProfile(soundcloud)){
+                        try{startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse(soundcloud)));}
+                        catch(Exception error){message("Impossible d'ouvrir SoundCloud.");}
                     }else{
                         EditText input=new EditText(this);
                         input.setHint("https://open.spotify.com/artist/…");
@@ -1118,7 +1124,9 @@ public final class MainActivity extends Activity {
                 };
                 tile.setContentDescription(name+
                     (SpotifyArtistVerifier.isArtistUrl(target[0])?
-                    " · ouvrir sur Spotify":" · associer un profil Spotify"));
+                    " · ouvrir sur Spotify":
+                    SoundCloudArtistFinder.validProfile(soundcloud)?
+                        " · ouvrir sur SoundCloud":" · associer un profil musical"));
                 tile.setOnClickListener(v->openSpotify.run());
 
                 // Music is optional: display a button only when Shotgun
