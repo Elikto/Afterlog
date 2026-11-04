@@ -355,7 +355,8 @@ function renderEvent(event){
  '<p class="muted small">Appuie sur un média pour l’ouvrir ou active « Sélectionner » pour un partage multiple.</p></section>'+
  ((String(event.origin||'').toLowerCase().includes('shotgun')||/^https:\/\/(?:[a-z0-9-]+\.)?shotgun\.live\/(?:[a-z]{2}\/)?(?:events|festivals)\//i.test(event.url||''))?
  '<section class="section"><h2>À propos</h2><p class="detail-description">'+
- esc(event.shotgunAbout||'Description « À propos » non encore récupérée sur la fiche Shotgun.')+
+ esc(event.shotgunAboutSource==='event_section'&&event.shotgunAbout?
+  event.shotgunAbout:'Description « À propos » non encore récupérée sur la fiche Shotgun.')+
  '</p></section>':
  (event.description?'<section class="section"><h2>À propos</h2><p class="detail-description">'+
  esc(event.description)+'</p></section>':''))+
