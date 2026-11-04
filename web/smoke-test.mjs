@@ -72,7 +72,9 @@ await pause(60);
 assert.ok(window.document.body.textContent.includes('MDMA'),'history navigation reveals the saved substance');
 click('[data-action="settings"]');
 await pause(45);
-assert.ok(window.document.body.textContent.includes('Importer une sauvegarde Android'),'Android import offered');
+assert.ok(window.document.body.textContent.includes('Importer JSON ou archive complète'),'archive import offered');
+assert.ok(window.document.body.textContent.includes('Sauvegarder avec photos et vidéos'),'complete backup action offered');
+assert.ok(window.NoctariaBackup && typeof window.NoctariaBackup.exportFull==='function','full backup module loaded');
 const rows=await new Promise((resolve,reject)=>{
  const req=indexedDB.open('noctaria-pwa-v1',1);
  req.onsuccess=()=>{
