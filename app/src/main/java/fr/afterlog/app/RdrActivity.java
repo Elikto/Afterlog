@@ -240,8 +240,14 @@ public final class RdrActivity extends Activity {
             @Override public void afterTextChanged(Editable text){}
         });
         city.setOnItemClickListener((parent,view,position,id)->{
-            if(position<0||position>=suggestions.size())return;
-            RdrPlacesSearch.City option=suggestions.get(position);
+            // AutoCompleteTextView filters the adapter: position in the popup
+            // is not necessarily the original IGN suggestion index.
+            String displayed=String.valueOf(parent.getItemAtPosition(position));
+            RdrPlacesSearch.City option=null;
+            for(RdrPlacesSearch.City candidate:suggestions){
+                if(candidate.label.equals(displayed)){option=candidate;break;}
+            }
+            if(option==null)return;
             filling[0]=true;
             city.setText(option.label);
             city.setSelection(city.length());
