@@ -244,54 +244,6 @@ function entryLabel(e){
  if(Array.isArray(e.portions)&&e.portions.length)return e.portions.map(p=>String(p.count||1)+' '+(p.size||'prise')).join(', ');
  return String(e.quantity||1)+' '+String(e.unit||'prise');
 }
-function flags(entries){
- const risks=[],all=[...state.entries];
- const mdma=e=>/ecstasy|mdma/i.test(e.name||'');
- const alcohol=e=>e.category==='Alcool';
- const onDay=(e,d)=>e.date===d;
- const days=[...new Set(entries.map(x=>x.date).filter(Boolean))];
- for(const d of days){
-  const items=all.filter(e=>onDay(e,d));
-  const alc=items.some(alcohol);
-  const has=name=>items.some(e=>name.test(e.name||''));
-  if(alc&&has(/ghb|gbl/i))risks.push({high:true,title:'GHB / GBL et alcool le même jour',body:"Association présentant un risque important de perte de connaissance et de ralentissement respiratoire. Les horaires réels ne sont pas confirmés.",link:SOURCE.all});
-  if(alc&&has(/k[ée]tamine/i))risks.push({high:true,title:'Kétamine et alcool le même jour',body:"Association déconseillée : sédation, troubles de la conscience et accidents possibles.",link:SOURCE.ketamine});
-  if(alc&&has(/mdma|ecstasy/i))risks.push({high:false,title:'MDMA / ecstasy et alcool',body:"Association déconseillée, notamment en raison des risques de surchauffe et de déshydratation.",link:SOURCE.mdma});
-  if(alc&&has(/coca[iï]ne/i))risks.push({high:true,title:'Cocaïne et alcool',body:"L'association entraîne la formation de cocaéthylène, associée à des risques cardiovasculaires accrus.",link:SOURCE.cocaine});
-  const glasses=items.filter(alcohol).reduce((n,e)=>n+Number(e.quantity||0),0);
-  if(glasses>2)risks.push({high:false,title:'Alcool : '+glasses+' verres notés le '+formatDate(d),body:"Le repère français est de 2 verres standards maximum par jour, et pas tous les jours. Un « verre » saisi ne correspond pas forcément à un verre standard.",link:SOURCE.alcohol});
- }
- const current=entries.filter(mdma);
- for(const x of current){
-  const here=new Date(x.date+'T12:00:00').getTime();
-  const other=all.filter(y=>mdma(y)&&String(y.id)!==String(x.id)&&y.date);
-  const nearest=other.map(y=>Math.abs(new Date(y.date+'T12:00:00').getTime()-here)/864e5).filter(Number.isFinite).sort((a,b)=>a-b)[0];
-  if(nearest!==undefined&&nearest>0&&nearest<42){
-   risks.push({high:false,title:'MDMA / ecstasy : prises espacées de '+Math.round(nearest)+' jours',body:"Des consommations ont été consignées dans des soirées rapprochées. Les recommandations de réduction des risques préconisent des pauses de plusieurs semaines ; aucun intervalle n'annule le risque.",link:SOURCE.mdma});
-   break;
-  }
- }
- const months=new Map();
- for(const e of all.filter(alcohol)){
-  if(!e.date)continue;
-  const dt=new Date(e.date+'T12:00:00');
-  if(Number.isNaN(dt.getTime()))continue;
-  const monday=new Date(dt);monday.setDate(dt.getDate()-(dt.getDay()+6)%7);
-  const key=monday.toISOString().slice(0,10);
-  months.set(key,(months.get(key)||0)+Number(e.quantity||0));
- }
- for(const x of entries.filter(alcohol)){
-  const dt=new Date(x.date+'T12:00:00');
-  if(Number.isNaN(dt.getTime()))continue;
-  const monday=new Date(dt);monday.setDate(dt.getDate()-(dt.getDay()+6)%7);
-  const key=monday.toISOString().slice(0,10);
-  if((months.get(key)||0)>10){
-   risks.push({high:false,title:'Alcool : plus de 10 verres notés cette semaine',body:"Le repère de Santé publique France est de 10 verres standards par semaine au maximum. L'application ne connaît pas le volume et le degré des verres déclarés.",link:SOURCE.alcohol});
-   break;
-  }
- }
- return risks.filter((r,i,a)=>a.findIndex(x=>x.title===r.title)===i);
-}
 function risksHtml(entries){
  const warnings=window.NoctariaParity?
    window.NoctariaParity.warnings(entries,state.entries):flags(entries);
