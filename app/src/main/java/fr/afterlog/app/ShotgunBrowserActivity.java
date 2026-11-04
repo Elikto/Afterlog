@@ -81,7 +81,7 @@ public final class ShotgunBrowserActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         header.addView(actions);
         button(actions,"Importer la soirée",this::importCurrent,1);
-        button(actions,"Mes billets passés",this::beginDiscovery,1);
+        button(actions,"↻ Synchroniser mes billets",this::beginDiscovery,1);
 
         web = new WebView(this);
         discovery=new ShotgunTicketDiscovery(this,web,status,this::onTicketsFound);
@@ -117,7 +117,7 @@ public final class ShotgunBrowserActivity extends Activity {
                         .postDelayed(ShotgunBrowserActivity.this::importCurrent,2200);
                 }
                 else if(discovery!=null && discovering)discovery.pageFinished();
-                else status.setText("Shotgun connecté : ouvre Mes billets → Passés si nécessaire.");
+                else status.setText("NØCTARIA lit tes trois listes de billets automatiquement après connexion.");
 
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error) {
@@ -219,11 +219,18 @@ public final class ShotgunBrowserActivity extends Activity {
         try {
             TicketSelectionStore.saveFound(this,tickets);
             SyncState.save(this,SyncState.SELECTION,
-                tickets.length()+" soirée(s) passée(s) détectée(s)",
+                tickets.length()+" soirée(s) trouvée(s) dans les trois listes",
                 0,tickets.length(),-1,
-                "Choisis les événements à synchroniser.");
+                "Import automatique après la connexion Shotgun.");
             discovering=false;
             if(discovery!=null)discovery.stop();
+            if(tickets.length()>0){
+                AutoSyncScheduler.enable(this);
+                ShotgunSyncService.importSelected(this);
+                toast("Synchronisation lancée pour "+tickets.length()+" soirée(s).");
+            }else{
+                toast("Aucune soirée trouvée dans les trois listes Shotgun.");
+            }
             setResult(RESULT_OK);
             finish();
         }catch(Exception e){
