@@ -66,6 +66,16 @@ final class TicketSelectionStore {
         }
         persist(context,items);
     }
+    /** Save one complete selection atomically; avoids one disk write per event. */
+    static void chooseIndices(Context ctx,Set<Integer> selected){
+        JSONArray items=list(ctx);
+        for(int i=0;i<items.length();i++){
+            JSONObject item=items.optJSONObject(i);
+            if(item!=null)try{item.put("selected",selected.contains(i));}
+            catch(Exception ignored){}
+        }
+        persist(ctx,items);
+    }
     private static void persist(Context ctx,JSONArray items) {
         prefs(ctx).edit().putString("pending",items.toString()).apply();
     }
