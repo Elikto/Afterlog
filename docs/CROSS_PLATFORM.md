@@ -76,3 +76,16 @@ Aucun abonnement développeur Apple nécessaire pour la PWA.
 - iPhone : la recherche de communes et les services RDR proches sont disponibles ; l'accès automatisé au compte Shotgun personnel reste indisponible sur la PWA.
 - Identité utilisateur : toujours NØCTARIA. Les anciens identifiants de package, formats JSON et chemins de téléchargement sont gardés uniquement pour la compatibilité.
 
+
+## 0.18.9 — Fiches événements et artistes
+
+- Android : sélection précochée avec petites affiches après recherche Shotgun
+  invisible ; accueil avec progression des soirées et des artistes.
+- Statut partiel si une fiche, un compte Spotify ou un portrait reste manquant :
+  100 % réservé aux imports intégralement vérifiés.
+- Android et iOS PWA : annuaire de tous les artistes du journal, portraits
+  circulaires et liens Spotify connus.
+- Le texte À propos de Shotgun est sauvegardé sans effacer les souvenirs.
+- Un extrait musical n'est proposé que lorsqu'un lien de lecture officiel
+  est réellement présent, sans copier ni héberger la musique.
+- Les tests ne remplacent pas une vérification avec un compte Shotgun réel.
