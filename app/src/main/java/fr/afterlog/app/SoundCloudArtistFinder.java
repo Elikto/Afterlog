@@ -52,17 +52,20 @@ final class SoundCloudArtistFinder {
             return ArtistNameMatcher.compatible(title,name);
         }catch(Exception ignored){return false;}
     }
+    static String knownProfile(String name){
+        for(String variant:ArtistNameMatcher.variants(name)){
+            String key=ArtistNameMatcher.normalized(variant);
+            if(key.equals("maissouille"))return "https://soundcloud.com/maissouille";
+            if(key.equals("skone"))return "https://soundcloud.com/skonebzh";
+        }
+        return "";
+    }
     static String find(String name,String explicit){
         List<String> alternatives=ArtistNameMatcher.variants(name);
         if(alternatives.isEmpty())return "";
         if(validProfile(explicit)&&matches(explicit,name))return explicit;
-        // Maissouille is verified from his booking agency's artist links.
-        for(String variant:alternatives){
-            if(ArtistNameMatcher.normalized(variant).equals("maissouille"))
-                return "https://soundcloud.com/maissouille";
-            if(ArtistNameMatcher.normalized(variant).equals("skone"))
-                return "https://soundcloud.com/skonebzh";
-        }
+        String linked=knownProfile(name);
+        if(!linked.isEmpty())return linked;
         try{
             LinkedHashSet<String> candidates=new LinkedHashSet<>();
             for(String variant:alternatives){
