@@ -35,6 +35,8 @@ const html=[
 const result=inspect(html);
 assert.ok(result.shotgunAbout.includes('Le festival rassemble plusieurs scènes'),
  'event À propos must come from the actual Shotgun section');
+assert.equal(result.shotgunAboutSource,'event_section',
+ 'the saved description is verified against the public event À propos section');
 assert.ok(result.shotgunAbout.includes('Ouverture des portes'),
  'all paragraphs from the source À propos must be retained');
 assert.equal(result.description,'Un court résumé marketing.',
@@ -91,4 +93,18 @@ assert.ok(android.includes('Temps total restant estimé'),
 assert.ok(android.includes('frenchDate(e.optString("date"))'),
  'home event dates use French long display, not ISO');
 
+const backfill=readFileSync(path.join(root,
+ 'app/src/main/java/fr/afterlog/app/ShotgunAboutBackfillWorker.java'),'utf8');
+const publicParser=readFileSync(path.join(root,
+ 'app/src/main/java/fr/afterlog/app/ShotgunAboutExtractor.java'),'utf8');
+assert.ok(backfill.includes('ShotgunAboutExtractor.readPublic(url)'),
+ 'previously imported events are automatically refreshed from their public source');
+assert.ok(backfill.includes('latest.put("shotgunAboutSource","event_section")'),
+ 'legacy corrections carry verified provenance');
+assert.ok(publicParser.includes('String extract(Document doc)'),
+ 'URL-based imports use the actual event À propos extraction');
+assert.ok(main.includes('ShotgunAboutBackfillWorker.schedule(this)'),
+ 'existing evenings are refreshed automatically at NØCTARIA startup');
+assert.ok(main.includes('"event_section".equals(event.optString("shotgunAboutSource"))'),
+ 'event detail never mislabels an unverified SEO snippet as Shotgun À propos');
 console.log('NØCTARIA event extraction OK: full À propos, explicit official preview, artist directory and strict completion');
