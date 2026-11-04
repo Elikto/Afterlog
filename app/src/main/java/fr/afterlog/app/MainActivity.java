@@ -358,7 +358,7 @@ public final class MainActivity extends Activity {
         String mode=state.optString("state",SyncState.IDLE);
         // Seules les erreurs concernant les billets cochés sont pertinentes.
         // Ne pas réafficher un ancien compteur de "fiche non récupérée".
-        if(SyncState.IDLE.equals(mode)) {
+        if(SyncState.IDLE.equals(mode)||SyncState.DONE.equals(mode)) {
             syncPanel.removeAllViews();
             syncPanel.setVisibility(View.GONE);
             syncLastSignature="";
@@ -398,7 +398,7 @@ public final class MainActivity extends Activity {
             add(panel,text("⚠  Import Shotgun à reprendre",17,Color.WHITE,true),9);
             add(panel,text(state.optString("phase"),14,SOFT,false),12);
             add(panel,button("Ouvrir mes billets sur Shotgun",false,this::connectShotgun),8);
-            add(panel,button("Masquer cet avertissement",false,()->{
+            add(panel,button("Masquer",false,()->{
                 SyncState.save(this,SyncState.IDLE,"",0,0,-1,"");
                 syncLastSignature="";
                 renderSyncProgress();
@@ -457,8 +457,17 @@ public final class MainActivity extends Activity {
             }),8);
             if(visibleFailureCount()>0)
                 add(panel,button("Rechercher à nouveau les soirées",false,this::connectShotgun),8);
-        }else if(!SyncState.DONE.equals(mode))
-            add(panel,button("Reconnecter Shotgun",false,this::connectShotgun),0);
+            add(panel,button("Masquer",false,()->{
+                SyncState.save(this,SyncState.IDLE,"",0,0,-1,"");
+                syncLastSignature="";renderSyncProgress();
+            }),0);
+        }else{
+            add(panel,button("Reconnecter Shotgun",false,this::connectShotgun),8);
+            add(panel,button("Masquer",false,()->{
+                SyncState.save(this,SyncState.IDLE,"",0,0,-1,"");
+                syncLastSignature="";renderSyncProgress();
+            }),0);
+        }
         if(!SyncState.RUNNING.equals(mode) && !SyncState.SELECTION.equals(mode))
             renderFailedEvents(panel);
         add(syncPanel,panel,18);
