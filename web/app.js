@@ -59,6 +59,21 @@ const safeSpotify = src => {
  const url=safeImage(src);
  return /^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?artist\/[a-zA-Z0-9]{22}(?:[/?#].*)?$/.test(url)?url:'';
 };
+const safePreview = src => {
+ const href=safeImage(src);
+ if(!href)return '';
+ try{
+  const u=new URL(href),host=u.hostname.toLowerCase(),path=u.pathname;
+  if(host==='open.spotify.com'&&/^\/(?:embed\/)?track\/[A-Za-z0-9]{22}\/?$/.test(path))
+   return u.origin+path;
+  if(host==='soundcloud.com'&&/^\/[^/]+\/[^/]+\/?$/.test(path)&&
+    !/^\/(sets|pages|tags|discover)\//.test(path))return u.origin+path;
+  if(host==='w.soundcloud.com'&&path==='/player/'&&u.searchParams.has('url'))return href;
+  if((host==='shotgun.live'||host.endsWith('.shotgun.live'))&&
+   /^\/(?:[a-z]{2}\/)?artists\/[^/]+\/music\/?$/.test(path))return u.origin+path;
+ }catch(_){}
+ return '';
+};
 const artistsOf = e => {
  const list = [];
  const seen = new Set();
@@ -71,6 +86,44 @@ const artistsOf = e => {
  }
  return list;
 };
+function artistCards(artists){
+ return '<div class="artist-grid">'+artists.map(a=>{
+  const photo=safeImage(a.spotifyPhoto||a.photo||'');
+  const spotify=safeSpotify(a.spotify)||safeSpotify(window.NoctariaTrustedSpotify?.[
+   String(a.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+   .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()]||'');
+  const preview=safePreview(a.previewUrl);
+  return '<div class="artist-tile"><button type="button" class="artist-card" data-action="artist" data-name="'+
+   aesc(a.name)+'" data-spotify="'+aesc(spotify)+'" title="'+aesc(a.name)+'">'+
+   '<span class="artist-letter">'+esc((a.name||'?')[0].toUpperCase())+'</span>'+
+   (photo?'<img class="artist-image" loading="lazy" src="'+aesc(photo)+'" alt="" onerror="this.remove()">':'')+
+   '<span class="artist-shade"></span><span class="spotify-badge '+(spotify?'':'unlinked')+'">≋</span>'+
+   '<span class="artist-name">'+esc(a.name)+'</span></button>'+
+   (preview?'<button type="button" class="artist-preview" data-action="artist-preview" data-url="'+
+    aesc(preview)+'" aria-label="Écouter un extrait officiel de '+aesc(a.name)+'">▶ Extrait</button>':'')+
+   '</div>';
+ }).join('')+'</div>';
+}
+function renderArtists(){
+ const map=new Map();
+ for(const event of state.events)for(const artist of artistsOf(event)){
+  const name=String(artist.name||'').trim(),key=name.toLocaleLowerCase('fr');
+  if(!key)continue;
+  const previous=map.get(key);
+  if(!previous){map.set(key,{...artist});continue;}
+  for(const field of ['photo','spotifyPhoto','spotify','shotgunUrl','previewUrl'])
+   if(!previous[field]&&artist[field])previous[field]=artist[field];
+ }
+ const artists=[...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+ const profiles=artists.filter(x=>safeSpotify(x.spotify)).length;
+ const photos=artists.filter(x=>safeImage(x.spotifyPhoto||x.photo)).length;
+ screen.innerHTML='<button class="back" data-action="home">‹ Mes soirées</button>'+
+ '<div class="page-head"><div><p class="eyebrow">NØCTARIA · MES ARTISTES</p>'+
+ '<h1>Tous les artistes</h1><p class="kicker">'+artists.length+' artistes · '+
+ profiles+' profils Spotify renseignés · '+photos+' portraits</p></div></div>'+
+ (artists.length?artistCards(artists):'<p class="card">Synchronise ou ajoute des soirées pour retrouver les artistes.</p>')+
+ '<div class="section">'+actionBtn('↻ Vérifier les profils Spotify','spotify-refresh','','block')+'</div>';
+}
 function tx(store,mode,job){
  return new Promise((resolve,reject)=>{
   const transaction=state.db.transaction(store,mode);
@@ -166,7 +219,7 @@ function scrollTop(){window.scrollTo({top:0,behavior:'instant'});}
 function parseRoute(){
  const raw=location.hash.replace(/^#/,'');
  if(raw.startsWith('event/')){state.route='event';state.eventId=decodeURIComponent(raw.slice(6));}
- else if(['tracking','settings','rdr'].includes(raw))state.route=raw;
+ else if(['tracking','settings','rdr','artists'].includes(raw))state.route=raw;
  else state.route='home';
 }
 function navigate(route){
@@ -198,6 +251,7 @@ async function render(){
  }else if(state.route==='tracking')renderTracking();
  else if(state.route==='settings')renderSettings();
  else if(state.route==='rdr')renderRdr();
+ else if(state.route==='artists')renderArtists();
  else renderHome();
  setNav(state.route==='event'?'home':state.route);
 }
@@ -210,7 +264,8 @@ function renderHome(){
  actionBtn('＋ Soirée','new-event','','primary')+
  actionBtn('🎟 Shotgun','shotgun')+
  '</div><div class="button-row home-buttons">'+
- actionBtn('♡ RDR','rdr')+actionBtn('Suivi','tracking')+'</div>'+
+ actionBtn('♡ RDR','rdr')+actionBtn('Suivi','tracking')+'</div>'+ 
+ '<div class="button-row home-buttons">'+actionBtn('♫ Tous les artistes','artists')+'</div>'+
  '<div class="heading-row"><h2>MES SOIRÉES · '+events.length+'</h2></div>'+
  (events.length?events.map(event=>{
   const entries=state.entries.filter(e=>byId(e.eventId)===byId(event.id));
@@ -264,14 +319,7 @@ function renderEvent(event){
    (state.selectionMode?'<span class="check">'+(selected?'✓':'')+'</span>':'')+'</button>';
  }).join('')+'</div>':'<div class="empty"><p class="muted">Ajoute tes photos et vidéos de la soirée.</p></div>';
  const lineUp=artists.length?'<section class="section"><div class="heading-row"><h2>Line-up</h2><span class="pill">'+artists.length+' artistes</span></div>'+
- '<div class="artist-grid">'+artists.map(a=>{
-  const photo=safeImage(a.spotifyPhoto||a.photo||'');
-  const spotify=safeSpotify(a.spotify);
-  return '<button type="button" class="artist-card" data-action="artist" data-name="'+aesc(a.name)+'" data-spotify="'+aesc(spotify)+'" title="'+aesc(a.name)+'">'+
-   '<span class="artist-letter">'+esc((a.name||'?')[0].toUpperCase())+'</span>'+
-   (photo?'<img class="artist-image" loading="lazy" src="'+aesc(photo)+'" alt="" onerror="this.remove()">':'')+
-   '<span class="artist-shade"></span><span class="spotify-badge '+(spotify?'':'unlinked')+'">≋</span><span class="artist-name">'+esc(a.name)+'</span></button>';
- }).join('')+'</div><div style="margin-top:12px">'+actionBtn('↻ Compléter les artistes Spotify','spotify-refresh','','tiny')+'</div></section>':'';
+ artistCards(artists)+'<div style="margin-top:12px">'+actionBtn('↻ Compléter les artistes Spotify','spotify-refresh','','tiny')+'</div></section>':'';
  screen.innerHTML='<button class="back" data-action="home">‹ Mes soirées</button>'+
  posterHtml(event,true)+
  '<div class="button-row" style="margin:-8px 0 19px">'+actionBtn('🖼 Modifier l’affiche','choose-poster','data-id="'+aesc(event.id)+'"','tiny')+
@@ -559,6 +607,7 @@ async function act(action,button){
  switch(action){
   case 'home':navigate('home');break;
   case 'tracking':navigate('tracking');break;
+  case 'artists':navigate('artists');break;
   case 'tracking-period':
    window.NoctariaTracking?.mode(button.dataset.mode);
    render();break;
@@ -655,6 +704,11 @@ async function act(action,button){
    await act('delete-selected',button);break;
   }
   case 'close-viewer':closeViewer();break;
+  case 'artist-preview':{
+   const url=safePreview(button.dataset.url);
+   if(url)window.open(url,'_blank','noopener,noreferrer');
+   break;
+  }
   case 'artist':{
    const url=safeSpotify(button.dataset.spotify);
    if(url)window.open(url,'_blank','noopener,noreferrer');
