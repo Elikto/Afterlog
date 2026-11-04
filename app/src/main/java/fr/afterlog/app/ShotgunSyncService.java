@@ -717,10 +717,15 @@ public final class ShotgunSyncService extends Service {
             int remaining=SyncFailureStore.actionableCount(this);
             String summary=remaining==0 ? "Synchronisation terminée" :
                 "Synchronisation partielle : "+remaining+" soirée(s) cochée(s) non récupérée(s)";
-            SyncState.save(this,SyncState.DONE,summary,
-                queue.size()+1,queue.size()+1,0,remaining==0?
-                "Toutes les soirées et les fiches des artistes sont vérifiées · "+
-                artistLinksVerified+" profils Spotify associés.":summary);
+            if(remaining==0){
+                SyncState.save(this,SyncState.DONE,summary,
+                    queue.size()+1,queue.size()+1,0,
+                    "Toutes les soirées et les fiches des artistes sont vérifiées · "+
+                    artistLinksVerified+" profils Spotify associés.");
+            }else{
+                SyncState.save(this,SyncState.PARTIAL,summary,
+                    queue.size(),queue.size()+1,0,summary);
+            }
         } else {
             int total=gotTickets?queue.size()+1:0;
             // Incomplete music/account info keeps the last step unfinished.
