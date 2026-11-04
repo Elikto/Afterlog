@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "application": "NØCTARIA",
+  "platforms": [
+    "android",
+    "ios-pwa"
+  ],
+  "common": [
+    {
+      "id": "identity",
+      "name": "Nom et logo",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/MainActivity.java",
+          "NØCTARIA"
+        ],
+        [
+          "app/src/main/res/drawable/ic_afterlog_foreground.xml",
+          "vector"
+        ]
+      ],
+      "web": [
+        [
+          "web/index.html",
+          "NØCTARIA"
+        ],
+        [
+          "web/build-icons.py",
+          "ic_afterlog_foreground.xml"
+        ]
+      ]
+    },
+    {
+      "id": "events",
+      "name": "Création, modification, suppression des soirées",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/AppStore.java",
+          "saveEvent("
+        ],
+        [
+          "app/src/main/java/fr/afterlog/app/AppStore.java",
+          "deleteEvent("
+        ]
+      ],
+      "web": [
+        [
+          "web/app.js",
+          "openEventForm("
+        ],
+        [
+          "web/app.js",
+          "case 'delete-event':"
+        ]
+      ]
+    },
+    {
+      "id": "consumption",
+      "name": "Journal de consommations",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/AppStore.java",
+          "saveEntry("
+        ],
+        [
+          "app/src/main/java/fr/afterlog/app/ConsumptionActivity.java",
+          "measuredAmount"
+        ]
+      ],
+      "web": [
+        [
+          "web/parity.js",
+          "extractEntry("
+        ],
+        [
+          "web/app.js",
+          "case 'delete-entry':"
+        ]
+      ]
+    },
+    {
+      "id": "posters",
+      "name": "Affiches par défaut et personnalisées",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/EventPoster.java",
+          "Bitmap"
+        ]
+      ],
+      "web": [
+        [
+          "web/app.js",
+          "posterHtml("
+        ],
+        [
+          "web/app.js",
+          "case 'reset-poster':"
+        ]
+      ]
+    },
+    {
+      "id": "media",
+      "name": "Galerie photo et vidéo",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/EventGalleryActivity.java",
+          "EventVideos"
+        ],
+        [
+          "app/src/main/java/fr/afterlog/app/EventGalleryActivity.java",
+          "ACTION_SEND_MULTIPLE"
+        ]
+      ],
+      "web": [
+        [
+          "web/app.js",
+          "uploadFiles("
+        ],
+        [
+          "web/app.js",
+          "case 'share-selected':"
+        ]
+      ]
+    },
+    {
+      "id": "tracking",
+      "name": "Suivi des prises",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/SuiviActivity.java",
+          "TrackingChartView"
+        ]
+      ],
+      "web": [
+        [
+          "web/tracking.js",
+          "function draw("
+        ]
+      ]
+    },
+    {
+      "id": "rdr",
+      "name": "Indicateurs de vigilance et réduction des risques",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/RiskGuidance.java",
+          "class RiskGuidance"
+        ]
+      ],
+      "web": [
+        [
+          "web/parity.js",
+          "function warnings("
+        ]
+      ]
+    },
+    {
+      "id": "places",
+      "name": "Structures et associations par adresse",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/RdrPlacesSearch.java",
+          "CSAPA"
+        ]
+      ],
+      "web": [
+        [
+          "web/places.js",
+          "CSAPA"
+        ]
+      ]
+    },
+    {
+      "id": "spotify",
+      "name": "Artistes et comptes Spotify",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/SpotifyArtistFinder.java",
+          "spotify"
+        ]
+      ],
+      "web": [
+        [
+          "web/spotify.js",
+          "Spotify"
+        ]
+      ]
+    },
+    {
+      "id": "portable_json",
+      "name": "Sauvegarde JSON compatible Android",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/AppStore.java",
+          "afterlog-v1"
+        ]
+      ],
+      "web": [
+        [
+          "web/app.js",
+          "afterlog-v1"
+        ]
+      ]
+    }
+  ],
+  "platformGaps": [
+    {
+      "id": "shotgun_personal",
+      "name": "Connexion privée Shotgun et synchronisation des billets",
+      "android": "Navigateur WebView natif et extraction",
+      "ios": "Indisponible : accès utilisateur personnel non autorisé par une API Shotgun publique vérifiée",
+      "priority": "blocker"
+    },
+    {
+      "id": "complete_media_backup",
+      "name": "Sauvegarde complète photos/vidéos",
+      "android": "Sauvegarde JSON sans fichiers média",
+      "ios": "Archive .noctaria intégrant les médias",
+      "priority": "parity"
+    },
+    {
+      "id": "instagram_native_share",
+      "name": "Partage Story Instagram",
+      "android": "Intent Android",
+      "ios": "Feuille de partage iOS, dépend des capacités d'Instagram",
+      "priority": "platform"
+    }
+  ]
+}
