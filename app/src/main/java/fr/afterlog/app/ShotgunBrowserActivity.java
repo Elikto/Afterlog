@@ -458,6 +458,7 @@ public final class ShotgunBrowserActivity extends Activity {
               if(raw.length>=20&&raw.length<=12000&&
                  raw.length>=(result.description||'').length*0.45){
                 result.description=raw.slice(0,12000);
+                result.shotgunAbout=result.description; // Preserve user-edited notes.
                 break;
               }
             }
