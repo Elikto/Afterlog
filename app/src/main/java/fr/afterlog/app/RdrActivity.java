@@ -10,7 +10,13 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
+import android.widget.AutoCompleteTextView;
+import android.widget.ArrayAdapter;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.os.Handler;
+import android.os.Looper;
+import java.util.ArrayList;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -189,18 +195,76 @@ public final class RdrActivity extends Activity {
         add(placesContainer,c,10);
     }
     private void chooseTown(){
-        EditText city=new EditText(this);
-        city.setSingleLine(true);city.setText(town);
-        LinearLayout space=col();space.setPadding(dp(18),0,dp(18),0);space.addView(city);
-        NeonDialog.builder(this).setTitle("Changer de ville ou d'adresse")
-            .setMessage("Sans GPS : ton adresse est recherchée avec le service public de l’IGN ; seules ses coordonnées servent ensuite à la recherche de structures. Ton journal reste privé.")
-            .setView(space).setNegativeButton("Annuler",null)
-            .setPositiveButton("Valider",(d,w)->{
-                String value=city.getText().toString().trim();
-                if(value.isEmpty())return;
+        AutoCompleteTextView city=new AutoCompleteTextView(this);
+        city.setSingleLine(true);
+        city.setThreshold(2);
+        city.setTextColor(WHITE);
+        city.setHintTextColor(SOFT);
+        city.setHint("Ex. Toulouse, Arles, Marseille…");
+        city.setText(town);
+        city.setSelection(city.length());
+        LinearLayout space=col();
+        space.setPadding(dp(18),0,dp(18),0);
+        add(space,txt("Entre le début d'une ville, puis sélectionne la proposition.",
+            13,false,SOFT),8);
+        space.addView(city);
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(
+            this,android.R.layout.simple_dropdown_item_1line,new ArrayList<>());
+        city.setAdapter(adapter);
+        city.setDropDownBackgroundDrawable(bg(CARD));
+        final ArrayList<RdrPlacesSearch.City> suggestions=new ArrayList<>();
+        final String[] selected={town};
+        final int[] querySequence={0};
+        final boolean[] filling={false};
+        Handler debounce=new Handler(Looper.getMainLooper());
+        city.addTextChangedListener(new TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence text,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence text,int start,int before,int count){
+                if(filling[0])return;
+                selected[0]="";
+                final int seq=++querySequence[0];
+                String input=text.toString().trim();
+                if(input.length()<2){adapter.clear();return;}
+                debounce.postDelayed(()->{
+                    if(seq!=querySequence[0]||isFinishing())return;
+                    RdrPlacesSearch.suggestCities(input,results->{
+                        if(seq!=querySequence[0]||isFinishing())return;
+                        suggestions.clear();suggestions.addAll(results);
+                        adapter.clear();
+                        for(RdrPlacesSearch.City option:results)adapter.add(option.label);
+                        adapter.notifyDataSetChanged();
+                        if(!results.isEmpty())city.showDropDown();
+                    });
+                },350);
+            }
+            @Override public void afterTextChanged(Editable text){}
+        });
+        city.setOnItemClickListener((parent,view,position,id)->{
+            if(position<0||position>=suggestions.size())return;
+            RdrPlacesSearch.City option=suggestions.get(position);
+            filling[0]=true;
+            city.setText(option.label);
+            city.setSelection(city.length());
+            filling[0]=false;
+            selected[0]=option.query;
+            city.dismissDropDown();
+        });
+        NeonDialog.builder(this).setTitle("Choisir une ville")
+            .setMessage("Les associations seront recherchées autour de la ville validée, pas autour de l'ancienne adresse.")
+            .setView(space)
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Valider la ville",(d,w)->{
+                String value=selected[0].trim();
+                if(value.isEmpty()){
+                    Toast.makeText(this,
+                        "Sélectionne une ville dans les suggestions avant de valider.",
+                        Toast.LENGTH_LONG).show();
+                    return;
+                }
                 town=value;
                 getPreferences(0).edit().putString("city",town).apply();
                 showPage();
             }).show();
     }
+
 }
