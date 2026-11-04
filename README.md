@@ -1,3 +1,14 @@
+# NØCTARIA 0.18.6 — Spotify sur toutes les soirées (Android + PWA iPhone)
+
+- Recherche des comptes Spotify à partir des **artistes de toutes les soirées enregistrées**, y compris anciennes soirées et nouveaux événements importés. Aucune donnée de consommation n'est envoyée aux services de recherche.
+- Les **15 profils Spotify déjà confirmés dans Android** sont désormais aussi disponibles dans la PWA iPhone, via une liste générée depuis le code Android. Chaque correspondance connue est propagée aux occurrences de l'artiste dans toutes les soirées.
+- Sur iPhone, les candidats découverts via Wikidata sont ajoutés **uniquement lorsque le nom d'artiste est confirmé par l'oEmbed officiel Spotify**. Les homonymes et candidats non vérifiables restent sans lien ; aucune photo arbitraire n'est attribuée.
+- Les nouvelles soirées ou sauvegardes importées déclenchent une nouvelle vérification, sans attendre le délai habituel de 24 heures. Recherche web progressive par groupes limités, avec reprise au prochain lancement si iOS interrompt l'application.
+- Android conserve sa recherche MusicBrainz/Wikidata et l'enrichissement de tous les line-ups ; le statut indique maintenant combien de soirées ont été examinées et combien n'ont pas d'artistes renseignés. Restaurer une sauvegarde Android relance la recherche Spotify.
+- Limite : il n'est pas possible de garantir le compte de **chaque** artiste. Certaines soirées ne contiennent pas de line-up, et Spotify peut ne pas fournir d'identification publique fiable. L'application laisse alors le lien non renseigné plutôt que d'inventer une identité.
+
+---
+
 # NØCTARIA 0.18.5 — Captures d’écran Shotgun (Android)
 
 - Les captures d’écran et l’enregistrement de l’écran sont désormais autorisés dans le navigateur Shotgun intégré à NØCTARIA Android. Le blocage venait du drapeau Android `FLAG_SECURE` appliqué à cette fenêtre.
