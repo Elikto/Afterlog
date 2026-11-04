@@ -436,10 +436,10 @@ public final class ShotgunBrowserActivity extends Activity {
           // and handle React layouts where heading and content are siblings.
           const canonical=v=>(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
             .replace(/\\s+/g,' ').trim().toLowerCase().replace(/\\s*[:：]$/,'');
-          const headings=[...document.querySelectorAll(
+          const aboutHeadings=[...document.querySelectorAll(
             'main h2,main h3,main h4,article h2,article h3,article h4,'+
             'main [role="heading"],article [role="heading"]')];
-          const about=headings.find(h=>
+          const about=aboutHeadings.find(h=>
             /^(a propos|about|description|infos pratiques|event details)$/
               .test(canonical(h.textContent||'')));
           if(about){
