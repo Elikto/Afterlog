@@ -41,11 +41,6 @@ window.eval(readFileSync(path.join(root,'tracking.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'spotify-trusted.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'spotify.js'),'utf8'));
 assert.ok(window.NoctariaTrustedSpotify.perceval,'Android confirmed artist links available on iPhone');
-assert.ok(window.document.body.textContent.includes('Tous les artistes') ||
- window.document.documentElement.innerHTML.includes('Tous les artistes'),
- 'artists directory link appears in iOS home');
-assert.ok(window.document.documentElement.outerHTML.includes('NØCTARIA'),'app branding persists');
-
 assert.equal(typeof window.NoctariaPlaces.suggestCities,'function','IGN city autocomplete is available on iPhone');
 window.eval(readFileSync(path.join(root,'backup.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'app.js'),'utf8'));
@@ -62,6 +57,7 @@ async function submit(formName){
 }
 await pause(150);
 assert.ok(window.document.querySelector('h1')?.textContent.includes('NØCTARIA'),'home page rendered');
+assert.ok(window.document.querySelector('[data-action="artists"]'),'artists button on homepage');
 click('[data-action="new-event"]');
 assert.ok(window.document.querySelector('.modal-title').textContent.includes('Créer une soirée'));
 window.document.querySelector('[name="title"]').value='Soirée chez Camille';
