@@ -290,15 +290,12 @@ public final class ShotgunBrowserActivity extends Activity {
         if(authChoiceShown||isFinishing())return;
         authChoiceShown=true;
         stopAuthProbe();
-        status.setText("Compte Shotgun connecté · choisis quoi synchroniser.");
-        NeonDialog.builder(this)
-            .setTitle("Compte Shotgun connecté")
-            .setMessage("NØCTARIA peut rechercher tes billets passés et à venir en arrière-plan. " +
-                "Tu n'as pas besoin de naviguer dans Shotgun.")
-            .setNegativeButton("Plus tard",(d,w)->finish())
-            .setNeutralButton("Choisir des soirées",(d,w)->startSilentSync(true))
-            .setPositiveButton("Tout synchroniser",(d,w)->startSilentSync(false))
-            .show();
+        // Authenticating is the last visible Shotgun step. Return immediately
+        // to NØCTARIA; the silent service retrieves the complete ticket list.
+        // The user then gets a prechecked poster/name selection on the home page.
+        web.setVisibility(View.GONE);
+        status.setText("Connexion validée · recherche des soirées en arrière-plan…");
+        startSilentSync(true);
     }
     private void startSilentSync(boolean choose){
         SyncState.save(this,SyncState.RUNNING,
