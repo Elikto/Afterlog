@@ -30,12 +30,16 @@ jobs:
           node --check web/app.js
           node --check web/sw.js
           node --check scripts/check-parity.mjs
+          node --check scripts/sync-spotify-profiles.mjs
+          node --check scripts/spotify-parity-test.mjs
           node --check scripts/shotgun-scan-test.mjs
           python3 -m json.tool web/manifest.webmanifest >/dev/null
       - name: Test journal functionality
         run: |
           npm install --no-save --ignore-scripts jsdom@26 fake-indexeddb@6
           node scripts/check-parity.mjs
+          node scripts/sync-spotify-profiles.mjs --check
+          node scripts/spotify-parity-test.mjs
           node scripts/shotgun-scan-test.mjs
           node web/smoke-test.mjs
       - name: Generate install icons
@@ -45,6 +49,7 @@ jobs:
       - name: Check PWA files
         run: |
           test -s web/index.html
+          test -s web/spotify-trusted.js
           test -s web/icons/apple-touch-icon.png
           test -s web/icons/icon-192.png
           test -s web/icons/icon-512.png
