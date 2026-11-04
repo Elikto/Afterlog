@@ -578,6 +578,17 @@ public final class ShotgunSyncService extends Service {
                         String track=OfficialMusicPreview.firstSpotifyTrack(url);
                         if(!track.isEmpty())merged.put("previewUrl",track);
                     }
+                    // Spotify artist embeds often contain no track links in
+                    // server-rendered HTML. Use a independently confirmed
+                    // SoundCloud identity when available (never guess slugs).
+                    if(merged.optString("previewUrl").isEmpty()){
+                        String known=SoundCloudArtistFinder.knownProfile(name);
+                        if(SoundCloudArtistFinder.validProfile(known)){
+                            merged.put("soundcloud",known);
+                            String track=SoundCloudArtistFinder.firstOfficialTrack(known);
+                            if(!track.isEmpty())merged.put("previewUrl",track);
+                        }
+                    }
                     if(merged.optString("spotifyPhoto").isEmpty() &&
                         !merged.optString("photo").startsWith("https://"))
                         missingPhoto++;
