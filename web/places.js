@@ -19,25 +19,35 @@ function distance(a,b,c,d){
 async function suggestCities(query){
  const term=String(query||'').trim();
  if(term.length<2)return [];
- const params=new URLSearchParams({
-  index:'address',type:'municipality',limit:'8',autocomplete:'1',q:term
- });
- const data=await getJson('https://data.geopf.fr/geocodage/search?'+params,{},14000);
  const found=new Set(),results=[];
- for(const feature of data.features||[]){
-  const p=feature.properties||{};
-  const city=String(p.city||p.name||'').trim(),postcode=String(p.postcode||'').trim();
-  if(!city)continue;
-  const label=city+(postcode?', '+postcode:'');
-  if(found.has(label.toLocaleLowerCase('fr')))continue;
-  found.add(label.toLocaleLowerCase('fr'));
-  results.push({label,query:label});
+ // Prefer proper municipalities. If a municipality-only search returns no
+ // records, deduplicate the city properties of standard BAN suggestions.
+ for(const municipalityOnly of [true,false]){
+  const params=new URLSearchParams({
+   index:'address',limit:'12',autocomplete:'1',q:term
+  });
+  if(municipalityOnly)params.set('type','municipality');
+  try{
+   const data=await getJson('https://data.geopf.fr/geocodage/search?'+params,{},14000);
+   for(const feature of data.features||[]){
+    const p=feature.properties||{};
+    const city=String(p.city||p.name||'').trim(),postcode=String(p.postcode||'').trim();
+    if(!city)continue;
+    const label=city+(postcode?', '+postcode:'');
+    const key=label.toLocaleLowerCase('fr');
+    if(found.has(key))continue;
+    found.add(key);results.push({label,query:label});
+    if(results.length>=8)break;
+   }
+  }catch(error){if(!municipalityOnly&&!results.length)throw error;}
+  if(results.length>=5)break;
  }
  return results;
 }
 async function geocode(address){
  const q=encodeURIComponent(address);
  for(const suffix of [
+  '?index=address&type=municipality&limit=5&q='+q,
   '?index=address&limit=5&q='+q,
   '?limit=5&q='+q]){
   try{
