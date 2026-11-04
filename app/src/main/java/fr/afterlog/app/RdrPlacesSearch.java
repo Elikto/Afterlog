@@ -77,8 +77,14 @@ final class RdrPlacesSearch {
                     String url="https://data.geopf.fr/geocodage/search?index=address"+
                         (municipalityOnly?"&type=municipality":"")+
                         "&limit=12&autocomplete=1&q="+URLEncoder.encode(query,"UTF-8");
-                    JSONObject data=new JSONObject(get(url,11000,180000));
-                    JSONArray features=data.optJSONArray("features");
+                    JSONArray features=null;
+                    try {
+                        JSONObject data=new JSONObject(get(url,11000,180000));
+                        features=data.optJSONArray("features");
+                    }catch(Exception problem){
+                        if(!municipalityOnly && results.isEmpty())throw problem;
+                        continue;
+                    }
                     if(features!=null)for(int i=0;i<features.length();i++){
                         JSONObject f=features.optJSONObject(i);
                         if(f==null)continue;
