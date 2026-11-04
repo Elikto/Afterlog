@@ -63,10 +63,11 @@ assert.match(browser,/if\(autoSyncMode\)\{finish\(\);return;\}/,
 assert.match(browser,/else if\(autoSyncMode\)\s*\{[\s\S]*?web\.loadUrl\(ShotgunTicketDiscovery\.ACCOUNT\)/,
  'personal login starts with only the official Shotgun account view');
 assert.match(browser,/offerSyncChoice\(\)/,
- 'user receives a one-time choice once Shotgun authentication is verified');
-for(const label of ['Tout synchroniser','Choisir des soirées','Plus tard']){
- assert.ok(browser.includes('"'+label+'"'),'missing sync preference '+label);
-}
+ 'the login callback hands off to silent discovery after authentication');
+assert.match(browser,/web\.setVisibility\(View\.GONE\)/,
+ 'the Shotgun browser is hidden once the session is verified');
+assert.match(browser,/startSilentSync\(true\)/,
+ 'all three ticket categories are found before showing the prechecked selection');
 assert.match(browser,/ShotgunSyncService\.discoverAccount\(this,choose\)/,
  'authenticated user hands off silent navigation to background service');
 assert.doesNotMatch(browser,/ShotgunSyncService\.importSelected\(this\)/,
@@ -74,8 +75,12 @@ assert.doesNotMatch(browser,/ShotgunSyncService\.importSelected\(this\)/,
 const main=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/MainActivity.java'),'utf8');
 assert.ok(main.includes('private void showTicketChoice()'),
  'user can choose which events to sync after silent discovery');
-assert.match(main,/TicketSelectionStore\.mark\(this,\(Integer\)b\.getTag\(\),b\.isChecked\(\)\)/,
- 'per-event selection is persisted before background import');
+assert.match(main,/TicketSelectionStore\.chooseIndices\(this,selectedIds\)/,
+ 'per-event selection is saved atomically before background import');
+assert.ok(main.includes('String poster=item.optString("poster")'),
+ 'prechecked event selection shows each available poster thumbnail');
+assert.ok(main.includes('private void showAllArtists()'),
+ 'a single page lists all artists from every synced event');
 const service=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/ShotgunSyncService.java'),'utf8');
 assert.ok(service.includes('private void inspectTicketCategory(int nav)'),
  'event categories are inspected by the background service');
