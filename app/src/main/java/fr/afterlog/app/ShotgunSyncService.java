@@ -39,6 +39,8 @@ import java.util.Set;
 public final class ShotgunSyncService extends Service {
     private static final String START="fr.afterlog.app.DISCOVER_PAST";
     private static final String IMPORT_SELECTED="fr.afterlog.app.IMPORT_SELECTED";
+    private static final String DISCOVER_ALL="fr.afterlog.app.DISCOVER_ALL";
+    private static final String DISCOVER_CHOOSE="fr.afterlog.app.DISCOVER_CHOOSE";
     private static final String RETRY_FAILED="fr.afterlog.app.RETRY_FAILED";
     private static final String EXTRA_FAILED_URL="failed_url";
     private static final String STOP="fr.afterlog.app.SYNC_STOP";
@@ -52,6 +54,8 @@ public final class ShotgunSyncService extends Service {
     private AppStore store;
     private NotificationManager notifications;
     private boolean active,seenPast,clickedPast,triedMenu,gotTickets,readingPage,rateLimited;
+    private boolean backgroundDiscovery,chooseBeforeImport;
+    private int ticketPageIndex,discoveryRetries,successfulPages;
     private int navigationId,discoveryAttempts,processed,errors,nextIndex,detailAttempts;
     private long startedAt;
     private String phase="",lastError="";
@@ -62,6 +66,13 @@ public final class ShotgunSyncService extends Service {
         Intent i=new Intent(ctx,ShotgunSyncService.class);
         i.setAction(START);
         i.putExtra(EXTRA_URL,url);
+        if(Build.VERSION.SDK_INT>=26)ctx.startForegroundService(i);
+        else ctx.startService(i);
+    }
+    /** Launch a complete silent scan using the authenticated Android WebView session. */
+    public static void discoverAccount(Context ctx,boolean chooseEvents) {
+        Intent i=new Intent(ctx,ShotgunSyncService.class);
+        i.setAction(chooseEvents?DISCOVER_CHOOSE:DISCOVER_ALL);
         if(Build.VERSION.SDK_INT>=26)ctx.startForegroundService(i);
         else ctx.startService(i);
     }
@@ -102,6 +113,9 @@ public final class ShotgunSyncService extends Service {
             return START_NOT_STICKY;
         }
         if(active)return START_NOT_STICKY;
+        backgroundDiscovery=DISCOVER_ALL.equals(action)||DISCOVER_CHOOSE.equals(action);
+        chooseBeforeImport=DISCOVER_CHOOSE.equals(action);
+        ticketPageIndex=0;discoveryRetries=0;successfulPages=0;
         boolean retryFailed=RETRY_FAILED.equals(action);
         boolean selectedImport=IMPORT_SELECTED.equals(action)||retryFailed;
         active=true;rateLimited=false;seenPast=false;clickedPast=false;triedMenu=false;
@@ -125,13 +139,13 @@ public final class ShotgunSyncService extends Service {
             }
             gotTickets=true;
         }
-        status(selectedImport?"Synchronisation automatique des soirées…":
-            "Recherche de tous tes billets Shotgun…",selectedImport?
-            "Récupération des affiches, dates et artistes":"Tous les billets, à venir et passés");
+        status(selectedImport?"Synchronisation des soirées choisies…":
+            "Recherche des billets Shotgun en arrière-plan…",selectedImport?
+            "Artistes et informations des soirées inclus":"Tous les billets, à venir et passés");
         if(Build.VERSION.SDK_INT>=29)
             startForeground(NOTIF_ID,notification("Synchronisation des billets Shotgun…"),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-        else startForeground(NOTIF_ID,notification("Recherche des billets passés…"));
+        else startForeground(NOTIF_ID,notification("Synchronisation des billets Shotgun…"));
         try {
             browser=new WebView(getApplicationContext());
             WebSettings config=browser.getSettings();
@@ -167,7 +181,8 @@ public final class ShotgunSyncService extends Service {
                     }
                 }
             });
-            if(selectedImport) next();
+            if(selectedImport)next();
+            else if(backgroundDiscovery)open(ShotgunTicketDiscovery.TICKET_PAGES[0]);
             else open(url);
         }catch(Exception e) {
             finish(SyncState.ERROR,"Navigateur Android indisponible : "+e.getMessage());
@@ -220,6 +235,10 @@ public final class ShotgunSyncService extends Service {
         if(!active||readingPage||browser==null)return;
         readingPage=true;
         final int nav=navigationId;
+        if(backgroundDiscovery){
+            inspectTicketCategory(nav);
+            return;
+        }
         if(gotTickets) {
             browser.evaluateJavascript(ShotgunBrowserActivity.CURRENT_EVENT_JS,raw->{
                 readingPage=false;
@@ -330,6 +349,78 @@ public final class ShotgunSyncService extends Service {
             });
         }
     }
+    /** One category per invisible WebView navigation, no user-visible browsing. */
+    private void inspectTicketCategory(int nav) {
+        if(!active||!backgroundDiscovery)return;
+        browser.evaluateJavascript(ShotgunTicketDiscovery.SCAN_JS,raw->{
+            readingPage=false;
+            if(!active||!backgroundDiscovery||nav!=navigationId)return;
+            try {
+                JSONObject data=new JSONObject(ShotgunBrowserActivity.decoded(raw));
+                String action=data.optString("action");
+                if("login".equals(action)){
+                    finish(SyncState.BLOCKED,
+                        "Connexion Shotgun expirée. Reconnecte ton compte pour synchroniser.");
+                    return;
+                }
+                if("wait".equals(action)||"scroll".equals(action)){
+                    if(++discoveryRetries>7){nextTicketCategory(false);return;}
+                    handler.postDelayed(()->inspectPage(),1600);
+                    return;
+                }
+                if("ready".equals(action)){
+                    enqueueDiscovered(data.optJSONArray("events"));
+                    nextTicketCategory(true);
+                    return;
+                }
+                nextTicketCategory(false);
+            }catch(Exception error){
+                if(++discoveryRetries>5)nextTicketCategory(false);
+                else handler.postDelayed(()->inspectPage(),1600);
+            }
+        });
+    }
+    private void nextTicketCategory(boolean successful) {
+        if(!active||!backgroundDiscovery)return;
+        if(successful)successfulPages++;
+        ticketPageIndex++;discoveryRetries=0;
+        if(ticketPageIndex<ShotgunTicketDiscovery.TICKET_PAGES.length){
+            status("Billets Shotgun : "+(ticketPageIndex+1)+"/3",
+                queue.size()+" soirée(s) trouvée(s) ; lecture invisible en cours.");
+            open(ShotgunTicketDiscovery.TICKET_PAGES[ticketPageIndex]);
+            return;
+        }
+        backgroundDiscovery=false;
+        if(successfulPages==0){
+            finish(SyncState.BLOCKED,
+                "Impossible de lire les listes de billets Shotgun depuis la session.");
+            return;
+        }
+        if(queue.isEmpty()){
+            finish(SyncState.DONE,"Aucun événement accessible dans les billets Shotgun.");
+            return;
+        }
+        JSONArray discovered=new JSONArray();
+        for(JSONObject item:queue)discovered.put(item);
+        try{
+            TicketSelectionStore.saveFound(this,discovered);
+            if(chooseBeforeImport){
+                finish(SyncState.SELECTION,
+                    queue.size()+" soirée(s) trouvée(s). Choisis celles à synchroniser.");
+                return;
+            }
+            TicketSelectionStore.markAll(this,true);
+            AutoSyncScheduler.enable(this);
+            gotTickets=true;
+            nextIndex=0;
+            status("Import automatique de toutes les soirées",
+                queue.size()+" événement(s) · artistes inclus.");
+            next();
+        }catch(Exception error){
+            finish(SyncState.ERROR,"Impossible de préparer les événements Shotgun.");
+        }
+    }
+
     private void enqueueDiscovered(JSONArray list) {
         if(list==null)return;
         for(int i=0;i<list.length() && queue.size()<MAX_EVENTS;i++) {
