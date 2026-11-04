@@ -41,6 +41,7 @@ final class SpotifyArtistFinder {
             // Independently identified via the performers own official profiles.
             case "maissouille":return "https://open.spotify.com/artist/1aQbGaag8KEI8kKtY37UQU";
             case "unicorn on k":return "https://open.spotify.com/artist/4Y1vfB7DE2qneIPdgylsL8";
+            case "skone":return "https://open.spotify.com/artist/6uMAPLKPcylTmdl0F1T2HF";
             default:return "";
         }
     }
