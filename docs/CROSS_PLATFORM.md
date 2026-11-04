@@ -106,3 +106,15 @@ Aucun abonnement développeur Apple nécessaire pour la PWA.
   conservé, bouton « Masquer » ; le masquage n'efface pas le journal.
 - Android et PWA iPhone affichent SoundCloud comme alternative à Spotify ;
   la PWA n'a toujours pas accès aux billets privés Shotgun.
+
+## 0.19.1 — Descriptions « À propos » sans confusion de source
+
+- « À propos » = texte de la section homonyme **de la page événement Shotgun**.
+  Le résumé `og:description` reste une métadonnée distincte.
+- Provenance vérifiée : `shotgunAboutSource=event_section`. Les versions
+  Android et iOS ne présentent aucun résumé non vérifié comme le vrai À propos.
+- Sur Android, les événements Shotgun déjà stockés sont réparés depuis leur page
+  événement publique en arrière-plan, sans ouvrir de billets et sans toucher
+  aux notes privées ou aux médias.
+- Sköne : association de son compte Spotify officiel et de son SoundCloud
+  public ; les anciennes cartes reçoivent aussi ces liens.
