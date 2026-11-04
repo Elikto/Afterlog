@@ -16,7 +16,7 @@ import java.util.Locale;
 /** Résolution prudente du véritable profil Spotify, sans deviner un ID. */
 final class SpotifyArtistFinder {
     private static long lastMusicBrainzCall=0L;
-    private static final String PREFS="afterlog_artist_lookup_v2";
+    private static final String PREFS="afterlog_artist_lookup_v3";
 
     // Profils exacts croisés avec la discographie publique Spotify.
     // Pas de génération d'ID à partir du nom (source d'erreurs d'homonymie).
@@ -38,6 +38,9 @@ final class SpotifyArtistFinder {
             case "amygdala":return "https://open.spotify.com/artist/7BGTl5Swxc7pcXnSgqzSSM";
             case "a5km":return "https://open.spotify.com/artist/3SIWzGY4GAe5R18PTHOK1v";
             case "hortense de beauharnais":return "https://open.spotify.com/artist/6dwoHBXfXApma5YaoM2vE3";
+            // Independently identified via the performers own official profiles.
+            case "maissouille":return "https://open.spotify.com/artist/1aQbGaag8KEI8kKtY37UQU";
+            case "unicorn on k":return "https://open.spotify.com/artist/4Y1vfB7DE2qneIPdgylsL8";
             default:return "";
         }
     }
@@ -74,6 +77,20 @@ final class SpotifyArtistFinder {
      * Sinon renvoie la chaîne vide et l'interface reste sur "Recherche Spotify".
      */
     static String resolve(Context ctx,String artistName,String shotgunPortrait,String explicitLink){
+        if(artistName==null||artistName.trim().isEmpty())return "";
+        // Start with the exact displayed name. A prefix such as "DJ" or
+        // decorative emojis are aliases, not evidence for arbitrary matches.
+        for(String variant:ArtistNameMatcher.variants(artistName)){
+            String profile=resolveOne(ctx,variant,shotgunPortrait,explicitLink);
+            if(SpotifyArtistVerifier.isArtistUrl(profile) &&
+                (trustedProfile(variant).equals(profile)||
+                 SpotifyArtistVerifier.matchesName(profile,artistName)))
+                return profile;
+        }
+        return "";
+    }
+    private static String resolveOne(Context ctx,String artistName,
+                                     String shotgunPortrait,String explicitLink){
         if(artistName==null||artistName.trim().isEmpty())return "";
         String local=savedProfile(ctx,artistName);
         if(!local.isEmpty())return local;
