@@ -158,7 +158,7 @@ final class SpotifyArtistFinder {
             connection.setConnectTimeout(6500);connection.setReadTimeout(6500);
             connection.setRequestProperty("Accept","application/json");
             connection.setRequestProperty("User-Agent",
-                "AfterLog/0.14 (https://github.com/Elikto/Afterlog)");
+                "NOCTARIA/0.18 (https://github.com/Elikto/Afterlog)");
             if(connection.getResponseCode()!=200)throw new Exception("MusicBrainz indisponible");
             ByteArrayOutputStream result=new ByteArrayOutputStream();
             try(InputStream in=connection.getInputStream()){
