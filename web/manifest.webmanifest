@@ -1,0 +1,31 @@
+{
+  "id": "./",
+  "name": "NØCTARIA — Journal de soirées",
+  "short_name": "NØCTARIA",
+  "description": "Ton journal privé de soirées, festivals et souvenirs.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0c18",
+  "theme_color": "#0b0c18",
+  "lang": "fr",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": [
+    "lifestyle",
+    "entertainment"
+  ]
+}
