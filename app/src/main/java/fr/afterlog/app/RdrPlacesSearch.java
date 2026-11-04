@@ -72,22 +72,27 @@ final class RdrPlacesSearch {
         new Thread(()->{
             ArrayList<City> results=new ArrayList<>();
             try{
-                String url="https://data.geopf.fr/geocodage/search?index=address&type=municipality"+
-                    "&limit=8&autocomplete=1&q="+URLEncoder.encode(query,"UTF-8");
-                JSONObject data=new JSONObject(get(url,11000,180000));
-                JSONArray features=data.optJSONArray("features");
                 HashSet<String> seen=new HashSet<>();
-                if(features!=null)for(int i=0;i<features.length();i++){
-                    JSONObject f=features.optJSONObject(i);
-                    if(f==null)continue;
-                    JSONObject props=f.optJSONObject("properties");
-                    if(props==null)continue;
-                    String city=props.optString("city",props.optString("name")).trim();
-                    String postcode=props.optString("postcode").trim();
-                    if(city.isEmpty())continue;
-                    String canonical=city+(postcode.isEmpty()?"":", "+postcode);
-                    if(seen.add(canonical.toLowerCase(Locale.ROOT)))
-                        results.add(new City(canonical,canonical));
+                for(boolean municipalityOnly:new boolean[]{true,false}){
+                    String url="https://data.geopf.fr/geocodage/search?index=address"+
+                        (municipalityOnly?"&type=municipality":"")+
+                        "&limit=12&autocomplete=1&q="+URLEncoder.encode(query,"UTF-8");
+                    JSONObject data=new JSONObject(get(url,11000,180000));
+                    JSONArray features=data.optJSONArray("features");
+                    if(features!=null)for(int i=0;i<features.length();i++){
+                        JSONObject f=features.optJSONObject(i);
+                        if(f==null)continue;
+                        JSONObject props=f.optJSONObject("properties");
+                        if(props==null)continue;
+                        String city=props.optString("city",props.optString("name")).trim();
+                        String postcode=props.optString("postcode").trim();
+                        if(city.isEmpty())continue;
+                        String canonical=city+(postcode.isEmpty()?"":", "+postcode);
+                        if(seen.add(canonical.toLowerCase(Locale.ROOT)))
+                            results.add(new City(canonical,canonical));
+                        if(results.size()>=8)break;
+                    }
+                    if(results.size()>=5)break;
                 }
             }catch(Exception ignored){}
             new Handler(Looper.getMainLooper()).post(()->callback.onCities(results));
@@ -112,10 +117,17 @@ final class RdrPlacesSearch {
         double lat=Double.NaN,lon=Double.NaN;
         String location="";
         try{
-            String address="https://data.geopf.fr/geocodage/search?index=address&limit=5&q="+
-                URLEncoder.encode(query,"UTF-8");
-            JSONObject data=new JSONObject(get(address,18000,600000));
-            JSONArray features=data.optJSONArray("features");
+            JSONArray features=null;
+            for(boolean municipalityOnly:new boolean[]{true,false}){
+                String address="https://data.geopf.fr/geocodage/search?index=address"+
+                    (municipalityOnly?"&type=municipality":"")+
+                    "&limit=5&q="+URLEncoder.encode(query,"UTF-8");
+                try {
+                    JSONObject data=new JSONObject(get(address,18000,600000));
+                    features=data.optJSONArray("features");
+                    if(features!=null&&features.length()>0)break;
+                }catch(Exception failure){if(!municipalityOnly)throw failure;}
+            }
             if(features==null||features.length()==0)
                 return new Result(query,"",new ArrayList<>(),lat,lon,
                     "Adresse introuvable : précise la ville ou le code postal.");
