@@ -27,7 +27,7 @@ final class ArtistProfileMerger {
                 }
             }
             if(newer!=null){
-                for(String field:new String[]{"photo","spotify","spotifyPhoto","shotgunUrl"}){
+                for(String field:new String[]{"photo","spotify","spotifyPhoto","shotgunUrl","previewUrl"}){
                     if(old.optString(field).isEmpty() && !newer.optString(field).isEmpty()){
                         old.put(field,newer.optString(field));changed=true;
                     }
