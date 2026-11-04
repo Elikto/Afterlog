@@ -46,6 +46,7 @@ click('[data-action="new-entry"]');
 const products=window.document.querySelector('[name="name"]');
 products.value='MDMA';
 window.document.querySelector('[name="quantity"]').value='1';
+window.document.querySelector('[name="time"]').value='22:30';
 await submit('entry');
 assert.ok(window.document.querySelector('.consume-bubble .consume-name').textContent.includes('MDMA'),'entry created');
 click('[data-action="tracking"]');
