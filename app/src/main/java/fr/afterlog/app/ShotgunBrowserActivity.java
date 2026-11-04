@@ -43,8 +43,9 @@ public final class ShotgunBrowserActivity extends Activity {
     private ShotgunBatchImporter batch;
     private boolean autoSyncMode;
     private boolean syncTriggered;
-    private ShotgunTicketDiscovery discovery;
-    private boolean discovering;
+    private WebView authProbe;
+    private boolean authChecking,authChoiceShown;
+    private final android.os.Handler authHandler=new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean autoExtractEvent,autoExtractStarted;
     private boolean lineupScrollPrepared=false;
     @Override public void onCreate(Bundle state) {
@@ -91,7 +92,6 @@ public final class ShotgunBrowserActivity extends Activity {
         }
 
         web = new WebView(this);
-        discovery=new ShotgunTicketDiscovery(this,web,status,this::onTicketsFound);
         batch = new ShotgunBatchImporter(this,web, message -> status.setText(message), this::finishWithEvents);
         outer.addView(web,new LinearLayout.LayoutParams(-1,0,1));
         WebSettings config = web.getSettings();
@@ -123,8 +123,8 @@ public final class ShotgunBrowserActivity extends Activity {
                     new android.os.Handler(android.os.Looper.getMainLooper())
                         .postDelayed(ShotgunBrowserActivity.this::importCurrent,2200);
                 }
-                else if(discovery!=null && discovering)discovery.pageFinished();
-                else status.setText("NØCTARIA lit tes trois listes de billets automatiquement après connexion.");
+                else if(autoSyncMode)checkLoggedIn(url);
+                else status.setText("NØCTARIA · navigateur Shotgun.");
 
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error) {
@@ -138,7 +138,8 @@ public final class ShotgunBrowserActivity extends Activity {
                 if (req.isForMainFrame() && response.getStatusCode()==429) {
                     status.setText("Shotgun limite l'accès (HTTP 429). Réessaie plus tard ; ne multiplie pas les demandes.");
                     if(batch!=null)batch.onHttp429();
-                    if(discovery!=null)discovery.rateLimited();
+                    if(autoSyncMode)SyncState.save(ShotgunBrowserActivity.this,SyncState.BLOCKED,
+                        "Shotgun limite temporairement les demandes",0,0,-1,"Réessaie ultérieurement.");
                 }
             }
         });
@@ -158,7 +159,6 @@ public final class ShotgunBrowserActivity extends Activity {
         else if(autoSyncMode) {
             status.setText("Ouverture de ton compte Shotgun. Connecte-toi seulement si nécessaire.");
             web.loadUrl(ShotgunTicketDiscovery.ACCOUNT);
-            beginDiscovery();
         }else web.loadUrl(SHOTGUN_LOGIN);
     }
 
@@ -217,42 +217,96 @@ public final class ShotgunBrowserActivity extends Activity {
             }catch(Exception e){toast("Informations manquantes. Tu peux saisir cette soirée manuellement.");}
         });
     }
-    private void beginDiscovery() {
-        if(discovery==null)return;
-        discovering=true;
-        discovery.tryAgain();
-    }
-    private void onTicketsFound(JSONArray tickets) {
-        try {
-            TicketSelectionStore.saveFound(this,tickets);
-            discovering=false;
-            if(discovery!=null)discovery.stop();
-            if(tickets.length()>0){
-                // Ne jamais passer par l'état SELECTION : l'utilisateur n'a
-                // rien à cocher, ni de bouton de synchronisation à déclencher.
-                SyncState.save(this,SyncState.RUNNING,
-                    "Synchronisation automatique des billets Shotgun",
-                    0,tickets.length(),-1,
-                    "Import en cours pour les soirées trouvées dans les trois catégories.");
-                AutoSyncScheduler.enable(this);
-                ShotgunSyncService.importSelected(this);
-                toast("Synchronisation automatique lancée : "+tickets.length()+" soirée(s).");
-                setResult(RESULT_OK);
-                finish();
-            }else{
-                // L'absence de billets n'est pas un import réussi.
-                SyncState.save(this,SyncState.DONE,
-                    "Aucune soirée trouvée dans les listes Shotgun",0,0,0,
-                    "Vérifie ta connexion Shotgun si tu attendais des billets.");
-                status.setText("Aucune soirée trouvée dans tes trois catégories Shotgun.");
-                toast("Aucune soirée trouvée dans tes billets Shotgun.");
-            }
-        }catch(Exception e){
-            SyncState.save(this,SyncState.ERROR,
-                "Impossible de démarrer la synchronisation",0,tickets.length(),-1,
-                "Réessaie après avoir vérifié ta connexion Shotgun.");
-            status.setText("Synchronisation impossible : "+e.getMessage());
+    // Authentification : garder la page Shotgun réelle visible uniquement pour
+    // la connexion. Aucune navigation dans les billets n'est montrée ensuite.
+    private static final String SESSION_JS = """
+        (function(){
+          const path=location.pathname.toLowerCase();
+          if(/\\/(?:login|signin|sign-in|signup|register|auth)(?:\\/|$)/.test(path) ||
+             document.querySelector('input[type="password"]'))
+            return 'login';
+          if(/\\/account\\/tickets(?:\\/|$)/.test(path))return 'connected';
+          return 'unknown';
+        })();
+        """;
+    private void checkLoggedIn(String url){
+        if(!autoSyncMode||authChoiceShown||isFinishing()||url==null||
+           !trusted(Uri.parse(url)))return;
+        String path=Uri.parse(url).getPath();
+        if(path!=null&&path.matches("(?i).*/(?:login|signin|sign-in|signup|register|auth)(?:/.*)?")){
+            status.setText("Connecte-toi à Shotgun. Rien d'autre à faire.");
+            return;
         }
+        // Laisser l'authentification et le rendu React terminer le chargement.
+        authHandler.postDelayed(()->{
+            if(!autoSyncMode||authChoiceShown||isFinishing()||web==null)return;
+            web.evaluateJavascript(SESSION_JS,raw->{
+                if(authChoiceShown||isFinishing())return;
+                try{
+                    String result=decoded(raw);
+                    if("connected".equals(result)){offerSyncChoice();return;}
+                    if("unknown".equals(result))probeAccountSilently();
+                }catch(Exception ignored){}
+            });
+        },1700);
+    }
+    private void probeAccountSilently(){
+        if(authChecking||authChoiceShown||isFinishing())return;
+        authChecking=true;
+        authProbe=new WebView(this);
+        WebSettings settings=authProbe.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        authProbe.setWebViewClient(new WebViewClient(){
+            @Override public void onPageFinished(WebView view,String url){
+                authHandler.postDelayed(()->{
+                    if(!authChecking||authChoiceShown||isFinishing())return;
+                    view.evaluateJavascript(SESSION_JS,raw->{
+                        if(!authChecking||authChoiceShown||isFinishing())return;
+                        String state="";
+                        try{state=decoded(raw);}catch(Exception ignored){}
+                        boolean connected="connected".equals(state);
+                        stopAuthProbe();
+                        if(connected)offerSyncChoice();
+                    });
+                },1500);
+            }
+        });
+        authProbe.loadUrl(ShotgunTicketDiscovery.ACCOUNT);
+        authHandler.postDelayed(this::stopAuthProbe,12000);
+    }
+    private void stopAuthProbe(){
+        authChecking=false;
+        if(authProbe!=null){
+            authProbe.stopLoading();
+            authProbe.destroy();
+            authProbe=null;
+        }
+    }
+    private void offerSyncChoice(){
+        if(authChoiceShown||isFinishing())return;
+        authChoiceShown=true;
+        stopAuthProbe();
+        status.setText("Compte Shotgun connecté · choisis quoi synchroniser.");
+        NeonDialog.builder(this)
+            .setTitle("Compte Shotgun connecté")
+            .setMessage("NØCTARIA peut rechercher tes billets passés et à venir en arrière-plan. " +
+                "Tu n'as pas besoin de naviguer dans Shotgun.")
+            .setNegativeButton("Plus tard",(d,w)->finish())
+            .setNeutralButton("Choisir des soirées",(d,w)->startSilentSync(true))
+            .setPositiveButton("Tout synchroniser",(d,w)->startSilentSync(false))
+            .show();
+    }
+    private void startSilentSync(boolean choose){
+        SyncState.save(this,SyncState.RUNNING,
+            "Recherche des billets Shotgun en arrière-plan",0,0,-1,
+            "Tous les billets, à venir et passés · recherche d'artistes incluse.");
+        ShotgunSyncService.discoverAccount(this,choose);
+        setResult(RESULT_OK);
+        finish();
     }
     private void importVisible() {
         batch.begin();
@@ -294,7 +348,8 @@ public final class ShotgunBrowserActivity extends Activity {
         else super.onBackPressed();
     }
     @Override protected void onDestroy() {
-        if(discovery!=null)discovery.stop();
+        authHandler.removeCallbacksAndMessages(null);
+        stopAuthProbe();
         if(batch!=null)batch.cancelSilently();
         if(web!=null){
             ViewGroup parent=(ViewGroup)web.getParent();
