@@ -101,7 +101,7 @@ public final class SuiviActivity extends Activity {
     private void render() {
         LinearLayout outer=col();outer.setPadding(dp(16),dp(12),dp(16),0);
         outer.setBackgroundColor(BG);setContentView(outer);
-        add(outer,button("← Retour à AfterLog",this::finish),11);
+        add(outer,button("← Retour à NØCTARIA",this::finish),11);
         add(outer,text("Mon suivi",27,WHITE,true),5);
         add(outer,text("Visualiser les consommations consignées, sans estimation de dose cachée.",
             13,SOFT,false),16);
