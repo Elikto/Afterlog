@@ -47,7 +47,8 @@ const formatDate = v => {
  catch{return v;}
 };
 const day = () => {const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
-const id = () => String(Date.now()*100+Math.floor(Math.random()*100));
+let idSequence=0;
+const id = () => String(Date.now()*1000+(++idSequence%1000));
 const byId = v => String(v);
 const mediaKey = v => String(v);
 const eventById = v => state.events.find(e=>byId(e.id)===byId(v));
@@ -362,6 +363,9 @@ function openEntryForm(existing){
   const next={...e,id:e.id||id(),eventId:event.id};
   for(const [key,value] of data.entries())next[key]=String(value).trim();
   next.quantity=Math.max(0,Number(next.quantity)||0);
+  // Old native portion details no longer apply when the simplified iOS
+  // quantity is edited. Never show an obsolete fraction after editing.
+  if(e.parts||e.portions){delete next.parts;delete next.portions;}
   if(!next.name||!next.date)throw new Error('Produit et date requis.');
   next.category=typeOf(next)[2];
   const at=state.entries.findIndex(x=>byId(x.id)===byId(next.id));
@@ -553,7 +557,7 @@ async function act(action,button){
    });break;
   }
   case 'upload-media':$('#media-file').click();break;
-  case 'selection-mode':clearSelection();state.selectionMode=!state.selectionMode;render();break;
+  case 'selection-mode':state.selectionMode=!state.selectionMode;state.selected.clear();render();break;
   case 'select-all':
    if(state.selected.size===state.media.length)state.selected.clear();
    else state.selected=new Set(state.media.map(x=>String(x.id)));
@@ -609,6 +613,23 @@ async function act(action,button){
   case 'close-modal':closeModal();break;
  }
 }
+// Long press on a gallery thumbnail enters multi-selection on touch devices.
+let pressTimer=null;
+document.addEventListener('pointerdown',event=>{
+ const tile=event.target.closest('.media-tile');
+ if(!tile||state.selectionMode)return;
+ clearTimeout(pressTimer);
+ const chosen=tile.dataset.id;
+ pressTimer=setTimeout(()=>{
+  state.selectionMode=true;
+  state.selected.add(String(chosen));
+  if(navigator.vibrate)navigator.vibrate(15);
+  render();
+ },550);
+});
+for(const name of ['pointerup','pointercancel','pointerleave','scroll'])
+ document.addEventListener(name,()=>clearTimeout(pressTimer),{passive:true});
+
 document.addEventListener('click',event=>{
  const button=event.target.closest('[data-action]');
  if(!button)return;
