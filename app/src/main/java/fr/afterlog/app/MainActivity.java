@@ -254,6 +254,19 @@ public final class MainActivity extends Activity {
         for(int i=0;i<found.length();i++){
             JSONObject item=found.optJSONObject(i);
             if(item==null)continue;
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(6),dp(7),dp(6),dp(7));
+            String poster=item.optString("poster");
+            ImageView thumb=new ImageView(this);
+            thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumb.setBackground(rounded(PANEL,9));
+            LinearLayout.LayoutParams imageLp=new LinearLayout.LayoutParams(dp(46),dp(58));
+            imageLp.rightMargin=dp(12);
+            row.addView(thumb,imageLp);
+            if(poster.startsWith("https://"))loadImage(thumb,poster);
+            else thumb.setImageResource(R.drawable.ic_afterlog_foreground);
             CheckBox check=new CheckBox(this);
             check.setTextColor(Color.WHITE);
             check.setTextSize(14);
@@ -262,8 +275,10 @@ public final class MainActivity extends Activity {
                 (item.optString("date").isEmpty()?"":"\n"+item.optString("date")));
             check.setChecked(item.optBoolean("selected",true));
             check.setTag(i);
-            check.setPadding(dp(3),dp(8),dp(3),dp(8));
-            choices.addView(check,new LinearLayout.LayoutParams(-1,-2));
+            check.setPadding(dp(3),dp(5),dp(3),dp(5));
+            row.addView(check,new LinearLayout.LayoutParams(0,-2,1));
+            row.setOnClickListener(v->check.setChecked(!check.isChecked()));
+            choices.addView(row,new LinearLayout.LayoutParams(-1,-2));
             boxes.add(check);
         }
         TextView all=button("Tout",false,()->{
@@ -279,9 +294,10 @@ public final class MainActivity extends Activity {
             .setView(content)
             .setNegativeButton("Plus tard",null)
             .setPositiveButton("Synchroniser la sélection",(d,w)->{
-                TicketSelectionStore.markAll(this,false);
+                java.util.HashSet<Integer> selectedIds=new java.util.HashSet<>();
                 for(CheckBox b:boxes)
-                    TicketSelectionStore.mark(this,(Integer)b.getTag(),b.isChecked());
+                    if(b.isChecked())selectedIds.add((Integer)b.getTag());
+                TicketSelectionStore.chooseIndices(this,selectedIds);
                 int selected=TicketSelectionStore.selectedCount(this);
                 if(selected==0){
                     message("Aucune soirée cochée : synchronisation non lancée.");
@@ -294,7 +310,7 @@ public final class MainActivity extends Activity {
                         "Import Shotgun en arrière-plan",0,selected,-1,
                         "Profils d'artistes vérifiés pendant la synchronisation.");
                     ShotgunSyncService.importSelected(this);
-                    syncLastSignature="";renderSyncProgress();
+                    showHome(); // Show progress + remaining time immediately.
                 }catch(Exception e){
                     SyncState.save(this,SyncState.ERROR,
                         "Import impossible : "+e.getMessage(),0,selected,-1,
@@ -360,7 +376,8 @@ public final class MainActivity extends Activity {
         if(SyncState.SELECTION.equals(mode)) {
             int count=TicketSelectionStore.list(this).length();
             add(panel,text("Billets Shotgun récupérés",18,Color.WHITE,true),8);
-            add(panel,text(count+" soirée(s) détectée(s). Choisis celles que tu veux importer.",
+            add(panel,text(count+" soirée(s) détectée(s), toutes cochées par défaut. "+
+                "Tu peux en retirer avant la synchronisation.",
                 14,SOFT,false),10);
             add(panel,button("Choisir mes soirées",true,this::showTicketChoice),10);
             add(panel,button("Plus tard",false,()->{
