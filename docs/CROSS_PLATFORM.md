@@ -66,3 +66,13 @@ Aucun abonnement développeur Apple nécessaire pour la PWA.
   impossibles à confirmer ne doivent jamais être attribués automatiquement.
 - Un compte Spotify confirmé ne garantit pas de portrait public. Ne pas inventer
   de photo quand Spotify ne renvoie pas de vignette.
+
+## 0.18.8 — Synchronisation Shotgun et choix personnel
+
+- Android : une fois connecté, l'utilisateur choisit **tout**, **certains événements** ou **plus tard**. Seul le formulaire de connexion est affiché ; les catégories de billets et chaque événement sont traités dans un service avec notification de progression.
+- La sélection individuelle n'apparaît que lorsque l'utilisateur la demande.
+- Les profils des artistes sont enrichis pendant le traitement des soirées, avec attente de la fin des recherches lancées avant d'afficher DONE.
+- L'expérience dépend des pages HTML présentées au compte Shotgun et n'est pas une connexion officielle OAuth ou une API Shotgun.
+- iPhone : la recherche de communes et les services RDR proches sont disponibles ; l'accès automatisé au compte Shotgun personnel reste indisponible sur la PWA.
+- Identité utilisateur : toujours NØCTARIA. Les anciens identifiants de package, formats JSON et chemins de téléchargement sont gardés uniquement pour la compatibilité.
+
