@@ -46,7 +46,7 @@ public final class ShotgunSyncService extends Service {
     private static final int NOTIF_ID=4104;
     public static final String EXTRA_URL="start_url";
     private static final String HOME="https://shotgun.live/fr";
-    private static final int MAX_EVENTS=75;
+    private static final int MAX_EVENTS=ShotgunTicketDiscovery.MAX_EVENTS;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private WebView browser;
     private AppStore store;
