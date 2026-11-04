@@ -8,7 +8,7 @@ const NS='noctaria-spotify-v2';
 const TRUSTED=window.NoctariaTrustedSpotify||{};
 const MAX_NETWORK_LOOKUPS=12;
 const RETRY_MS=6*3600*1000;
-const KNOWN_SOUNDCLOUD=Object.freeze({maissouille:'https://soundcloud.com/maissouille'});
+const KNOWN_SOUNDCLOUD=Object.freeze({maissouille:'https://soundcloud.com/maissouille',skone:'https://soundcloud.com/skonebzh'});
 let running=false,queuedRescan=false;
 const norm=s=>String(s||'').toLowerCase().replace(/ø/g,'o').normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
