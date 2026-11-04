@@ -1075,6 +1075,15 @@ public final class MainActivity extends Activity {
                 badgeLp.topMargin=dp(11);
                 badgeLp.rightMargin=dp(11);
                 tile.addView(spotify,badgeLp);
+                if(!SpotifyArtistVerifier.isArtistUrl(target[0]) &&
+                    SoundCloudArtistFinder.validProfile(soundcloud)){
+                    spotify.setVisibility(View.GONE);
+                    TextView sc=text("SC",11,Color.WHITE,true);
+                    sc.setGravity(Gravity.CENTER);
+                    sc.setBackground(rounded(Color.rgb(232,103,48),18));
+                    sc.setContentDescription("Profil SoundCloud vérifié pour "+name);
+                    tile.addView(sc,badgeLp);
+                }
 
                 // Subtle ring with no fill, so photos remain prominent.
                 View border=new View(this);
