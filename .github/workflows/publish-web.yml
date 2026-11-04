@@ -34,6 +34,7 @@ jobs:
           node --check scripts/spotify-parity-test.mjs
           node --check scripts/city-autocomplete-test.mjs
           node --check scripts/shotgun-scan-test.mjs
+          node --check scripts/shotgun-event-test.mjs
           python3 -m json.tool web/manifest.webmanifest >/dev/null
       - name: Test journal functionality
         run: |
@@ -42,6 +43,7 @@ jobs:
           node scripts/sync-spotify-profiles.mjs --check
           node scripts/spotify-parity-test.mjs
           node scripts/shotgun-scan-test.mjs
+          node scripts/shotgun-event-test.mjs
           node scripts/city-autocomplete-test.mjs
           node web/smoke-test.mjs
       - name: Generate install icons
