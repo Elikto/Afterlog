@@ -27,7 +27,7 @@ const TYPES = [
 const state = {
   db:null,events:[],entries:[],route:'home',eventId:null,
   selected:new Set(),selectionMode:false,
-  media:[],urls:[],posterUrls:new Map(),posterUploadEventId:null,rdrAddress:'',renderVersion:0,installPrompt:null,
+  media:[],urls:[],posterUrls:new Map(),posterUploadEventId:null,rdrAddress:'',rdrCitySelected:'',renderVersion:0,installPrompt:null,
   viewerUrl:null,toastTimer:null
 };
 const esc = value => String(value==null?'':value).replace(/[&<>"']/g,c=>({
@@ -405,12 +405,13 @@ function renderRdr(){
  '<div class="button-row"><a class="btn" href="tel:0800231313">📞 Appeler le 0 800 23 13 13</a>'+
  '<a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/">Site et chat ↗</a></div></div>'+
  '<div class="card"><h2>📍 Structures et associations</h2>'+
- '<p class="muted small" style="margin:9px 0 14px">Recherche des CAARUD et CSAPA proches de l’adresse choisie, comme sur Android.</p>'+
- '<div class="fields">'+field('address','Ville, code postal ou adresse',state.rdrAddress||'',{full:true,placeholder:'Ex. Montpellier 34000'})+'</div>'+
- '<div class="button-row" style="margin-top:12px">'+actionBtn('Rechercher à cette adresse','rdr-places','','primary')+
+ '<p class="muted small" style="margin:9px 0 14px">Commence à écrire une ville, sélectionne une suggestion, puis valide pour rechercher les associations à proximité.</p>'+
+ '<div class="fields">'+field('address','Ville ou code postal',state.rdrAddress||'',{full:true,placeholder:'Ex. Montpellier, Marseille…'})+'</div>'+ 
+ '<div id="rdr-city-options" class="city-suggestions" role="listbox" aria-label="Suggestions de villes" aria-live="polite" hidden></div>'+
+ '<div class="button-row" style="margin-top:12px">'+actionBtn('Valider cette ville','rdr-places','','primary')+
  '<a class="btn" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/Adresses-utiles">Annuaire national ↗</a></div>'+
  '<div id="rdr-results" aria-live="polite" style="margin-top:16px">'+
- '<p class="muted small">Saisis une adresse pour trouver les structures cartographiées à proximité. Les résultats peuvent être incomplets.</p></div></div>'+
+ '<p class="muted small">Sélectionne une ville dans les propositions pour afficher les structures autour. Les résultats peuvent être incomplets.</p></div></div>'+
  (rdr?rdr.guide():'');
 }
 async function searchRdrPlaces(query){
@@ -669,9 +670,22 @@ async function act(action,button){
    break;
   }
   case 'install':installGuide();break;
+  case 'rdr-city':{
+   const choice=button.dataset.city||'';
+   if(choice){
+    state.rdrCitySelected=choice;
+    state.rdrAddress=choice;
+    const field=$('#f-address');if(field)field.value=choice;
+    const list=$('#rdr-city-options');if(list){list.hidden=true;list.innerHTML='';}
+   }
+   break;
+  }
   case 'rdr-places':{
-   const value=$('#f-address')&&$('#f-address').value.trim();
-   await searchRdrPlaces(value);
+   if(!state.rdrCitySelected){
+    notify('Sélectionne une ville dans les suggestions avant de valider.');
+    return;
+   }
+   await searchRdrPlaces(state.rdrCitySelected);
    break;
   }
   case 'close-modal':closeModal();break;
@@ -694,6 +708,37 @@ document.addEventListener('pointerdown',event=>{
 for(const name of ['pointerup','pointercancel','pointerleave','scroll'])
  document.addEventListener(name,()=>clearTimeout(pressTimer),{passive:true});
 
+// Debounced IGN municipality suggestions. Searching never starts until confirmed.
+let cityLookupNumber=0;
+document.addEventListener('input',event=>{
+ if(event.target.id!=='f-address'||state.route!=='rdr')return;
+ const value=event.target.value.trim();
+ state.rdrCitySelected='';
+ const list=$('#rdr-city-options');if(!list)return;
+ list.innerHTML='';list.hidden=true;
+ const request=++cityLookupNumber;
+ if(value.length<2)return;
+ setTimeout(async()=>{
+  if(request!==cityLookupNumber||state.route!=='rdr'||!list.isConnected)return;
+  try{
+   const items=await window.NoctariaPlaces.suggestCities(value);
+   if(request!==cityLookupNumber||state.route!=='rdr'||!list.isConnected)return;
+   if(!items.length){
+    list.innerHTML='<p class="muted small">Aucune commune trouvée. Précise ta recherche.</p>';
+   }else{
+    list.innerHTML=items.map(x=>
+     '<button type="button" class="city-suggestion" role="option" data-action="rdr-city" data-city="'+
+     aesc(x.query)+'">📍 '+esc(x.label)+'</button>').join('');
+   }
+   list.hidden=false;
+  }catch(error){
+   if(request===cityLookupNumber){
+    list.innerHTML='<p class="muted small">Suggestions indisponibles : réessaie.</p>';
+    list.hidden=false;
+   }
+  }
+ },350);
+});
 document.addEventListener('click',event=>{
  const button=event.target.closest('[data-action]');
  if(!button)return;
