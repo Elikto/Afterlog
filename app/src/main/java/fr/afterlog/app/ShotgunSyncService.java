@@ -640,8 +640,8 @@ public final class ShotgunSyncService extends Service {
             getSharedPreferences("afterlog_auto_sync",MODE_PRIVATE).edit()
                 .putLong("blockedUntil",System.currentTimeMillis()+6*60*60*1000L).apply();
         if(SyncState.DONE.equals(state)){
-            // Extra enrichment is part of the sync, not a separate user step.
-            SpotifyArtistBackfillWorker.schedule(this);
+            // The Spotify enrichment stage has already completed within this
+            // foreground sync; do not start a separate post-sync Spotify job.
             // Un ancien échec d'un billet volontairement décoché n'est plus un échec.
             SyncFailureStore.discardStale(this);
             int remaining=SyncFailureStore.actionableCount(this);
@@ -649,7 +649,8 @@ public final class ShotgunSyncService extends Service {
                 "Synchronisation partielle : "+remaining+" soirée(s) cochée(s) non récupérée(s)";
             SyncState.save(this,SyncState.DONE,summary,
                 processed,queue.size(),0,remaining==0?
-                "Toutes les soirées choisies sont traitées.":summary);
+                "Soirées et artistes vérifiés pendant la synchronisation · "+
+                artistLinksVerified+" profil(s) Spotify associés.":summary);
         } else {
             SyncState.save(this,state,message,processed,queue.size(),0,message);
         }
