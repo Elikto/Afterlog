@@ -66,7 +66,7 @@ final class SpotifyArtistVerifier {
             .replaceFirst("(?i)\\s*[|·–-]\\s*Spotify\\s*$","")
             .replaceFirst("(?i)\\s*[|·–-]\\s*(artist|artiste)\\s*$","")
             .replaceFirst("(?i)\\s*·\\s*Top tracks\\s*$","");
-        return !title.isEmpty()&&normalize(title).equals(normalize(expected));
+        return !title.isEmpty()&&ArtistNameMatcher.compatible(title,expected);
     }
 
     private static boolean safeSpotifyPortrait(String image){
