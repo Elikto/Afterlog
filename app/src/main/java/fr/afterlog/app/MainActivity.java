@@ -1578,7 +1578,7 @@ public final class MainActivity extends Activity {
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
-            intent.putExtra(Intent.EXTRA_TITLE,"noctis-sauvegarde.json");
+            intent.putExtra(Intent.EXTRA_TITLE,"noctaria-sauvegarde.json");
             startActivityForResult(intent,EXPORT);
         }),10);
         add(page,button("Importer une sauvegarde JSON",false,()->{
