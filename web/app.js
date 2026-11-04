@@ -227,7 +227,7 @@ function renderHome(){
  '<p class="muted small" style="margin-top:8px">Ajoute une soirée, ou importe les événements d’une sauvegarde Android.</p>'+
  '<div style="margin-top:15px">'+actionBtn('＋ Ajouter une soirée','new-event','','primary')+'</div></div>')+
  '<div class="section"><div class="button-row">'+actionBtn('Importer le journal Android','import')+
- actionBtn('Sauvegarder mon journal','export')+'</div></div>';
+ actionBtn('Sauvegarde complète + médias','export-full','','primary')+'</div></div>';
 }
 function entryLabel(e){
  if(e.parts&&typeof e.parts==='object'){
@@ -375,9 +375,9 @@ function renderSettings(){
  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
  screen.innerHTML='<div class="page-head"><div><p class="eyebrow">CONFIDENTIALITÉ</p><h1>Mes réglages</h1><p class="kicker">Toutes tes données restent sur cet appareil.</p></div></div>'+
  '<div class="card"><h2>Installer sur iPhone</h2><p class="muted" style="margin:12px 0">'+(standalone?'NØCTARIA est déjà ouverte comme application.':ios?'Dans <b>Safari</b>, touche le bouton <b>Partager</b> puis <b>Sur l’écran d’accueil</b> et confirme « Ajouter ».':'Ouvre cette adresse dans Safari sur ton iPhone, puis Partager → Sur l’écran d’accueil.')+'</p>'+actionBtn('Instructions d’installation','install','','block')+'</div>'+
- '<div class="card"><h2>Sauvegarde & migration</h2><p class="muted small" style="margin:8px 0 15px">Importe une sauvegarde JSON Android « afterlog-v1 » pour retrouver tes soirées, artistes et prises. Les fichiers photo et vidéo Android ne sont pas contenus dans ce JSON et doivent être ajoutés à nouveau.</p>'+
- '<div class="button-row">'+actionBtn('Importer une sauvegarde Android','import','','primary')+actionBtn('Exporter mon journal JSON','export')+'</div>'+
- '<p class="muted small" style="margin-top:14px">Le stockage local d’une PWA peut être supprimé si tu effaces les données Safari. Exporte régulièrement ton journal. Ce JSON ne contient pas les médias binaires.</p></div>'+
+ '<div class="card"><h2>Sauvegarde & migration</h2><p class="muted small" style="margin:8px 0 15px">Enregistre une archive NØCTARIA contenant soirées, prises, photos, vidéos et affiches personnelles. Tu peux la restaurer sur un autre iPhone ou navigateur. Le format JSON reste compatible avec Android mais ne contient pas les médias.</p>'+
+ '<div class="button-row">'+actionBtn('Importer JSON ou archive complète','import','','primary')+actionBtn('Sauvegarder avec photos et vidéos','export-full')+actionBtn('Exporter JSON compatible Android','export')+'</div>'+
+ '<p class="muted small" style="margin-top:14px">Les données restent sur cet appareil, sans synchronisation entre téléphones. Sauvegarde ton archive .noctaria sur Fichiers ou iCloud Drive. Effacer les données Safari peut supprimer ton journal local.</p></div>'+
  '<div class="card"><h2>Artistes Spotify</h2><p class="muted small" style="margin:8px 0">Les noms publics des artistes peuvent être recherchés sur Wikidata et Spotify. Aucune consommation n’est envoyée. Sur iOS, l’accès aux portraits officiels dépend de la politique CORS de Spotify.</p>'+
  '<p class="muted small" style="margin:10px 0">'+esc(window.NoctariaSpotify?.status().state||'Jamais analysé')+'</p>'+
  actionBtn('↻ Rechercher tous les artistes','spotify-refresh','','block')+'</div>'+
@@ -652,6 +652,12 @@ async function act(action,button){
   }
   case 'import':$('#import-file').click();break;
   case 'export':exportBackup();break;
+  case 'export-full':{
+   if(!window.NoctariaBackup)throw new Error('Sauvegarde complète indisponible.');
+   const result=await window.NoctariaBackup.exportFull();
+   notify('Archive complète enregistrée : '+result.count+' média(s).');
+   break;
+  }
   case 'install':installGuide();break;
   case 'rdr-places':{
    const value=$('#f-address')&&$('#f-address').value.trim();
@@ -692,7 +698,21 @@ document.addEventListener('keydown',event=>{
 });
 $('#import-file').addEventListener('change',async e=>{
  const file=e.target.files[0];
- if(file)try{await importBackup(file);}catch(error){notify(error.message||'Import impossible');}
+ if(file)try{
+  if(file.name.toLowerCase().endsWith('.noctaria')){
+   if(!window.NoctariaBackup)throw new Error('Import complet indisponible.');
+   const prepared=await window.NoctariaBackup.previewImport(file);
+   openConfirm('Restaurer l’archive complète ?',
+    'Cette opération remplace les soirées, les prises ET tous les médias présents sur cet appareil. Sauvegarde les données actuelles avant de continuer.',
+    'Restaurer',async()=>{
+     const result=await window.NoctariaBackup.restore(prepared);
+     state.media=[];state.events=[];state.entries=[];
+     state.selected.clear();state.selectionMode=false;
+     await load();navigate('home');
+     notify('Archive restaurée : '+result.events+' soirées et '+result.media+' médias.');
+    });
+  }else await importBackup(file);
+ }catch(error){notify(error.message||'Import impossible');}
  e.target.value='';
 });
 $('#poster-file').addEventListener('change',async e=>{
