@@ -28,6 +28,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.text.Normalizer;
 
 /**
  * Synchronisation en service de premier plan avec notification Android.
@@ -61,6 +66,11 @@ public final class ShotgunSyncService extends Service {
     private String phase="",lastError="";
     private final List<JSONObject> queue=new ArrayList<>();
     private final Set<String> seenUrls=new HashSet<>();
+    // Spotify matching runs alongside event retrieval, within the same sync.
+    private final ExecutorService artistPool=Executors.newFixedThreadPool(2);
+    private int artistsPending,artistsFinished,artistLinksVerified;
+    private boolean metadataDone;
+    private String finalSummary="";
 
     public static void start(Context ctx,String url) {
         Intent i=new Intent(ctx,ShotgunSyncService.class);
@@ -282,6 +292,7 @@ public final class ShotgunSyncService extends Service {
                     if(extracted.optString("date").isEmpty())
                         extracted.put("date",previous.optString("date"));
                     saveEventPreservingUserData(extracted);
+                    enrichArtistsDuringSync(new JSONObject(extracted.toString()));
                     SyncFailureStore.remove(this,queue.get(nextIndex).optString("url"));
                     processed++;advance();
                 }catch(Exception e){failCurrent("Extraction indisponible ou en erreur");}
@@ -474,6 +485,86 @@ public final class ShotgunSyncService extends Service {
         if(gotTickets){failCurrent(message);}
         else finish(SyncState.BLOCKED,message);
     }
+    private static String artistKey(String input){
+        return Normalizer.normalize(input.toLowerCase(Locale.ROOT).replace("ø","o"),
+            Normalizer.Form.NFD).replaceAll("\\p{M}","")
+            .replaceAll("[^a-z0-9]+"," ").trim();
+    }
+    private void enrichArtistsDuringSync(JSONObject snapshot){
+        JSONArray given=snapshot.optJSONArray("artistProfiles");
+        Map<String,JSONObject> discovered=new LinkedHashMap<>();
+        if(given!=null)for(int i=0;i<given.length();i++){
+            JSONObject p=given.optJSONObject(i);
+            if(p==null)continue;
+            String name=p.optString("name").trim(),key=artistKey(name);
+            if(!key.isEmpty())discovered.put(key,p);
+        }
+        for(String item:snapshot.optString("artists").split("[,;\\n]+")){
+            String name=item.trim(),key=artistKey(name);
+            if(name.length()>=2&&!key.isEmpty()&&!discovered.containsKey(key)){
+                try{discovered.put(key,new JSONObject().put("name",name));}
+                catch(Exception ignored){}
+            }
+        }
+        if(discovered.isEmpty())return;
+        artistsPending++;
+        artistPool.execute(()->{
+            int linked=0;
+            try{
+                JSONArray validated=new JSONArray();
+                for(JSONObject profile:discovered.values()){
+                    if(Thread.currentThread().isInterrupted())break;
+                    String name=profile.optString("name").trim();
+                    if(name.isEmpty())continue;
+                    JSONObject merged=new JSONObject(profile.toString());
+                    String existing=merged.optString("spotify");
+                    String url=SpotifyArtistFinder.resolve(this,name,
+                        merged.optString("photo"),existing);
+                    if(SpotifyArtistVerifier.isArtistUrl(url)){
+                        merged.put("spotify",url);
+                        linked++;
+                        if(merged.optString("spotifyPhoto").isEmpty()){
+                            String portrait=SpotifyArtistVerifier.verifiedThumbnail(url,name);
+                            if(!portrait.isEmpty())merged.put("spotifyPhoto",portrait);
+                        }
+                    }
+                    validated.put(merged);
+                }
+                if(validated.length()>0){
+                    JSONObject incoming=new JSONObject().put("artistProfiles",validated);
+                    synchronized(ShotgunSyncService.class){
+                        AppStore local=new AppStore(this);
+                        JSONObject current=null;
+                        String url=normalizeUrl(snapshot.optString("url"));
+                        String ticket=normalizeUrl(snapshot.optString("ticketUrl"));
+                        for(JSONObject item:local.events()){
+                            if((!url.isEmpty()&&url.equals(normalizeUrl(item.optString("url"))))||
+                               (!ticket.isEmpty()&&ticket.equals(normalizeUrl(item.optString("ticketUrl"))))){
+                                current=local.event(item.optLong("id"));break;
+                            }
+                        }
+                        if(current!=null){
+                            ArtistProfileMerger.merge(current,incoming);
+                            local.saveEvent(current);
+                        }
+                    }
+                }
+            }catch(Exception ignored){
+                // Keep event and Shotgun photos even if Spotify is unavailable.
+            }
+            final int verified=linked;
+            handler.post(()->{
+                if(!active)return;
+                artistsPending=Math.max(0,artistsPending-1);
+                artistsFinished++;
+                artistLinksVerified+=verified;
+                if(metadataDone&&artistsPending==0)finish(SyncState.DONE,finalSummary);
+                else if(metadataDone)status("Artistes Spotify : vérification en cours",
+                    artistsPending+" soirée(s) à enrichir · "+artistLinksVerified+
+                    " profil(s) trouvé(s).");
+            });
+        });
+    }
     private JSONObject findExisting(JSONObject incoming) {
         String ticketUrl=normalizeUrl(incoming.optString("ticketUrl"));
         if(!ticketUrl.isEmpty()){
@@ -497,8 +588,9 @@ public final class ShotgunSyncService extends Service {
         return found;
     }
     private void saveEventPreservingUserData(JSONObject incoming) throws Exception {
+        synchronized(ShotgunSyncService.class){
         JSONObject existing=findExisting(incoming);
-        if(existing==null){store.saveEvent(incoming);SpotifyArtistBackfillWorker.schedule(this);return;}
+        if(existing==null){store.saveEvent(incoming);return;}
         for(String key:new String[]{"poster","description","date","start","end","endDate",
             "venue","city","address","artists","organizer","genres","url","ticketUrl"}) {
             String newValue=incoming.optString(key).trim();
@@ -507,7 +599,7 @@ public final class ShotgunSyncService extends Service {
         }
         ArtistProfileMerger.merge(existing,incoming);
         store.saveEvent(existing);
-        SpotifyArtistBackfillWorker.schedule(this);
+        }
     }
     private static String clean(String value) {
         return java.text.Normalizer.normalize(value.toLowerCase(Locale.ROOT),
@@ -534,11 +626,22 @@ public final class ShotgunSyncService extends Service {
     }
     private void finish(String state,String message) {
         if(!active) {stopSelf();return;}
+        if(SyncState.DONE.equals(state)&&artistsPending>0){
+            // Never report a completed sync before the artist pages are enriched.
+            metadataDone=true;
+            finalSummary=message;
+            status("Vérification des artistes Spotify",
+                artistsPending+" soirée(s) encore en cours d'enrichissement.");
+            return;
+        }
         active=false;navigationId++;
+        artistPool.shutdownNow();
         if(rateLimited || SyncState.BLOCKED.equals(state) && message.contains("429"))
             getSharedPreferences("afterlog_auto_sync",MODE_PRIVATE).edit()
                 .putLong("blockedUntil",System.currentTimeMillis()+6*60*60*1000L).apply();
         if(SyncState.DONE.equals(state)){
+            // Extra enrichment is part of the sync, not a separate user step.
+            SpotifyArtistBackfillWorker.schedule(this);
             // Un ancien échec d'un billet volontairement décoché n'est plus un échec.
             SyncFailureStore.discardStale(this);
             int remaining=SyncFailureStore.actionableCount(this);
