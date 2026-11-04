@@ -89,3 +89,20 @@ Aucun abonnement développeur Apple nécessaire pour la PWA.
 - Un extrait musical n'est proposé que lorsqu'un lien de lecture officiel
   est réellement présent, sans copier ni héberger la musique.
 - Les tests ne remplacent pas une vérification avec un compte Shotgun réel.
+
+## 0.19.0 — Séquencement, temps total et suppression du bandeau
+
+- Android : N soirées importées avant la recherche des artistes. La vérification
+  Spotify, SoundCloud, des portraits et pistes officielles forme UNE dernière
+  étape, d'où N+1 étapes affichées (9 soirées = 10 étapes).
+- Estimation prudente du temps TOTAL restant, y compris les requêtes Spotify,
+  SoundCloud et photos. Ne jamais promettre quelques secondes sans preuve.
+- Dates françaises (ex. 31 octobre 2026) sur les listes et l'éditeur, tout en
+  conservant les dates ISO dans les données et lors des comparaisons.
+- Correspondances musicales : nom exact puis variantes sans « DJ » ni emojis ;
+  confirmation par sources indépendantes et API oEmbed, ou Source SoundCloud
+  officielle. Aucune URL d'identité ne doit être fabriquée à partir d'un slug.
+- Synchronisation complète : le bandeau disparaît. Erreurs/partiels : détail
+  conservé, bouton « Masquer » ; le masquage n'efface pas le journal.
+- Android et PWA iPhone affichent SoundCloud comme alternative à Spotify ;
+  la PWA n'a toujours pas accès aux billets privés Shotgun.
