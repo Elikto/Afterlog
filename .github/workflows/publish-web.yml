@@ -32,6 +32,7 @@ jobs:
           node --check scripts/check-parity.mjs
           node --check scripts/sync-spotify-profiles.mjs
           node --check scripts/spotify-parity-test.mjs
+          node --check scripts/artist-alias-soundcloud-test.mjs
           node --check scripts/city-autocomplete-test.mjs
           node --check scripts/shotgun-scan-test.mjs
           node --check scripts/shotgun-event-test.mjs
@@ -42,6 +43,7 @@ jobs:
           node scripts/check-parity.mjs
           node scripts/sync-spotify-profiles.mjs --check
           node scripts/spotify-parity-test.mjs
+          node scripts/artist-alias-soundcloud-test.mjs
           node scripts/shotgun-scan-test.mjs
           node scripts/shotgun-event-test.mjs
           node scripts/city-autocomplete-test.mjs
