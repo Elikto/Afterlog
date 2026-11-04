@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class ShotgunScheduledWorker extends Worker {
     private static final String HOME="https://shotgun.live/fr";
     private static final String PREFS="afterlog_auto_sync";
-    private static final int MAX_EVENTS=75;
+    private static final int MAX_EVENTS=ShotgunTicketDiscovery.MAX_EVENTS;
     private final Handler main=new Handler(Looper.getMainLooper());
     private WebView web;
     private volatile boolean blocked=false,failed=false;
@@ -56,30 +56,31 @@ public final class ShotgunScheduledWorker extends Worker {
         if(!safe(start))start=HOME;
         try {
             if(!createWebView())return Result.retry();
-            if(!load(start))return finish(ctx,"Contrôle impossible : Shotgun inaccessible.");
+            // Reuse the logged-in Shotgun WebView, read all three ticket categories.
             List<JSONObject> found=new ArrayList<>();
             Set<String> seen=new HashSet<>();
-            for(int n=0;n<9 && !isStopped() && !blocked;n++) {
-                String raw=evaluate(ShotgunSyncService.DISCOVER_JS);
-                if(raw==null)break;
-                JSONObject response=new JSONObject(ShotgunBrowserActivity.decoded(raw));
-                String action=response.optString("action");
-                addLinks(response.optJSONArray("events"),found,seen);
-                if("login".equals(action)) {
-                    prefs.edit().putString("lastCheck","Session expirée — reconnecte Shotgun").apply();
-                    return Result.success();
+            for(String ticketPage:ShotgunTicketDiscovery.TICKET_PAGES){
+                if(blocked||isStopped())break;
+                if(!load(ticketPage))continue;
+                for(int attempt=0;attempt<5&&!blocked&&!isStopped();attempt++){
+                    String raw=evaluate(ShotgunTicketDiscovery.SCAN_JS);
+                    if(raw==null)break;
+                    JSONObject response=new JSONObject(ShotgunBrowserActivity.decoded(raw));
+                    String action=response.optString("action");
+                    if("login".equals(action)){
+                        prefs.edit().putString("lastCheck",
+                            "Session expirée — reconnecte Shotgun dans NØCTARIA").apply();
+                        return Result.success();
+                    }
+                    if("scroll".equals(action)||"wait".equals(action)){
+                        Thread.sleep(1500);
+                        continue;
+                    }
+                    if("ready".equals(action)){
+                        addLinks(response.optJSONArray("events"),found,seen);
+                        break;
+                    }
                 }
-                if("tickets".equals(action)) {
-                    String url=response.optString("url");
-                    if(!safe(url)||!load(url))break;
-                    prefs.edit().putString("ticketsUrl",url).apply();
-                    continue;
-                }
-                if("past".equals(action)||"menu".equals(action)||"wait".equals(action)) {
-                    Thread.sleep(1500);
-                    continue;
-                }
-                if("ready".equals(action))break;
             }
             if(blocked)return finish(ctx,"Shotgun HTTP 429 : vérifications suspendues.");
             if(found.isEmpty())return finish(ctx,"Aucun événement accessible lors du contrôle.");
