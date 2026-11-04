@@ -36,7 +36,7 @@ final class ShotgunTicketDiscovery {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Map<String,JSONObject> gathered=new LinkedHashMap<>();
     private boolean active,busy,stopped;
-    private int pageIndex,tries;
+    private int pageIndex,tries,offRouteTries;
     private String lastExpected="";
 
     ShotgunTicketDiscovery(ShotgunBrowserActivity activity,WebView web,TextView status,
@@ -47,7 +47,7 @@ final class ShotgunTicketDiscovery {
         this.foundCallback=foundCallback;
     }
     void begin(){
-        active=true;busy=false;stopped=false;pageIndex=0;tries=0;
+        active=true;busy=false;stopped=false;pageIndex=0;tries=0;offRouteTries=0;
         gathered.clear();lastExpected="";
         status.setText("Connecte-toi à Shotgun. Les trois listes de billets seront lues automatiquement.");
         schedule(1300);
@@ -90,14 +90,19 @@ final class ShotgunTicketDiscovery {
         if(!cleanUrl(current).equals(cleanUrl(expected))){
             // Après authentification, aller directement à la liste demandée,
             // même si Shotgun a renvoyé vers son accueil.
-            if(!expected.equals(lastExpected)){
-                tries=0;lastExpected=expected;
+            if(++offRouteTries>12){
+                status.setText("Liste Shotgun inaccessible : "+(pageIndex+1)+"/3.");
+                nextPage();return;
+            }
+            if(offRouteTries==1 || offRouteTries%3==0){
+                lastExpected=expected;
                 status.setText("Ouverture des billets Shotgun : "+(pageIndex+1)+"/3…");
                 web.loadUrl(expected);
             }
-            schedule(2000);
+            schedule(2200);
             return;
         }
+        offRouteTries=0;
         if(web.getProgress()<90){schedule(1300);return;}
         if(++tries>12){nextPage();return;}
         busy=true;
@@ -133,7 +138,7 @@ final class ShotgunTicketDiscovery {
     }
     private void nextPage(){
         if(!active)return;
-        pageIndex++;tries=0;lastExpected="";
+        pageIndex++;tries=0;offRouteTries=0;lastExpected="";
         if(pageIndex>=TICKET_PAGES.length){complete();return;}
         schedule(1100);
     }
