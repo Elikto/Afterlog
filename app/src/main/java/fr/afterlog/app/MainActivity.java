@@ -365,9 +365,13 @@ public final class MainActivity extends Activity {
             return;
         }
         syncPanel.setVisibility(View.VISIBLE);
+        long displayEta=state.optLong("eta",-1);
+        if(displayEta>=0&&SyncState.RUNNING.equals(mode))
+            displayEta=Math.max(0,displayEta-
+                (System.currentTimeMillis()-state.optLong("updatedAt",0))/1000);
         String signature=mode+"|"+state.optString("phase")+"|"+state.optInt("done")+
             "|"+state.optInt("total")+"|"+state.optString("detail")+
-            "|"+state.optLong("eta");
+            "|"+displayEta;
         if(signature.equals(syncLastSignature))return;
         syncLastSignature=signature;
         syncPanel.removeAllViews();
@@ -426,7 +430,7 @@ public final class MainActivity extends Activity {
             " étapes validées (soirées + profils d'artistes)":
             "Recherche de tes billets Shotgun…";
         add(panel,text(amount,13,ACCENT,true),5);
-        long remaining=state.optLong("eta",-1);
+        long remaining=displayEta;
         if(remaining>=0&&SyncState.RUNNING.equals(mode)&&total>0) {
             long min=remaining/60,sec=remaining%60;
             add(panel,text("Temps restant estimé : "+min+" min "+sec+" s",12,SOFT,false),7);
