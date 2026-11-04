@@ -12,7 +12,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.UUID;
 
-/** Photos utilisateur privées, compressées en JPEG et sauvegardées dans AfterLog. */
+/** Photos utilisateur privées, compressées en JPEG et sauvegardées dans NØCTARIA. */
 final class EventPhotos {
     private static final String DIR="event_photos";
     private static File folder(Context ctx) {
