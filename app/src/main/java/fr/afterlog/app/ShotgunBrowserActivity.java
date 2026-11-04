@@ -431,14 +431,39 @@ public final class ShotgunBrowserActivity extends Activity {
               txt('[class*="EventDescription"]',7000) ||
               txt('[id*="description"]',7000);
           }
-          // Texte complet de la section À propos s'il est visible sur la fiche.
-          const sections=[...document.querySelectorAll('main h2,main h3,article h2,article h3')];
-          const about=sections.find(h=>/^(à propos|about|description)$/i.test((h.textContent||'').trim()));
+          // "À propos" is the event's ORIGINAL description, not a teaser
+          // from og:description. Keep paragraph line breaks when available,
+          // and handle React layouts where heading and content are siblings.
+          const canonical=v=>(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+            .replace(/\\s+/g,' ').trim().toLowerCase().replace(/\\s*[:：]$/,'');
+          const headings=[...document.querySelectorAll(
+            'main h2,main h3,main h4,article h2,article h3,article h4,'+
+            'main [role="heading"],article [role="heading"]')];
+          const about=headings.find(h=>
+            /^(a propos|about|description|infos pratiques|event details)$/
+              .test(canonical(h.textContent||'')));
           if(about){
-            const content=about.nextElementSibling;
-            const full=(content?.innerText||content?.textContent||'').trim();
-            if(full.length>result.description.length && full.length<12000)result.description=full;
+            const containers=[
+              about.nextElementSibling,
+              about.parentElement?.nextElementSibling,
+              about.parentElement?.querySelector(
+                '[data-testid*="description"],[class*="description"],[class*="Description"]'),
+              about.parentElement?.parentElement?.querySelector(
+                '[data-testid*="about"],[class*="aboutText"],[class*="AboutText"]')
+            ];
+            for(const content of containers){
+              if(!content||content===about||content.contains(about))continue;
+              const raw=(content.innerText||content.textContent||'')
+                .replace(/\\r/g,'').replace(/\\n[ \\t]*\\n[ \\t]*\\n+/g,'\\n\\n').trim();
+              if(raw.length>=20&&raw.length<=12000&&
+                 raw.length>=(result.description||'').length*0.45){
+                result.description=raw.slice(0,12000);
+                break;
+              }
+            }
           }
+          if(typeof result.description==='string')
+            result.description=result.description.trim().slice(0,12000);
           if(!result.address)result.address=txt('main address',250);
           const linked=(pattern,max)=>{
             const anchors=[...document.querySelectorAll('main a[href]')];
