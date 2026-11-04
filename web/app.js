@@ -59,6 +59,16 @@ const safeSpotify = src => {
  const url=safeImage(src);
  return /^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?artist\/[a-zA-Z0-9]{22}(?:[/?#].*)?$/.test(url)?url:'';
 };
+const safeSoundCloud = src => {
+ const url=safeImage(src);
+ return /^https:\/\/soundcloud\.com\/(?!search|discover|sets|pages|tags|charts|stream|upload)[a-zA-Z0-9_-]{2,100}\/?$/.test(url)?url:'';
+};
+const verifiedArtistKey = name => {
+ const clean=String(name||'').replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF\uFE0E\uFE0F]/gu,' ')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+  .replace(/[^a-z0-9]+/g,' ').trim();
+ return [clean,clean.replace(/^dj\s+/,'')];
+};
 const safePreview = src => {
  const href=safeImage(src);
  if(!href)return '';
@@ -89,15 +99,17 @@ const artistsOf = e => {
 function artistCards(artists){
  return '<div class="artist-grid">'+artists.map(a=>{
   const photo=safeImage(a.spotifyPhoto||a.photo||'');
-  const spotify=safeSpotify(a.spotify)||safeSpotify(window.NoctariaTrustedSpotify?.[
-   String(a.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-   .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()]||'');
+  const spotify=safeSpotify(a.spotify)||safeSpotify(
+   verifiedArtistKey(a.name).map(k=>window.NoctariaTrustedSpotify?.[k]).find(safeSpotify)||'');
+  const soundcloud=spotify?'':safeSoundCloud(a.soundcloud);
   const preview=safePreview(a.previewUrl);
   return '<div class="artist-tile"><button type="button" class="artist-card" data-action="artist" data-name="'+
-   aesc(a.name)+'" data-spotify="'+aesc(spotify)+'" title="'+aesc(a.name)+'">'+
+   aesc(a.name)+'" data-spotify="'+aesc(spotify)+'" data-soundcloud="'+
+   aesc(soundcloud)+'" title="'+aesc(a.name)+'">'+
    '<span class="artist-letter">'+esc((a.name||'?')[0].toUpperCase())+'</span>'+
    (photo?'<img class="artist-image" loading="lazy" src="'+aesc(photo)+'" alt="" onerror="this.remove()">':'')+
-   '<span class="artist-shade"></span><span class="spotify-badge '+(spotify?'':'unlinked')+'">≋</span>'+
+   '<span class="artist-shade"></span><span class="spotify-badge '+(spotify?'':'unlinked')+'">'+
+   (spotify?'≋':soundcloud?'SC':'?')+'</span>'+
    '<span class="artist-name">'+esc(a.name)+'</span></button>'+
    (preview?'<button type="button" class="artist-preview" data-action="artist-preview" data-url="'+
     aesc(preview)+'" aria-label="Écouter un extrait officiel de '+aesc(a.name)+'">▶ Extrait</button>':'')+
@@ -111,16 +123,18 @@ function renderArtists(){
   if(!key)continue;
   const previous=map.get(key);
   if(!previous){map.set(key,{...artist});continue;}
-  for(const field of ['photo','spotifyPhoto','spotify','shotgunUrl','previewUrl'])
+  for(const field of ['photo','spotifyPhoto','spotify','soundcloud','shotgunUrl','previewUrl'])
    if(!previous[field]&&artist[field])previous[field]=artist[field];
  }
  const artists=[...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr'));
  const profiles=artists.filter(x=>safeSpotify(x.spotify)).length;
+ const soundcloudProfiles=artists.filter(x=>!safeSpotify(x.spotify)&&safeSoundCloud(x.soundcloud)).length;
  const photos=artists.filter(x=>safeImage(x.spotifyPhoto||x.photo)).length;
  screen.innerHTML='<button class="back" data-action="home">‹ Mes soirées</button>'+
  '<div class="page-head"><div><p class="eyebrow">NØCTARIA · MES ARTISTES</p>'+
  '<h1>Tous les artistes</h1><p class="kicker">'+artists.length+' artistes · '+
- profiles+' profils Spotify renseignés · '+photos+' portraits</p></div></div>'+
+ profiles+' Spotify · '+soundcloudProfiles+' SoundCloud · '+photos+
+ ' portraits</p></div></div>'+
  (artists.length?artistCards(artists):'<p class="card">Synchronise ou ajoute des soirées pour retrouver les artistes.</p>')+
  '<div class="section">'+actionBtn('↻ Vérifier les profils Spotify','spotify-refresh','','block')+'</div>';
 }
@@ -710,7 +724,8 @@ async function act(action,button){
    break;
   }
   case 'artist':{
-   const url=safeSpotify(button.dataset.spotify);
+   const url=safeSpotify(button.dataset.spotify)||
+    safeSoundCloud(button.dataset.soundcloud);
    if(url)window.open(url,'_blank','noopener,noreferrer');
    else askArtist(button.dataset.name||'Artiste');
    break;
