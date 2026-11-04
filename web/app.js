@@ -353,7 +353,12 @@ function renderEvent(event){
  actionBtn('Story Instagram','share-story','','tiny')+
  actionBtn('Supprimer','delete-selected','','tiny danger'):'')+'</div>'+gallery+
  '<p class="muted small">Appuie sur un média pour l’ouvrir ou active « Sélectionner » pour un partage multiple.</p></section>'+
- ((event.shotgunAbout||event.description)?'<section class="section"><h2>À propos</h2><p class="detail-description">'+esc(event.shotgunAbout||event.description)+'</p></section>':'')+
+ ((String(event.origin||'').toLowerCase().includes('shotgun')||/^https:\/\/(?:[a-z0-9-]+\.)?shotgun\.live\/(?:[a-z]{2}\/)?(?:events|festivals)\//i.test(event.url||''))?
+ '<section class="section"><h2>À propos</h2><p class="detail-description">'+
+ esc(event.shotgunAbout||'Description « À propos » non encore récupérée sur la fiche Shotgun.')+
+ '</p></section>':
+ (event.description?'<section class="section"><h2>À propos</h2><p class="detail-description">'+
+ esc(event.description)+'</p></section>':''))+
  lineUp+
  (event.genres?'<section class="section"><h2>Vibe · Styles musicaux</h2><div class="button-row" style="margin-top:12px">'+
  String(event.genres).split(/[,;]+/).filter(Boolean).map(g=>'<span class="pill">♫ '+esc(g.trim())+'</span>').join('')+'</div></section>':'')+
