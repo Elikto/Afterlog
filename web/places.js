@@ -15,6 +15,26 @@ function distance(a,b,c,d){
  const aa=Math.sin(dl/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(doLon/2)**2;
  return 2*R*Math.asin(Math.min(1,Math.sqrt(aa)));
 }
+/** IGN Géoplateforme municipality suggestions, no GPS or user account. */
+async function suggestCities(query){
+ const term=String(query||'').trim();
+ if(term.length<2)return [];
+ const params=new URLSearchParams({
+  index:'address',type:'municipality',limit:'8',autocomplete:'1',q:term
+ });
+ const data=await getJson('https://data.geopf.fr/geocodage/search?'+params,{},14000);
+ const found=new Set(),results=[];
+ for(const feature of data.features||[]){
+  const p=feature.properties||{};
+  const city=String(p.city||p.name||'').trim(),postcode=String(p.postcode||'').trim();
+  if(!city)continue;
+  const label=city+(postcode?', '+postcode:'');
+  if(found.has(label.toLocaleLowerCase('fr')))continue;
+  found.add(label.toLocaleLowerCase('fr'));
+  results.push({label,query:label});
+ }
+ return results;
+}
 async function geocode(address){
  const q=encodeURIComponent(address);
  for(const suffix of [
@@ -106,5 +126,5 @@ function guide(){
  '<section class="section"><h2>Fiches de prévention</h2><p class="muted small" style="margin-bottom:12px">Informations générales, sans seuil de sécurité inventé.</p>'+
  sheets.map(([title,text])=>'<details class="rdr-item"><summary><b>'+esc(title)+'</b></summary><p class="muted">'+esc(text)+'</p><a class="btn tiny" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues">Lire les fiches de référence ↗</a></details>').join('')+'</section>';
 }
-window.NoctariaPlaces={directory,card,guide,source:SOURCE};
+window.NoctariaPlaces={directory,suggestCities,card,guide,source:SOURCE};
 })();
