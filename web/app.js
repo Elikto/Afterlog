@@ -205,19 +205,36 @@ async function render(){
  setNav(state.route==='event'?'home':state.route);
 }
 function renderHome(){
- const events=[...state.events].sort((a,b)=>
-  String(b.date||'').localeCompare(String(a.date||'')));
- const nights=events.length,cons=state.entries.length;
- const mediaCount=events.reduce((n,e)=>n+(Array.isArray(e.photos)?e.photos.length:0)+(Array.isArray(e.videos)?e.videos.length:0),0);
+ const events=[...state.events].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
  screen.innerHTML=
- '<section class="hero"><p class="eyebrow">TON UNIVERS NOCTURNE</p><h1>Chaque nuit laisse une <span class="highlight">trace.</span></h1><p class="kicker">Festivals, soirées, souvenirs et journal personnel — au même endroit, chez toi.</p><div class="hero-actions">'+actionBtn('＋ Nouvelle soirée','new-event','','primary')+actionBtn('Importer Android','import')+'</div></section>'+
- '<div class="stats"><div class="stat"><strong>'+nights+'</strong><span>soirées</span></div><div class="stat"><strong>'+cons+'</strong><span>prises notées</span></div><div class="stat"><strong>'+mediaCount+'</strong><span>médias référencés</span></div></div>'+
- '<div class="heading-row"><h2>Mes soirées</h2><span class="pill">Privé · sur cet appareil</span></div>'+
- (events.length?'<section class="event-grid">'+events.map(e=>
-  '<button class="event-card" data-action="open-event" data-id="'+aesc(e.id)+'" aria-label="Ouvrir '+aesc(e.title)+'">'+posterHtml(e)+
-  '<div class="event-meta"><strong>'+esc(e.title)+'</strong><p>'+esc([e.venue||e.city,formatDate(e.date)].filter(Boolean).join(' · '))+'</p></div></button>'
- ).join('')+'</section>':
- '<div class="empty"><div class="emoji">🌙</div><h3>Ta première soirée commence ici</h3><p class="muted">Crée une soirée personnelle ou importe le journal JSON de NØCTARIA sur Android.</p>'+actionBtn('Créer une soirée','new-event','','primary')+'</div>');
+ '<div class="page-head"><div><p class="eyebrow">MES NUITS · MES SOUVENIRS</p><h1>NØCTARIA</h1>'+
+ '<p class="kicker">Retrouve toutes tes soirées et ton journal personnel.</p></div></div>'+
+ '<div class="button-row home-buttons">'+
+ actionBtn('＋ Soirée','new-event','','primary')+
+ actionBtn('🎟 Shotgun','shotgun')+
+ '</div><div class="button-row home-buttons">'+
+ actionBtn('♡ RDR','rdr')+actionBtn('Suivi','tracking')+'</div>'+
+ '<div class="heading-row"><h2>MES SOIRÉES · '+events.length+'</h2></div>'+
+ (events.length?events.map(event=>{
+  const entries=state.entries.filter(e=>byId(e.eventId)===byId(event.id));
+  const named=[...new Set(entries.map(e=>typeOf(e)[0]))].slice(0,8).join('  ');
+  const risk=window.NoctariaParity?.warnings(entries,state.entries)||[];
+  const high=risk.some(w=>w.severity===2);
+  const place=event.venue||event.city||'';
+  const poster=posterHtml(event);
+  return '<button class="event-row card" data-action="open-event" data-id="'+aesc(event.id)+'" aria-label="Ouvrir '+aesc(event.title)+'">'+
+   '<div class="event-row-art">'+poster+'</div>'+
+   '<div class="event-row-text"><strong>'+esc(event.title||'Événement')+'</strong>'+
+   '<span class="event-row-date">'+esc(event.date||'')+(event.start?' · '+esc(event.start):'')+'</span>'+
+   (place?'<span class="muted small">'+esc(place)+'</span>':'')+
+   ((named||risk.length)?'<span class="event-row-icons">'+esc(named)+(risk.length?' <b class="'+(high?'danger':'warn')+'">⚠</b>':'')+'</span>':'')+
+   '<span class="muted small">Ouvrir ›</span></div></button>';
+ }).join(''):
+ '<div class="card"><h3>Aucune soirée pour l’instant</h3>'+
+ '<p class="muted small" style="margin-top:8px">Ajoute une soirée, ou importe les événements d’une sauvegarde Android.</p>'+
+ '<div style="margin-top:15px">'+actionBtn('＋ Ajouter une soirée','new-event','','primary')+'</div></div>')+
+ '<div class="section"><div class="button-row">'+actionBtn('Importer le journal Android','import')+
+ actionBtn('Sauvegarder mon journal','export')+'</div></div>';
 }
 function entryLabel(e){
  if(e.parts&&typeof e.parts==='object'){
