@@ -51,8 +51,8 @@ public final class ShotgunBrowserActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        getWindow().setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE,
-            android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        // Ne pas activer FLAG_SECURE : les captures d’écran et enregistrements
+        // d’écran sont autorisés dans le navigateur Shotgun intégré.
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
