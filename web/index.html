@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0c18">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NØCTARIA">
+  <meta name="description" content="NØCTARIA, ton journal privé de soirées, festivals et souvenirs.">
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>NØCTARIA — Mes nuits, mes souvenirs</title>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button type="button" class="brand" data-action="home" aria-label="Accueil NØCTARIA">
+      <img src="./icon.svg" width="42" height="42" alt="">
+      <span>NØCTARIA<small>MES NUITS · MES SOUVENIRS</small></span>
+    </button>
+    <button type="button" id="install-button" class="icon-button" data-action="install" title="Installer NØCTARIA" aria-label="Installer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3"/></svg></button>
+    <button type="button" class="icon-button" data-action="settings" aria-label="Paramètres"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M20 12a8 8 0 0 0-.1-1.1l-2.1-.7-.7-1.5 1-2-2-2-2 1-1.5-.7L12 2l-2 .6-.7 2.2-1.5.7-2-1-2 2 1 2-.7 1.5L2 12l.6 2 2.2.7.7 1.5-1 2 2 2 2-1 1.5.7L12 22l2-.6.7-2.2 1.5-.7 2 1 2-2-1-2 .7-1.5z"/></svg></button>
+  </header>
+  <main id="screen" class="screen" tabindex="-1" aria-live="polite"></main>
+  <nav class="bottom-nav" aria-label="Navigation principale">
+    <button type="button" data-action="home" data-tab="home"><span class="nav-icon">⌂</span>Mes soirées</button>
+    <button type="button" data-action="new-event" data-tab="new"><span class="nav-add">＋</span>Ajouter</button>
+    <button type="button" data-action="tracking" data-tab="tracking"><span class="nav-icon">◷</span>Mon suivi</button>
+    <button type="button" data-action="settings" data-tab="settings"><span class="nav-icon">☰</span>Réglages</button>
+  </nav>
+</div>
+<div id="overlay" class="overlay" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<input id="import-file" type="file" accept=".json,application/json" hidden>
+<input id="media-file" type="file" accept="image/*,video/*" multiple hidden>
+<script src="./app.js" defer></script>
+</body>
+</html>
