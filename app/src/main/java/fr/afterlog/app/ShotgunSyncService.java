@@ -500,21 +500,20 @@ public final class ShotgunSyncService extends Service {
             (System.currentTimeMillis()-startedAt)/1000L/Math.max(1,processed+errors):35;
         // Never assume each event takes less than 30 seconds.
         long eventSecs=eventsRemaining*Math.max(30,Math.min(90,eventAverage*3/2));
-        if(!artistStageStarted)return Math.max(120,eventSecs+180+queue.size()*12L);
-        if(artistsPending>0)return Math.max(120,artistsPending*35L+45);
-        return Math.max(60,eventSecs+60);
+        if(!artistStageStarted)return Math.max(240,eventSecs+240+queue.size()*20L);
+        if(artistsPending>0)return Math.max(240,artistsPending*50L+90);
+        return Math.max(120,eventSecs+120);
     }
     private void startArtistStage(){
         if(!active||artistStageStarted)return;
         artistStageStarted=true;
-        status("Étape "+(queue.size()+1)+"/"+(queue.size()+1)+
-            " · Artistes, Spotify et SoundCloud",
-            "Recherche des profils, portraits et extraits après les "+queue.size()+
-            " soirées.");
         metadataDone=true;
         for(JSONObject event:artistSnapshots)enrichArtistsDuringSync(event);
-        if(artistsPending==0)finish(SyncState.DONE,
-            "Soirées analysées et vérification des artistes terminée.");
+        if(artistsPending==0){
+            finish(SyncState.DONE,"Vérification des artistes terminée.");
+        }else status("Étape "+(queue.size()+1)+"/"+(queue.size()+1)+
+            " · Tous les artistes",artistsPending+
+            " line-up(s) : Spotify, SoundCloud, portraits et extraits.");
     }
     private static String artistKey(String input){
         return Normalizer.normalize(input.toLowerCase(Locale.ROOT).replace("ø","o"),
@@ -561,7 +560,24 @@ public final class ShotgunSyncService extends Service {
                             String portrait=SpotifyArtistVerifier.verifiedThumbnail(url,name);
                             if(!portrait.isEmpty())merged.put("spotifyPhoto",portrait);
                         }
-                    }else missingLink++;
+                    }
+                    String soundcloud=merged.optString("soundcloud");
+                    if(!SpotifyArtistVerifier.isArtistUrl(url)){
+                        // SoundCloud is a checked fallback, never a guessed slug.
+                        soundcloud=SoundCloudArtistFinder.find(name,soundcloud);
+                        if(SoundCloudArtistFinder.validProfile(soundcloud)){
+                            merged.put("soundcloud",soundcloud);
+                            if(merged.optString("previewUrl").isEmpty()){
+                                String track=SoundCloudArtistFinder.firstOfficialTrack(soundcloud);
+                                if(!track.isEmpty())merged.put("previewUrl",track);
+                            }
+                        }else missingLink++;
+                    }
+                    if(merged.optString("previewUrl").isEmpty() &&
+                       SpotifyArtistVerifier.isArtistUrl(url)){
+                        String track=OfficialMusicPreview.firstSpotifyTrack(url);
+                        if(!track.isEmpty())merged.put("previewUrl",track);
+                    }
                     if(merged.optString("spotifyPhoto").isEmpty() &&
                         !merged.optString("photo").startsWith("https://"))
                         missingPhoto++;
@@ -684,7 +700,7 @@ public final class ShotgunSyncService extends Service {
             artistMissingLinks>0||artistMissingPhotos>0)){
             state=SyncState.PARTIAL;
             message=processed+"/"+queue.size()+" soirées importées · "+
-                artistMissingLinks+" profil(s) Spotify manquant(s) · "+
+                artistMissingLinks+" profil(s) Spotify/SoundCloud manquant(s) · "+
                 artistMissingPhotos+" portrait(s) absent(s) · "+
                 missingLineups+" programmation(s) introuvable(s).";
         }
