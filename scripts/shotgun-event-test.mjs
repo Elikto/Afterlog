@@ -37,6 +37,8 @@ assert.ok(result.description.includes('Le festival rassemble plusieurs scènes')
  'event À propos replaces short social metadata');
 assert.ok(result.description.includes('Ouverture des portes'),
  'full About includes the practical second paragraph');
+assert.equal(result.shotgunAbout,result.description,
+ 'Shotgun About is preserved without erasing user-edited notes on older events');
 assert.equal(result.artistProfiles?.[0]?.name,'Perceval');
 assert.equal(result.artistProfiles?.[0]?.previewUrl,music,
  'only an explicit real official track is retained');
