@@ -1766,7 +1766,12 @@ public final class MainActivity extends Activity {
                     .setMessage("Cette sauvegarde remplacera entièrement ton journal actuel.")
                     .setNegativeButton("Annuler",null)
                     .setPositiveButton("Importer",(d,w)->{
-                        try {store.restore(content);message("Données restaurées");showHome();}
+                        try {
+                            store.restore(content);
+                            SpotifyArtistBackfillWorker.refreshAll(this);
+                            message("Données restaurées · recherche Spotify sur toutes les soirées lancée");
+                            showHome();
+                        }
                         catch(Exception ex){message("Erreur de sauvegarde : "+ex.getMessage());}
                     }).show();
             }
