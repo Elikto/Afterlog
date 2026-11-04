@@ -1,3 +1,11 @@
+# NØCTARIA 0.18.5 — Captures d’écran Shotgun (Android)
+
+- Les captures d’écran et l’enregistrement de l’écran sont désormais autorisés dans le navigateur Shotgun intégré à NØCTARIA Android. Le blocage venait du drapeau Android `FLAG_SECURE` appliqué à cette fenêtre.
+- Cela ne change pas l’authentification Shotgun, la synchronisation des événements ou le fonctionnement de la PWA iOS.
+- Attention aux captures de billets personnels : masque QR codes et informations privées avant tout partage.
+
+---
+
 # NØCTARIA 0.18.4 — Billets personnels Shotgun (Android)
 
 - Après la connexion dans le navigateur Shotgun **intégré à Android**, NØCTARIA visite automatiquement les trois pages de billets : `/fr/account/tickets`, `/fr/account/tickets/pending`, `/fr/account/tickets/past`.
