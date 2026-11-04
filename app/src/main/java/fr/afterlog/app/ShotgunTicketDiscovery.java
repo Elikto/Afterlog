@@ -7,209 +7,193 @@ import android.webkit.WebView;
 import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Découverte de billets dans le WebView VISIBLE et déjà connecté de l'utilisateur.
- * Évite le WebView sans fenêtre du service Android pour la navigation initiale.
- * Ne lit ni QR codes, cookies, formulaires, mots de passe, ni données de paiement.
+ * Lecture automatique des trois listes de billets du compte personnel Shotgun,
+ * après la connexion effectuée par l'utilisateur sur le vrai site Shotgun
+ * dans une WebView Android visible. Aucune donnée d'authentification, QR code,
+ * facture ou moyen de paiement n'est extraite.
+ *
+ * Cette méthode dépend de l'interface Web de Shotgun : elle n'est pas une API
+ * officielle, ne contourne aucun contrôle d'accès et s'arrête en cas de 429.
  */
 final class ShotgunTicketDiscovery {
+    static final String[] TICKET_PAGES={
+        "https://shotgun.live/fr/account/tickets",
+        "https://shotgun.live/fr/account/tickets/pending",
+        "https://shotgun.live/fr/account/tickets/past"
+    };
+    static final String ACCOUNT=TICKET_PAGES[0];
+    static final int MAX_EVENTS=200;
+
     private final ShotgunBrowserActivity activity;
     private final WebView web;
     private final TextView status;
     private final Consumer<JSONArray> foundCallback;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean active, busy, stopped, accountTried;
-    private int tries, lastNavigation;
-    private long lastActionTime;
-    static final String ACCOUNT="https://shotgun.live/fr";
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private final Map<String,JSONObject> gathered=new LinkedHashMap<>();
+    private boolean active,busy,stopped;
+    private int pageIndex,tries;
+    private String lastExpected="";
 
     ShotgunTicketDiscovery(ShotgunBrowserActivity activity,WebView web,TextView status,
                            Consumer<JSONArray> foundCallback) {
-        this.activity=activity;this.web=web;this.status=status;this.foundCallback=foundCallback;
+        this.activity=activity;
+        this.web=web;
+        this.status=status;
+        this.foundCallback=foundCallback;
     }
     void begin(){
-        active=true;busy=false;stopped=false;tries=0;lastNavigation=0;
-        status.setText("Recherche des billets dans ta session Shotgun…");
+        active=true;busy=false;stopped=false;pageIndex=0;tries=0;
+        gathered.clear();lastExpected="";
+        status.setText("Connecte-toi à Shotgun. Les trois listes de billets seront lues automatiquement.");
         schedule(1300);
     }
     void stop(){active=false;stopped=true;handler.removeCallbacksAndMessages(null);}
-    void pageFinished(){if(active){busy=false;schedule(1100);}}
+    void pageFinished(){if(active){busy=false;schedule(1300);}}
     void rateLimited(){
-        if(!active)return;
-        active=false;stopped=true;
-        status.setText("Shotgun limite les demandes (HTTP 429). Ne relance pas l'import pour l'instant.");
+        stop();
+        status.setText("Shotgun limite les demandes (HTTP 429) : synchronisation interrompue.");
     }
-    void tryAgain(){
-        accountTried=false;
-        begin();
+    void tryAgain(){stop();begin();}
+    private void schedule(int delay){
+        if(active&&!stopped&&!activity.isFinishing())handler.postDelayed(this::inspect,delay);
     }
-    private void schedule(int millis){
-        if(!active||stopped||activity.isFinishing())return;
-        handler.postDelayed(this::inspect,millis);
+    private static boolean loginPage(String address){
+        String path=Uri.parse(address).getPath();
+        if(path==null)return false;
+        return path.matches("(?i).*/(?:login|signin|sign-in|auth)(?:/.*)?");
+    }
+    private static String cleanUrl(String value){
+        if(value==null)return "";
+        try{
+            Uri uri=Uri.parse(value);
+            return uri.buildUpon().clearQuery().fragment(null).build().toString()
+                .replaceAll("/+$","");
+        }catch(Exception e){return "";}
     }
     private void inspect(){
         if(!active||stopped||activity.isFinishing()||busy)return;
-        final String url=web.getUrl();
-        if(url==null||!ShotgunBrowserActivity.trusted(Uri.parse(url)))return;
-        if(web.getProgress()<90){schedule(1400);return;}
-        if(++tries>35) {
-            active=false;
-            status.setText("Recherche automatique interrompue. Ouvre « Mes billets → Passés » dans Shotgun, puis appuie sur « Lire mes billets ».");
+        if(pageIndex>=TICKET_PAGES.length){complete();return;}
+        String current=web.getUrl();
+        if(current==null||!ShotgunBrowserActivity.trusted(Uri.parse(current))){
+            schedule(2000);return;
+        }
+        if(loginPage(current)){
+            status.setText("Connecte-toi sur Shotgun. NØCTARIA reprendra automatiquement ensuite.");
+            schedule(1700);return;
+        }
+        String expected=TICKET_PAGES[pageIndex];
+        if(!cleanUrl(current).equals(cleanUrl(expected))){
+            // Après authentification, aller directement à la liste demandée,
+            // même si Shotgun a renvoyé vers son accueil.
+            if(!expected.equals(lastExpected)){
+                tries=0;lastExpected=expected;
+                status.setText("Ouverture des billets Shotgun : "+(pageIndex+1)+"/3…");
+                web.loadUrl(expected);
+            }
+            schedule(2000);
             return;
         }
+        if(web.getProgress()<90){schedule(1300);return;}
+        if(++tries>12){nextPage();return;}
         busy=true;
         web.evaluateJavascript(SCAN_JS,raw->{
             busy=false;
             if(!active||stopped||activity.isFinishing())return;
-            try {
-                JSONObject state=new JSONObject(ShotgunBrowserActivity.decoded(raw));
-                String action=state.optString("action");
-                if("login".equals(action)) {
-                    // La connexion appartient à Shotgun. Ne pas déclencher de navigation.
-                    status.setText("Connecte-toi sur Shotgun. Après connexion, AfterLog cherchera tes billets.");
-                    schedule(1700);
-                    return;
+            try{
+                JSONObject response=new JSONObject(ShotgunBrowserActivity.decoded(raw));
+                String action=response.optString("action");
+                if("login".equals(action)){
+                    status.setText("Termine ta connexion Shotgun pour lancer la synchronisation.");
+                    schedule(1800);return;
                 }
-                if("ready".equals(action)) {
-                    JSONArray tickets=state.optJSONArray("events");
-                    if(tickets!=null && tickets.length()>0) {
-                        active=false;
-                        foundCallback.accept(tickets);
-                        return;
+                if("wait".equals(action)||"scroll".equals(action)){
+                    status.setText("Lecture des billets : "+(pageIndex+1)+"/3…");
+                    schedule(1500);return;
+                }
+                JSONArray events=response.optJSONArray("events");
+                if(events!=null){
+                    for(int i=0;i<events.length() && gathered.size()<MAX_EVENTS;i++){
+                        JSONObject event=events.optJSONObject(i);
+                        if(event==null)continue;
+                        String url=event.optString("url");
+                        if(!ShotgunBrowserActivity.trusted(Uri.parse(url)))continue;
+                        String key=cleanUrl(url);
+                        if(!key.isEmpty()&&!gathered.containsKey(key))gathered.put(key,event);
                     }
                 }
-                if("account".equals(action)&&!accountTried){
-                    accountTried=true;
-                    status.setText("Ouverture de ton compte Shotgun…");
-                    web.loadUrl(ACCOUNT);
-                    schedule(1800);
-                    return;
-                }
-                if("link".equals(action)){
-                    String link=state.optString("url");
-                    if(ShotgunBrowserActivity.trusted(Uri.parse(link))) {
-                        status.setText("Ouverture de « Mes billets »…");
-                        lastNavigation++;tries=0;
-                        web.loadUrl(link);
-                        schedule(1800);
-                        return;
-                    }
-                }
-                if("clicked".equals(action)){
-                    String target=state.optString("target","billets");
-                    status.setText(target.equals("past")?
-                        "Affichage des billets passés…" : "Ouverture des billets…");
-                    schedule(2300);return;
-                }
-                if("empty".equals(action)){
-                    status.setText("Billets passés ouverts, mais aucun lien d'événement exploitable n'est visible. Vérifie la liste sur Shotgun.");
-                    active=false;return;
-                }
-                status.setText("Recherche de « Mes billets → Passés »…");
-                schedule(1700);
-            }catch(Exception ex) {
-                status.setText("La navigation Shotgun n'a pas répondu. Tu peux ouvrir Mes billets manuellement.");
-                schedule(2000);
-            }
+                status.setText("Billets "+(pageIndex+1)+"/3 : "+gathered.size()+" soirée(s) repérée(s).");
+                nextPage();
+            }catch(Exception e){schedule(2000);}
         });
     }
+    private void nextPage(){
+        if(!active)return;
+        pageIndex++;tries=0;lastExpected="";
+        if(pageIndex>=TICKET_PAGES.length){complete();return;}
+        schedule(1100);
+    }
+    private void complete(){
+        if(!active)return;
+        stop();
+        JSONArray result=new JSONArray();
+        for(JSONObject e:gathered.values())result.put(e);
+        status.setText(result.length()+" soirée(s) repérée(s) dans les trois catégories.");
+        foundCallback.accept(result);
+    }
 
-    // Uniquement les liens et métadonnées visibles des cartes d'événements.
-    // Les clics autorisés sont limités à l'ouverture de Mes billets et de l'onglet Passés.
-    private static final String SCAN_JS = """
+    // Ce script analyse uniquement les cartes de liste et les liens publics
+    // d'événements; jamais les QR codes ni les identifiants des billets.
+    static final String SCAN_JS = """
       (function(){
         const path=location.pathname.toLowerCase();
-        if(/\\/login|\\/signin|\\/sign-in/.test(path))return JSON.stringify({action:'login'});
-        const clean=s=>(s||'').replace(/\\s+/g,' ').trim();
-        const text=e=>clean(e?.innerText||e?.textContent||e?.getAttribute('aria-label')||'');
-        const buttons=[...document.querySelectorAll('a[href],button,[role="button"],[role="tab"]')];
-        const trusted=url=>{
-          try{
-            const u=new URL(url,location.href);
-            return u.protocol==='https:'&&/(^|\\.)shotgun\\.live$/i.test(u.hostname);
-          }catch(_){return false}
-        };
-        const ticketArea=/(?:tickets?|billets?|orders?)/i.test(path) ||
-          !!document.querySelector('[role="tablist"]') &&
-            buttons.some(e=>/^(passés|past|à venir|upcoming)$/i.test(text(e)));
-        const past=buttons.find(e=>/^(passés|passees|past|past events)$/i.test(text(e)));
-        const selected=past && (past.getAttribute('aria-selected')==='true' ||
-          past.getAttribute('data-state')==='active' ||
-          past.getAttribute('aria-current')==='page' ||
-          /(?:^|\\s)(?:active|selected)(?:\\s|$)/i.test(String(past.className)));
-        const urlPast=/\\/past(?:\\/|$)|[?&](?:tab|status)=past/i.test(location.href);
-        const accountHome=/^\\/(?:[a-z]{2}\\/)?account\\/?$/.test(path);
-        // Il faut arriver dans Mes billets avant de toucher les autres événements du site.
-        if(!ticketArea) {
-          const entry=buttons.find(e=>/mes billets|my tickets/i.test(text(e)) ||
-            (e.matches('a[href]')&&/(?:my-tickets|mes-billets|mytickets)/i.test(e.href)));
-          if(entry) {
-            if(entry.matches('a[href]')&&trusted(entry.href))
-              return JSON.stringify({action:'link',url:entry.href});
-            entry.click();return JSON.stringify({action:'clicked',target:'tickets'});
-          }
-          const profile=buttons.find(e=>/^(profil|profile|mon compte|account)$/i.test(text(e)) ||
-            /profil|profile|account|avatar/i.test(e.getAttribute('aria-label')||'') ||
-            /avatar|profile|account/i.test(e.getAttribute('data-testid')||''));
-          if(profile && !window.__afterlog_profile_clicked) {
-            window.__afterlog_profile_clicked=true;
-            if(profile.matches('a[href]') && trusted(profile.href))
-                return JSON.stringify({action:'link',url:profile.href});
-            profile.click();
-            return JSON.stringify({action:'clicked',target:'tickets'});
-          }
+        if(/\\/(?:login|signin|sign-in|auth)(?:\\/|$)/i.test(path) ||
+           document.querySelector('input[type="password"]'))
+          return JSON.stringify({action:'login'});
+        if(!/\\/account\\/tickets(?:\\/(?:pending|past))?\\/?$/.test(path))
           return JSON.stringify({action:'wait'});
-        }
-        if(past && !selected && !urlPast && !window.__afterlog_past_clicked){
-          window.__afterlog_past_clicked=true;
-          if(past.matches('a[href]') && trusted(past.href))
-            return JSON.stringify({action:'link',url:past.href});
-          past.click();
-          return JSON.stringify({action:'clicked',target:'past'});
-        }
-        const eventPath=/^\\/(?:[a-z]{2}\\/)?(?:events|festivals)\\/[^/]+\\/?$/;
-        const ticketPath=/\\/(?:my-tickets|tickets|ticket|orders)\\/[^/]+/i;
-        const seen=new Set(),events=[];
-        for(const anchor of document.querySelectorAll('a[href]')){
-          if(events.length>=75)break;
-          try{
-            const u=new URL(anchor.href,location.href);
-            if(!trusted(u.href)||(!eventPath.test(u.pathname)&&!ticketPath.test(u.pathname)))continue;
-            if(seen.has(u.pathname))continue;
-            const card=anchor.closest('article,li,[class*="card"],[class*="Card"]')||anchor;
-            const image=card.querySelector('img')||anchor.querySelector('img');
-            const title=clean(card.querySelector('h2,h3,h4')?.textContent||
-              anchor.querySelector('h1,h2,h3,h4')?.textContent||
-              image?.alt||anchor.textContent).slice(0,180);
-            if(title.length<3)continue;
-            const e={url:u.toString(),title};
-            const poster=image?.currentSrc||image?.src||'';
-            if(poster.startsWith('https://'))e.poster=poster;
-            const date=card.querySelector('time[datetime]')?.getAttribute('datetime')||'';
-            if(/^\\d{4}-\\d\\d-\\d\\d/.test(date))e.date=date.slice(0,10);
-            events.push(e);seen.add(u.pathname);
-          }catch(_){}
-        }
-        if(events.length && (selected||urlPast))
-          return JSON.stringify({action:'ready',events});
-        if(past && (selected||urlPast)) {
-          return JSON.stringify({action:events.length?'ready':'empty',events});
-        }
-        // L'espace /account peut montrer les onglets ailleurs que dans un role tab.
-        const link=buttons.find(e=>/mes billets|my tickets/i.test(text(e)));
-        if(link){
-          if(link.matches('a[href]')&&trusted(link.href))
-            return JSON.stringify({action:'link',url:link.href});
-          if(!window.__afterlog_tickets_clicked) {
-            window.__afterlog_tickets_clicked=true;
-            link.click();return JSON.stringify({action:'clicked',target:'tickets'});
+        const state=window.__noctariaTicketPage||(window.__noctariaTicketPage={visits:0});
+        if(++state.visits===1){
+          window.scrollTo(0,document.documentElement.scrollHeight||0);
+          for(const node of document.querySelectorAll('main,[role="main"],[class*="scroll"]')){
+            if(node.scrollHeight>node.clientHeight)node.scrollTop=node.scrollHeight;
           }
+          return JSON.stringify({action:'scroll'});
         }
-        if(accountHome && !past) return JSON.stringify({action:'wait'});
-        if(!ticketArea)return JSON.stringify({action:'wait'});
-        return JSON.stringify({action:'wait'});
+        const clean=s=>String(s||'').replace(/\\s+/g,' ').trim();
+        const eventPath=/^\\/(?:[a-z]{2}\\/)?(?:events|festivals)\\/[^/]+\\/?$/i;
+        const ticketPath=/^\\/(?:[a-z]{2}\\/)?(?:account\\/)?(?:tickets?|orders)\\/(?!pending\\/?$|past\\/?$)[a-z0-9_-]{5,}\\/?$/i;
+        const events=[],seen=new Set();
+        const links=[...document.querySelectorAll('a[href]')];
+        for(const anchor of links){
+          if(events.length>=200)break;
+          let url;
+          try{url=new URL(anchor.href,location.href);}catch(_){continue;}
+          if(url.protocol!=='https:' || !/(^|\\.)shotgun\\.live$/i.test(url.hostname))continue;
+          if(!eventPath.test(url.pathname)&&!ticketPath.test(url.pathname))continue;
+          if(seen.has(url.pathname))continue;
+          const card=anchor.closest('article,li,[class*="ticket"],[class*="Ticket"],[class*="card"],[class*="Card"]')||anchor;
+          const img=card.querySelector('img')||anchor.querySelector('img');
+          const title=clean(card.querySelector('h2,h3,h4')?.textContent ||
+            anchor.querySelector('h1,h2,h3,h4')?.textContent || img?.alt ||
+            anchor.textContent).slice(0,180);
+          if(title.length<3 || /^(mes billets|my tickets|à venir|passés|pending|past)$/i.test(title))continue;
+          const item={url:url.origin+url.pathname,title};
+          const poster=img?.currentSrc||img?.src||'';
+          if(poster.startsWith('https://'))item.poster=poster;
+          const date=card.querySelector('time[datetime]')?.getAttribute('datetime')||'';
+          if(/^\\d{4}-\\d\\d-\\d\\d/.test(date))item.date=date.slice(0,10);
+          events.push(item);seen.add(url.pathname);
+        }
+        if(!events.length &&
+            (document.querySelector('[aria-busy="true"]') ||
+             /chargement|loading/i.test(clean(document.querySelector('main')?.textContent).slice(0,100))))
+          return JSON.stringify({action:'wait'});
+        return JSON.stringify({action:'ready',events});
       })();
       """;
 }
