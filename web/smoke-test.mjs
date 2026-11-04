@@ -36,7 +36,7 @@ async function submit(formName){
  await pause(80);
 }
 await pause(150);
-assert.ok(window.document.querySelector('.hero'),'home page rendered');
+assert.ok(window.document.querySelector('h1')?.textContent.includes('NØCTARIA'),'home page rendered');
 click('[data-action="new-event"]');
 assert.ok(window.document.querySelector('.modal-title').textContent.includes('Créer une soirée'));
 window.document.querySelector('[name="title"]').value='Soirée chez Camille';
