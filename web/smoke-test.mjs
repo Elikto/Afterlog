@@ -1,4 +1,5 @@
 import {JSDOM} from 'jsdom';
+import {TextEncoder, TextDecoder} from 'node:util';
 import {indexedDB, IDBKeyRange} from 'fake-indexeddb';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
@@ -13,8 +14,18 @@ const dom=new JSDOM(html,{
  pretendToBeVisual:true
 });
 const {window}=dom;
+const manifest=JSON.parse(readFileSync(path.join(root,'manifest.webmanifest'),'utf8'));
+assert.equal(manifest.display,'standalone','installed iOS PWA opens without a browser frame');
+assert.equal(manifest.short_name,'NØCTARIA');
+assert.ok(manifest.icons.some(x=>x.sizes==='192x192'));
+assert.ok(manifest.icons.some(x=>x.sizes==='512x512'));
+assert.ok(window.document.querySelector('link[rel="apple-touch-icon"][href="./icons/apple-touch-icon.png"]'),'iOS home screen icon configured');
+assert.equal(window.document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.content,'yes');
 window.indexedDB=indexedDB;
 window.IDBKeyRange=IDBKeyRange;
+// jsdom does not expose these browser globals by default on Node.js 22.
+window.TextEncoder=TextEncoder;
+window.TextDecoder=TextDecoder;
 window.scrollTo=()=>{};
 window.matchMedia=()=>({matches:false,addListener(){},removeListener(){}});
 window.navigator.vibrate=()=>{};
