@@ -57,6 +57,43 @@ final class RdrPlacesSearch {
                 "/(address)/"+urlPath(query)+"/(country)/FR";
         }
     }
+    interface CityListener { void onCities(List<City> cities); }
+    static final class City {
+        final String label,query;
+        City(String label,String query){this.label=label;this.query=query;}
+    }
+    /** BAN/IGN municipality suggestions, no GPS and no third-party NØCTARIA server. */
+    static void suggestCities(String raw,CityListener callback){
+        final String query=raw==null?"":raw.trim();
+        if(query.length()<2){
+            new Handler(Looper.getMainLooper()).post(()->callback.onCities(new ArrayList<>()));
+            return;
+        }
+        new Thread(()->{
+            ArrayList<City> results=new ArrayList<>();
+            try{
+                String url="https://data.geopf.fr/geocodage/search?index=address&type=municipality"+
+                    "&limit=8&autocomplete=1&q="+URLEncoder.encode(query,"UTF-8");
+                JSONObject data=new JSONObject(get(url,11000,180000));
+                JSONArray features=data.optJSONArray("features");
+                HashSet<String> seen=new HashSet<>();
+                if(features!=null)for(int i=0;i<features.length();i++){
+                    JSONObject f=features.optJSONObject(i);
+                    if(f==null)continue;
+                    JSONObject props=f.optJSONObject("properties");
+                    if(props==null)continue;
+                    String city=props.optString("city",props.optString("name")).trim();
+                    String postcode=props.optString("postcode").trim();
+                    if(city.isEmpty())continue;
+                    String canonical=city+(postcode.isEmpty()?"":", "+postcode);
+                    if(seen.add(canonical.toLowerCase(Locale.ROOT)))
+                        results.add(new City(canonical,canonical));
+                }
+            }catch(Exception ignored){}
+            new Handler(Looper.getMainLooper()).post(()->callback.onCities(results));
+        },"NOCTARIA-city-suggestions").start();
+    }
+
     private static String urlPath(String value){
         try{return URLEncoder.encode(value,"UTF-8").replace("+","%20");}
         catch(Exception ignored){return "";}
