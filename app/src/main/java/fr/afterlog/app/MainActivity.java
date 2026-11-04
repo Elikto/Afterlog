@@ -913,6 +913,28 @@ public final class MainActivity extends Activity {
         renderArtistProfiles(collection);
     }
 
+    private static boolean isOfficialArtistPreview(String value){
+        if(value==null||!value.startsWith("https://"))return false;
+        try{
+            Uri uri=Uri.parse(value);
+            String host=uri.getHost(),path=uri.getPath();
+            if(host==null||path==null)return false;
+            host=host.toLowerCase(Locale.ROOT);
+            if(host.equals("open.spotify.com"))
+                return path.matches("^/(?:embed/)?track/[A-Za-z0-9]{22}/?$");
+            if(host.equals("soundcloud.com"))
+                return path.matches("^/[^/]+/[^/]+/?$") &&
+                    !path.matches("^/(?:sets|pages|tags|discover)/.*");
+            if(host.equals("w.soundcloud.com"))
+                return path.equals("/player/") &&
+                    uri.getQueryParameter("url")!=null &&
+                    !uri.getQueryParameter("url").isEmpty();
+            return (host.equals("shotgun.live")||
+                host.endsWith(".shotgun.live")) &&
+                path.matches("^/(?:[a-z]{2}/)?artists/[^/]+/music/?$");
+        }catch(Exception ignored){return false;}
+    }
+
     private void renderArtistProfiles(JSONObject event) {
         JSONArray profiles=event.optJSONArray("artistProfiles");
         if(profiles==null)profiles=new JSONArray();
@@ -1081,6 +1103,26 @@ public final class MainActivity extends Activity {
                     (SpotifyArtistVerifier.isArtistUrl(target[0])?
                     " · ouvrir sur Spotify":" · associer un profil Spotify"));
                 tile.setOnClickListener(v->openSpotify.run());
+
+                // Music is optional: display a button only when Shotgun
+                // supplies an actual official track/player link for this artist.
+                String preview=artist.optString("previewUrl");
+                if(isOfficialArtistPreview(preview)){
+                    TextView listen=text("▶",17,Color.WHITE,true);
+                    listen.setGravity(Gravity.CENTER);
+                    listen.setContentDescription("Écouter un extrait de "+name+
+                        " sur le lecteur musical officiel");
+                    listen.setBackground(rounded(Color.rgb(72,47,115),22));
+                    FrameLayout.LayoutParams listenLp=new FrameLayout.LayoutParams(
+                        dp(32),dp(32),Gravity.TOP|Gravity.LEFT);
+                    listenLp.topMargin=dp(8);
+                    listenLp.leftMargin=dp(8);
+                    tile.addView(listen,listenLp);
+                    listen.setOnClickListener(v->{
+                        try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(preview)));}
+                        catch(Exception error){message("Lecteur musical indisponible.");}
+                    });
+                }
             }
         }
 
