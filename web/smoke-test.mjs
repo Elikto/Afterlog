@@ -41,6 +41,7 @@ window.eval(readFileSync(path.join(root,'tracking.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'spotify-trusted.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'spotify.js'),'utf8'));
 assert.ok(window.NoctariaTrustedSpotify.perceval,'Android confirmed artist links available on iPhone');
+assert.equal(typeof window.NoctariaPlaces.suggestCities,'function','IGN city autocomplete is available on iPhone');
 window.eval(readFileSync(path.join(root,'backup.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'app.js'),'utf8'));
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
