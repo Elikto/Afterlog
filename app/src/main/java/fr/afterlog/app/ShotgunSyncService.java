@@ -69,6 +69,7 @@ public final class ShotgunSyncService extends Service {
     // Spotify matching runs alongside event retrieval, within the same sync.
     private final ExecutorService artistPool=Executors.newFixedThreadPool(2);
     private int artistsPending,artistsFinished,artistLinksVerified;
+    private int artistEventsComplete,artistMissingLinks,artistMissingPhotos,missingLineups;
     private boolean metadataDone;
     private String finalSummary="";
 
@@ -219,13 +220,17 @@ public final class ShotgunSyncService extends Service {
     }
     private void status(String text,String detail) {
         phase=text;
-        int total=queue.size();
+        // Each selected evening has TWO required stages: event data and
+        // verified artist pages/portraits. Percent never reaches 100 during
+        // the pending artist stage, even if all event pages were loaded.
+        int total=gotTickets?queue.size()*2:0;
+        int done=gotTickets?processed+artistEventsComplete:0;
         long eta=-1;
-        if(total>0 && processed>0) {
-            long avg=(System.currentTimeMillis()-startedAt)/Math.max(1,processed);
-            eta=Math.max(0,(total-processed)*avg/1000);
+        if(total>0 && done>0){
+            long avg=(System.currentTimeMillis()-startedAt)/Math.max(1,done);
+            eta=Math.max(0,(total-done)*avg/1000);
         }
-        SyncState.save(this,SyncState.RUNNING,text,processed,total,eta,detail);
+        SyncState.save(this,SyncState.RUNNING,text,done,total,eta,detail);
         if(notifications!=null && Build.VERSION.SDK_INT>=26 && active)
             notifications.notify(NOTIF_ID,notification(text));
     }
@@ -506,10 +511,13 @@ public final class ShotgunSyncService extends Service {
                 catch(Exception ignored){}
             }
         }
-        if(discovered.isEmpty())return;
+        if(discovered.isEmpty()){
+            missingLineups++;
+            return; // No event can count as fully enriched without a line-up.
+        }
         artistsPending++;
         artistPool.execute(()->{
-            int linked=0;
+            int linked=0,missingLink=0,missingPhoto=0;
             try{
                 JSONArray validated=new JSONArray();
                 for(JSONObject profile:discovered.values()){
@@ -527,7 +535,10 @@ public final class ShotgunSyncService extends Service {
                             String portrait=SpotifyArtistVerifier.verifiedThumbnail(url,name);
                             if(!portrait.isEmpty())merged.put("spotifyPhoto",portrait);
                         }
-                    }
+                    }else missingLink++;
+                    if(merged.optString("spotifyPhoto").isEmpty() &&
+                        !merged.optString("photo").startsWith("https://"))
+                        missingPhoto++;
                     validated.put(merged);
                 }
                 if(validated.length()>0){
@@ -552,16 +563,20 @@ public final class ShotgunSyncService extends Service {
             }catch(Exception ignored){
                 // Keep event and Shotgun photos even if Spotify is unavailable.
             }
-            final int verified=linked;
+            final int verified=linked,unlinked=missingLink,unpictured=missingPhoto;
             handler.post(()->{
                 if(!active)return;
                 artistsPending=Math.max(0,artistsPending-1);
                 artistsFinished++;
                 artistLinksVerified+=verified;
+                artistMissingLinks+=unlinked;
+                artistMissingPhotos+=unpictured;
+                if(unlinked==0&&unpictured==0)artistEventsComplete++;
                 if(metadataDone&&artistsPending==0)finish(SyncState.DONE,finalSummary);
-                else if(metadataDone)status("Artistes Spotify : vérification en cours",
-                    artistsPending+" soirée(s) à enrichir · "+artistLinksVerified+
-                    " profil(s) trouvé(s).");
+                else status("Artistes Spotify · synchronisation",
+                    "Fiches "+processed+"/"+queue.size()+" · "+verified+
+                    " profil(s) associés à cette soirée · "+artistsPending+
+                    " vérification(s) en cours.");
             });
         });
     }
@@ -634,6 +649,17 @@ public final class ShotgunSyncService extends Service {
                 artistsPending+" soirée(s) encore en cours d'enrichissement.");
             return;
         }
+        // Finishing all requests is NOT synonymous with successfully finding
+        // every artist. Partial imports remain under 100% and are clearly marked.
+        if(SyncState.DONE.equals(state)&&(errors>0||
+            artistEventsComplete!=queue.size()||missingLineups>0||
+            artistMissingLinks>0||artistMissingPhotos>0)){
+            state=SyncState.PARTIAL;
+            message=processed+"/"+queue.size()+" soirées importées · "+
+                artistMissingLinks+" profil(s) Spotify manquant(s) · "+
+                artistMissingPhotos+" portrait(s) absent(s) · "+
+                missingLineups+" programmation(s) introuvable(s).";
+        }
         active=false;navigationId++;
         artistPool.shutdownNow();
         if(rateLimited || SyncState.BLOCKED.equals(state) && message.contains("429"))
@@ -648,11 +674,13 @@ public final class ShotgunSyncService extends Service {
             String summary=remaining==0 ? "Synchronisation terminée" :
                 "Synchronisation partielle : "+remaining+" soirée(s) cochée(s) non récupérée(s)";
             SyncState.save(this,SyncState.DONE,summary,
-                processed,queue.size(),0,remaining==0?
-                "Soirées et artistes vérifiés pendant la synchronisation · "+
-                artistLinksVerified+" profil(s) Spotify associés.":summary);
+                queue.size()*2,queue.size()*2,0,remaining==0?
+                "Toutes les soirées et les fiches des artistes sont vérifiées · "+
+                artistLinksVerified+" profils Spotify associés.":summary);
         } else {
-            SyncState.save(this,state,message,processed,queue.size(),0,message);
+            int total=gotTickets?queue.size()*2:0;
+            int done=gotTickets?processed+artistEventsComplete:0;
+            SyncState.save(this,state,message,done,total,0,message);
         }
         handler.removeCallbacksAndMessages(null);
         if(browser!=null){browser.stopLoading();browser.destroy();browser=null;}
