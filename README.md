@@ -1,3 +1,13 @@
+# NØCTARIA 0.18.7 — Shotgun : connexion et synchronisation sans navigation (Android)
+
+- Le bouton **Connecter Shotgun** présente désormais uniquement la page officielle de connexion et un état de progression : suppression des boutons NØCTARIA **Retour**, **Précédent**, **Actualiser**, **Importer la soirée** et **Synchroniser mes billets** sur cet écran.
+- Dès la connexion à Shotgun, NØCTARIA examine automatiquement **Tous les billets**, **À venir** et **Passés**, rassemble les liens accessibles, dédoublonne les soirées et déclenche directement leur import, sans case à cocher.
+- L'ancienne liste de sélection sur l'accueil est supprimée. Une sélection enregistrée par une version précédente est reprise automatiquement. Le bouton Retour **système** ferme simplement la page de connexion au lieu de remonter l'historique Shotgun.
+- L'outil distinct d'import manuel via un lien de soirée reste disponible ailleurs dans l'application, sans apparaître dans le parcours de connexion.
+- La vérification du comportement réel de connexion exige un compte Shotgun personnel ; le fonctionnement dépend du site et de ses protections. La PWA iOS n'a pas encore d'accès autorisé à ces pages privées.
+
+---
+
 # NØCTARIA 0.18.6 — Spotify sur toutes les soirées (Android + PWA iPhone)
 
 - Recherche des comptes Spotify à partir des **artistes de toutes les soirées enregistrées**, y compris anciennes soirées et nouveaux événements importés. Aucune donnée de consommation n'est envoyée aux services de recherche.
