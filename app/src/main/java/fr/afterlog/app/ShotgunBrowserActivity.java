@@ -225,23 +225,33 @@ public final class ShotgunBrowserActivity extends Activity {
     private void onTicketsFound(JSONArray tickets) {
         try {
             TicketSelectionStore.saveFound(this,tickets);
-            SyncState.save(this,SyncState.SELECTION,
-                tickets.length()+" soirée(s) trouvée(s) dans les trois listes",
-                0,tickets.length(),-1,
-                "Import automatique après la connexion Shotgun.");
             discovering=false;
             if(discovery!=null)discovery.stop();
             if(tickets.length()>0){
+                // Ne jamais passer par l'état SELECTION : l'utilisateur n'a
+                // rien à cocher, ni de bouton de synchronisation à déclencher.
+                SyncState.save(this,SyncState.RUNNING,
+                    "Synchronisation automatique des billets Shotgun",
+                    0,tickets.length(),-1,
+                    "Import en cours pour les soirées trouvées dans les trois catégories.");
                 AutoSyncScheduler.enable(this);
                 ShotgunSyncService.importSelected(this);
-                toast("Synchronisation lancée pour "+tickets.length()+" soirée(s).");
+                toast("Synchronisation automatique lancée : "+tickets.length()+" soirée(s).");
+                setResult(RESULT_OK);
+                finish();
             }else{
-                toast("Aucune soirée trouvée dans les trois listes Shotgun.");
+                // L'absence de billets n'est pas un import réussi.
+                SyncState.save(this,SyncState.DONE,
+                    "Aucune soirée trouvée dans les listes Shotgun",0,0,0,
+                    "Vérifie ta connexion Shotgun si tu attendais des billets.");
+                status.setText("Aucune soirée trouvée dans tes trois catégories Shotgun.");
+                toast("Aucune soirée trouvée dans tes billets Shotgun.");
             }
-            setResult(RESULT_OK);
-            finish();
         }catch(Exception e){
-            status.setText("La liste n'a pas pu être enregistrée : "+e.getMessage());
+            SyncState.save(this,SyncState.ERROR,
+                "Impossible de démarrer la synchronisation",0,tickets.length(),-1,
+                "Réessaie après avoir vérifié ta connexion Shotgun.");
+            status.setText("Synchronisation impossible : "+e.getMessage());
         }
     }
     private void importVisible() {
