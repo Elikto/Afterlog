@@ -129,6 +129,9 @@ public final class MainActivity extends Activity {
         // Fix older imported "À propos" using the public source page,
         // without requiring another personal-account Shotgun login.
         ShotgunAboutBackfillWorker.schedule(this);
+        // New verified music identities (e.g. Sköne) propagate to previously
+        // imported events on the next app launch, without another Shotgun sync.
+        SpotifyArtistBackfillWorker.schedule(this);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         showHome();
