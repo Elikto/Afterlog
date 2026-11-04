@@ -178,7 +178,7 @@ final class SpotifyArtistVerifier {
             con=(HttpURLConnection)new URL(input).openConnection();
             con.setConnectTimeout(7000);con.setReadTimeout(8000);
             con.setRequestProperty("Accept","application/json,image/*");
-            con.setRequestProperty("User-Agent","AfterLog/0.9");
+            con.setRequestProperty("User-Agent","NOCTARIA/0.18");
             if(con.getResponseCode()!=200)throw new Exception("HTTP");
             ByteArrayOutputStream out=new ByteArrayOutputStream();
             try(InputStream in=con.getInputStream()){
