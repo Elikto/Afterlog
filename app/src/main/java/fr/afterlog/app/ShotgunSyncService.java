@@ -70,7 +70,9 @@ public final class ShotgunSyncService extends Service {
     private final ExecutorService artistPool=Executors.newFixedThreadPool(2);
     private int artistsPending,artistsFinished,artistLinksVerified;
     private int artistEventsComplete,artistMissingLinks,artistMissingPhotos,missingLineups;
-    private boolean metadataDone;
+    private final List<JSONObject> artistSnapshots=new ArrayList<>();
+    // Final music/artist enrichment is ONE shared stage, after every event.
+    private boolean artistStageStarted,metadataDone;
     private String finalSummary="";
 
     public static void start(Context ctx,String url) {
@@ -132,6 +134,7 @@ public final class ShotgunSyncService extends Service {
         active=true;rateLimited=false;seenPast=false;clickedPast=false;triedMenu=false;
         gotTickets=false;readingPage=false;discoveryAttempts=0;processed=0;
         errors=0;nextIndex=0;navigationId=0;detailAttempts=0;
+        artistSnapshots.clear();artistStageStarted=false;metadataDone=false;
         startedAt=System.currentTimeMillis();
         if(IMPORT_SELECTED.equals(action))SyncFailureStore.clear(this);
         String url=intent==null?HOME:intent.getStringExtra(EXTRA_URL);
@@ -220,16 +223,10 @@ public final class ShotgunSyncService extends Service {
     }
     private void status(String text,String detail) {
         phase=text;
-        // Each selected evening has TWO required stages: event data and
-        // verified artist pages/portraits. Percent never reaches 100 during
-        // the pending artist stage, even if all event pages were loaded.
-        int total=gotTickets?queue.size()*2:0;
-        int done=gotTickets?processed+artistEventsComplete:0;
-        long eta=-1;
-        if(total>0 && done>0){
-            long avg=(System.currentTimeMillis()-startedAt)/Math.max(1,done);
-            eta=Math.max(0,(total-done)*avg/1000);
-        }
+        // N evenings = N event steps + ONE final common artist/music step.
+        int total=gotTickets?queue.size()+1:0;
+        int done=gotTickets?Math.min(queue.size(),processed+errors):0;
+        long eta=estimateTotalEtaSeconds();
         SyncState.save(this,SyncState.RUNNING,text,done,total,eta,detail);
         if(notifications!=null && Build.VERSION.SDK_INT>=26 && active)
             notifications.notify(NOTIF_ID,notification(text));
@@ -297,7 +294,9 @@ public final class ShotgunSyncService extends Service {
                     if(extracted.optString("date").isEmpty())
                         extracted.put("date",previous.optString("date"));
                     saveEventPreservingUserData(extracted);
-                    enrichArtistsDuringSync(new JSONObject(extracted.toString()));
+                    // Artist verification and audio previews start ONLY after
+                    // every chosen event has been scanned and saved.
+                    artistSnapshots.add(new JSONObject(extracted.toString()));
                     SyncFailureStore.remove(this,queue.get(nextIndex).optString("url"));
                     processed++;advance();
                 }catch(Exception e){failCurrent("Extraction indisponible ou en erreur");}
@@ -482,14 +481,40 @@ public final class ShotgunSyncService extends Service {
         nextIndex++;
         navigationId++;
         if(processed+errors>=queue.size()) {
-            finish(SyncState.DONE,errors>0?
-                "Import partiel : "+processed+" enrichis, "+errors+" non récupérés.":
-                "Import terminé : "+processed+" événements.");
+            startArtistStage();
         } else next();
     }
     private void errorOrAdvance(String message) {
         if(gotTickets){failCurrent(message);}
         else finish(SyncState.BLOCKED,message);
+    }
+    /**
+     * Conservative estimate for ALL remaining work, not merely event-page
+     * browsing. Spotify/SoundCloud lookups can be slow or unavailable.
+     * No countdown to an artificial zero: recalculate when work advances.
+     */
+    private long estimateTotalEtaSeconds(){
+        if(!gotTickets||queue.isEmpty())return -1;
+        int eventsRemaining=Math.max(0,queue.size()-processed-errors);
+        long eventAverage=processed+errors>0?
+            (System.currentTimeMillis()-startedAt)/1000L/Math.max(1,processed+errors):35;
+        // Never assume each event takes less than 30 seconds.
+        long eventSecs=eventsRemaining*Math.max(30,Math.min(90,eventAverage*3/2));
+        if(!artistStageStarted)return Math.max(120,eventSecs+180+queue.size()*12L);
+        if(artistsPending>0)return Math.max(120,artistsPending*35L+45);
+        return Math.max(60,eventSecs+60);
+    }
+    private void startArtistStage(){
+        if(!active||artistStageStarted)return;
+        artistStageStarted=true;
+        status("Étape "+(queue.size()+1)+"/"+(queue.size()+1)+
+            " · Artistes, Spotify et SoundCloud",
+            "Recherche des profils, portraits et extraits après les "+queue.size()+
+            " soirées.");
+        metadataDone=true;
+        for(JSONObject event:artistSnapshots)enrichArtistsDuringSync(event);
+        if(artistsPending==0)finish(SyncState.DONE,
+            "Soirées analysées et vérification des artistes terminée.");
     }
     private static String artistKey(String input){
         return Normalizer.normalize(input.toLowerCase(Locale.ROOT).replace("ø","o"),
@@ -514,7 +539,7 @@ public final class ShotgunSyncService extends Service {
         }
         if(discovered.isEmpty()){
             missingLineups++;
-            return; // No event can count as fully enriched without a line-up.
+            return; // Missing line-up is reported, not a successful artist lookup.
         }
         artistsPending++;
         artistPool.execute(()->{
@@ -644,11 +669,12 @@ public final class ShotgunSyncService extends Service {
     private void finish(String state,String message) {
         if(!active) {stopSelf();return;}
         if(SyncState.DONE.equals(state)&&artistsPending>0){
-            // Never report a completed sync before the artist pages are enriched.
+            // One shared final stage: wait for every artist lookup.
             metadataDone=true;
             finalSummary=message;
-            status("Vérification des artistes Spotify",
-                artistsPending+" soirée(s) encore en cours d'enrichissement.");
+            status("Étape "+(queue.size()+1)+"/"+(queue.size()+1)+
+                " · Recherche de tous les artistes",
+                artistsPending+" soirée(s) dont les artistes sont encore vérifiés.");
             return;
         }
         // Finishing all requests is NOT synonymous with successfully finding
@@ -676,12 +702,13 @@ public final class ShotgunSyncService extends Service {
             String summary=remaining==0 ? "Synchronisation terminée" :
                 "Synchronisation partielle : "+remaining+" soirée(s) cochée(s) non récupérée(s)";
             SyncState.save(this,SyncState.DONE,summary,
-                queue.size()*2,queue.size()*2,0,remaining==0?
+                queue.size()+1,queue.size()+1,0,remaining==0?
                 "Toutes les soirées et les fiches des artistes sont vérifiées · "+
                 artistLinksVerified+" profils Spotify associés.":summary);
         } else {
-            int total=gotTickets?queue.size()*2:0;
-            int done=gotTickets?processed+artistEventsComplete:0;
+            int total=gotTickets?queue.size()+1:0;
+            // Incomplete music/account info keeps the last step unfinished.
+            int done=gotTickets?Math.min(queue.size(),processed+errors):0;
             SyncState.save(this,state,message,done,total,0,message);
         }
         handler.removeCallbacksAndMessages(null);
