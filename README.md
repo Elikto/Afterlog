@@ -113,7 +113,7 @@ et l'icône Android. L'identifiant `fr.afterlog.app`, la signature Android,
 les données locales et l'URL historique de mise à jour `AfterLog.apk`
 restent inchangés, pour permettre la mise à jour de l'application installée.
 
-La nouvelle release comporte `NOCTARIA-v0.18.9.apk` ainsi que des alias de
+La nouvelle release comporte `NOCTARIA-v0.19.0.apk` ainsi que des alias de
 compatibilité pour les anciennes versions.
 
 ---
@@ -228,7 +228,7 @@ Avant cette configuration, aucune release stable n'est annoncée au téléphone.
 
 **Version 0.11.0 (bêta expérimentale)**
 
-[![Télécharger NØCTARIA](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-N%C3%98CTARIA%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.18.9/NOCTARIA-v0.18.9.apk)
+[![Télécharger NØCTARIA](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-N%C3%98CTARIA%20Android-7c3aed?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Elikto/Afterlog/releases/download/v0.19.0/NOCTARIA-v0.19.0.apk)
 
 ## Mise à jour 0.11.0 — Galerie et Suivi
 
