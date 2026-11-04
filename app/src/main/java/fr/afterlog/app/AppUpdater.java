@@ -111,7 +111,7 @@ final class AppUpdater {
                     .setMessage("Impossible de consulter les versions GitHub.\n\n"+e.getMessage())
                     .setPositiveButton("OK",null).show());
             }
-        },"AfterLog-update-check").start();
+        },"NOCTARIA-update-check").start();
     }
 
     private JSONObject latestRelease() throws Exception {
@@ -125,7 +125,7 @@ final class AppUpdater {
             conn.setUseCaches(false);
             conn.setRequestProperty("Accept","application/json");
             conn.setRequestProperty("Cache-Control","no-cache");
-            conn.setRequestProperty("User-Agent","AfterLog-Android-updater");
+            conn.setRequestProperty("User-Agent","NOCTARIA-Android-updater");
             int status=conn.getResponseCode();
             if(status==404)
                 throw new Exception("La distribution NØCTARIA avec signature permanente n'est pas encore configurée sur GitHub. Il faut d'abord enregistrer le secret privé de signature dans le dépôt.");
@@ -266,7 +266,7 @@ final class AppUpdater {
                         .setPositiveButton("OK",null).show();
                 });
             }finally {if(conn!=null)conn.disconnect();}
-        },"AfterLog-apk-download").start();
+        },"NOCTARIA-apk-download").start();
     }
     /** Ne lance pas d'installation de paquet différent ni de rétrogradation. */
     private String validate(File apk) {
