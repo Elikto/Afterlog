@@ -76,7 +76,13 @@ async function spotifyMetadata(link,name){
  if(!isSpotify(link))return null;
  try{
   const data=await fetchJson('https://open.spotify.com/oembed?url='+encodeURIComponent(link),9500);
-  if(data.provider_name!=='Spotify'||norm(data.title)!==norm(name))return null;
+  const title=String(data.title||'').trim()
+   .replace(/^Spotify Embed:\s*/i,'').replace(/^Listen to\s+/i,'')
+   .replace(/\s+Songs\s*\|\s*Spotify\s*$/i,'')
+   .replace(/\s*[|·–-]\s*Spotify\s*$/i,'')
+   .replace(/\s*[|·–-]\s*(artist|artiste)\s*$/i,'')
+   .replace(/\s*·\s*Top tracks\s*$/i,'');
+  if(data.provider_name!=='Spotify'||norm(title)!==norm(name))return null;
   const src=data.thumbnail_url||'';
   let photo='';
   if(src){
