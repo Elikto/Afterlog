@@ -20,6 +20,7 @@ window.matchMedia=()=>({matches:false,addListener(){},removeListener(){}});
 window.navigator.vibrate=()=>{};
 window.URL.createObjectURL=blob=>'blob:mock-'+Math.random();
 window.URL.revokeObjectURL=()=>{};
+window.eval(readFileSync(path.join(root,'parity.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'app.js'),'utf8'));
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const click=selector=>{
