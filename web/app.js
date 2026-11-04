@@ -34,7 +34,7 @@ const TYPES = [
 const state = {
   db:null,events:[],entries:[],route:'home',eventId:null,
   selected:new Set(),selectionMode:false,
-  media:[],urls:[],posterUrls:new Map(),posterUploadEventId:null,renderVersion:0,installPrompt:null,
+  media:[],urls:[],posterUrls:new Map(),posterUploadEventId:null,rdrAddress:'',renderVersion:0,installPrompt:null,
   viewerUrl:null,toastTimer:null
 };
 const esc = value => String(value==null?'':value).replace(/[&<>"']/g,c=>({
@@ -388,21 +388,12 @@ function openConfirm(title,description,confirmLabel,callback){
  modal(title,'<p class="muted">'+esc(description)+'</p><div class="form-actions"><button type="button" class="btn ghost" data-action="close-modal">Annuler</button><button type="submit" class="btn danger">'+esc(confirmLabel)+'</button></div>',async()=>{await callback();closeModal();await render();});
 }
 function renderTracking(){
- const entries=state.entries;
- const grouped=new Map();
- for(const entry of entries){
-  const k=entry.name||'Autre';
-  const cur=grouped.get(k)||{n:0,tone:rgbByName(entry)};
-  cur.n++;grouped.set(k,cur);
+ if(window.NoctariaTracking){
+  screen.innerHTML=window.NoctariaTracking.draw(
+   state.entries,state.events,rgbByName);
+  return;
  }
- const sorted=[...grouped.entries()].sort((a,b)=>b[1].n-a[1].n);
- const max=sorted.reduce((v,x)=>Math.max(v,x[1].n),1);
- screen.innerHTML='<div class="page-head"><div><p class="eyebrow">TON HISTORIQUE</p><h1>Mon suivi</h1><p class="kicker">Un aperçu de tes notes, sans estimation cachée.</p></div></div>'+
- '<div class="stats"><div class="stat"><strong>'+state.events.length+'</strong><span>soirées</span></div><div class="stat"><strong>'+entries.length+'</strong><span>entrées</span></div><div class="stat"><strong>'+grouped.size+'</strong><span>produits notés</span></div></div>'+
- '<div class="card"><h2>Produits consignés</h2><p class="muted small" style="margin:6px 0 18px">Une couleur différente par produit. Les couleurs ne représentent jamais le niveau de danger.</p>'+
- (sorted.length?sorted.map(([name,value])=>'<div class="tracking-bar" style="--tone:'+aesc(value.tone)+'"><span>'+esc(name)+'</span><div class="tracking-track"><div class="tracking-fill" style="width:'+(100*value.n/max)+'%"></div></div><b>'+value.n+'</b></div>').join(''):'<p class="muted">Aucune prise enregistrée.</p>')+'</div>'+
- (entries.length?risksHtml(entries):'')+
- '<div class="card"><h3>Important</h3><p class="muted small" style="margin-top:7px">Ce journal permet de constater des habitudes, pas de calculer des doses ni de prédire la toxicité. En cas d’urgence (inconscience, respiration anormale, convulsions), appelle le 15 ou le 112.</p>'+actionBtn('Réduction des risques','rdr','','block')+'</div>';
+ screen.innerHTML='<div class="card"><h2>Mon suivi</h2><p>Actualise la page pour charger les graphiques.</p></div>';
 }
 function renderSettings(){
  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -417,12 +408,47 @@ function renderSettings(){
  '<a class="btn block" href="https://shotgun.live/" target="_blank" rel="noopener noreferrer">Ouvrir Shotgun ↗</a></div>';
 }
 function renderRdr(){
+ const rdr=window.NoctariaPlaces;
  screen.innerHTML='<button class="back" data-action="tracking">‹ Mon suivi</button>'+
- '<div class="page-head"><div><p class="eyebrow">PRÉVENTION</p><h1>Réduction des risques</h1><p class="kicker">Des informations et des contacts de confiance.</p></div></div>'+
- '<div class="notice high"><strong>Urgence : 15 ou 112</strong><p>Inconscience, convulsions, respiration anormale, douleur thoracique ou forte surchauffe : contacte immédiatement les secours.</p><a href="tel:15">Appeler le 15</a></div>'+
- '<div class="card"><h2>Drogues Info Service</h2><p class="muted" style="margin:10px 0">Informations, conseils et accompagnement anonyme.</p><div class="button-row"><a class="btn" href="tel:0800231313">Appeler le 0 800 23 13 13</a><a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/">Site officiel ↗</a></div></div>'+
- '<div class="card"><h2>Structures et associations</h2><p class="muted small" style="margin:9px 0">Recherche des CAARUD et CSAPA par ville ou adresse via l’annuaire officiel.</p><div class="fields">'+field('address','Adresse ou ville','',{full:true,placeholder:'Ex. Montpellier 34000'})+'</div><div style="margin-top:12px">'+actionBtn('Rechercher','rdr-places','','primary block')+'</div></div>';
+ '<div class="page-head"><div><p class="eyebrow">PRÉVENTION</p><h1>Réduction des risques</h1>'+
+ '<p class="kicker">Structures, analyses de produits et fiches de prévention.</p></div></div>'+
+ '<div class="notice high"><strong>Urgence : 15 ou 112</strong><p>Perte de connaissance, respiration anormale, convulsions, douleur thoracique ou forte surchauffe : appelle immédiatement les secours.</p><a href="tel:15">Appeler le 15</a></div>'+
+ '<div class="card"><h2>Drogues Info Service</h2><p class="muted" style="margin:10px 0">Écoute, informations et accompagnement anonyme. Vérifie les horaires sur le site officiel.</p>'+
+ '<div class="button-row"><a class="btn" href="tel:0800231313">📞 Appeler le 0 800 23 13 13</a>'+
+ '<a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/">Site et chat ↗</a></div></div>'+
+ '<div class="card"><h2>📍 Structures et associations</h2>'+
+ '<p class="muted small" style="margin:9px 0 14px">Recherche des CAARUD et CSAPA proches de l’adresse choisie, comme sur Android.</p>'+
+ '<div class="fields">'+field('address','Ville, code postal ou adresse',state.rdrAddress||'',{full:true,placeholder:'Ex. Montpellier 34000'})+'</div>'+
+ '<div class="button-row" style="margin-top:12px">'+actionBtn('Rechercher à cette adresse','rdr-places','','primary')+
+ '<a class="btn" target="_blank" rel="noopener noreferrer" href="https://www.drogues-info-service.fr/Adresses-utiles">Annuaire national ↗</a></div>'+
+ '<div id="rdr-results" aria-live="polite" style="margin-top:16px">'+
+ '<p class="muted small">Saisis une adresse pour trouver les structures cartographiées à proximité. Les résultats peuvent être incomplets.</p></div></div>'+
+ (rdr?rdr.guide():'');
 }
+async function searchRdrPlaces(query){
+ const el=$('#rdr-results');
+ if(!el)return;
+ if(!query||query.trim().length<2){notify('Saisis une adresse ou une ville.');return;}
+ if(!window.NoctariaPlaces){
+  el.innerHTML='<p class="muted">Service indisponible. Consulte l’annuaire national.</p>';return;
+ }
+ state.rdrAddress=query.trim();
+ el.innerHTML='<p class="muted">Recherche des structures autour de '+esc(query)+'…</p>';
+ try{
+  const result=await window.NoctariaPlaces.directory(query);
+  if(!el.isConnected)return;
+  el.innerHTML='<div class="pill">📍 '+esc(result.label)+'</div>'+
+   '<p class="muted small" style="margin:13px 0 9px">'+result.items.length+' structure(s) cartographiée(s), triées par proximité. Distances à vol d’oiseau.</p>'+
+   (result.items.length?result.items.map(window.NoctariaPlaces.card).join(''):
+   '<div class="notice"><strong>Aucun lieu trouvé dans OpenStreetMap</strong><p>Cela ne signifie pas qu’il n’existe pas de CAARUD ou de CSAPA. Consulte l’annuaire officiel.</p></div>')+
+   '<p class="muted small">Données OpenStreetMap non exhaustives. Vérifie les horaires et coordonnées avant de te déplacer.</p>';
+ }catch(error){
+  if(!el.isConnected)return;
+  el.innerHTML='<div class="notice"><strong>Recherche momentanément indisponible</strong><p>'+esc(error.message||'Service externe inaccessible')+
+  '</p><a href="https://www.drogues-info-service.fr/Adresses-utiles" target="_blank" rel="noopener noreferrer">Continuer sur l’annuaire officiel ↗</a></div>';
+ }
+}
+
 function installGuide(){
  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
  if(standalone){notify('NØCTARIA est déjà installée sur cet appareil.');return;}
@@ -544,6 +570,13 @@ async function act(action,button){
  switch(action){
   case 'home':navigate('home');break;
   case 'tracking':navigate('tracking');break;
+  case 'tracking-period':
+   window.NoctariaTracking?.mode(button.dataset.mode);
+   render();break;
+  case 'tracking-prev':
+   window.NoctariaTracking?.move(-1);render();break;
+  case 'tracking-next':
+   window.NoctariaTracking?.move(1);render();break;
   case 'rdr':navigate('rdr');break;
   case 'settings':navigate('settings');break;
   case 'new-event':openEventForm(null);break;
@@ -635,8 +668,7 @@ async function act(action,button){
   case 'install':installGuide();break;
   case 'rdr-places':{
    const value=$('#f-address')&&$('#f-address').value.trim();
-   if(!value){notify('Indique une ville ou une adresse.');return;}
-   window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent('CAARUD CSAPA '+value),'_blank','noopener');
+   await searchRdrPlaces(value);
    break;
   }
   case 'close-modal':closeModal();break;
