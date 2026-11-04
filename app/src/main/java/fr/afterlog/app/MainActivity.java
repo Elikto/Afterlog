@@ -498,6 +498,8 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams statsParams=new LinearLayout.LayoutParams(0,-2,1);
         statsParams.leftMargin=dp(8);shortcuts.addView(stats,statsParams);
 
+        add(page,button("♫ Tous les artistes · profils Spotify",false,
+            this::showAllArtists),13);
         List<JSONObject> events=store.events();
         add(page,text("MES SOIRÉES   ·   "+events.size(),15,ACCENT,true),11);
         if(events.isEmpty()){
@@ -863,6 +865,52 @@ public final class MainActivity extends Activity {
                 store.deleteEntry(entry.optLong("id"));
                 showEvent(eventId);
             }).show();
+    }
+
+    /** One artist directory for all synced and manually created events. */
+    private void showAllArtists(){
+        store=new AppStore(this);
+        screen("Tous les artistes",this::showHome);
+        add(page,text("Tous les artistes de tes soirées",20,Color.WHITE,true),7);
+        add(page,text("Photos des artistes et pages Spotify vérifiées. Les profils "+
+            "introuvables restent signalés, sans attribuer le compte d'un homonyme.",
+            13,SOFT,false),14);
+        java.util.LinkedHashMap<String,JSONObject> indexed=new java.util.LinkedHashMap<>();
+        for(JSONObject event:store.events()){
+            JSONArray profiles=event.optJSONArray("artistProfiles");
+            if(profiles!=null)for(int i=0;i<profiles.length();i++){
+                JSONObject original=profiles.optJSONObject(i);
+                if(original==null)continue;
+                String name=original.optString("name").trim();
+                if(name.isEmpty())continue;
+                String key=name.toLowerCase(Locale.ROOT);
+                JSONObject current=indexed.get(key);
+                if(current==null){
+                    try{current=new JSONObject(original.toString());}catch(Exception ignored){continue;}
+                    indexed.put(key,current);
+                }else for(String field:new String[]{"photo","spotify","spotifyPhoto","shotgunUrl","previewUrl"}){
+                    String value=original.optString(field);
+                    if(current.optString(field).isEmpty()&&!value.isEmpty())
+                        try{current.put(field,value);}catch(Exception ignored){}
+                }
+            }
+            for(String raw:event.optString("artists").split("[,;\\n]+")){
+                String name=raw.trim(),key=name.toLowerCase(Locale.ROOT);
+                if(name.length()<2||indexed.containsKey(key))continue;
+                try{indexed.put(key,new JSONObject().put("name",name));}
+                catch(Exception ignored){}
+            }
+        }
+        if(indexed.isEmpty()){
+            add(page,text("Aucun artiste identifié. Synchronise les événements "+
+                "Shotgun pour remplir cet annuaire.",14,SOFT,false),10);
+            return;
+        }
+        JSONArray all=new JSONArray();
+        for(JSONObject artist:indexed.values())all.put(artist);
+        JSONObject collection=new JSONObject();
+        try{collection.put("artistProfiles",all);}catch(Exception ignored){}
+        renderArtistProfiles(collection);
     }
 
     private void renderArtistProfiles(JSONObject event) {
