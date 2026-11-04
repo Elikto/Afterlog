@@ -1,6 +1,6 @@
-const CACHE='noctaria-pwa-v6';
+const CACHE='noctaria-pwa-v7';
 const BASE=new URL('./',self.location.href).href;
-const ASSETS=['./','./index.html','./styles.css','./app.js','./parity.js','./places.js','./tracking.js','./spotify.js','./backup.js','./manifest.webmanifest','./icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
+const ASSETS=['./','./index.html','./styles.css','./app.js','./parity.js','./places.js','./tracking.js','./spotify-trusted.js','./spotify.js','./backup.js','./manifest.webmanifest','./icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
   self.skipWaiting();
