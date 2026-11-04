@@ -1,3 +1,14 @@
+# NØCTARIA 0.19.0 — Synchronisation, Spotify et SoundCloud
+
+- Après la connexion Shotgun sur Android, l'utilisateur choisit les événements dans une liste précochée avec mini-affiches. L'import des soirées se déroule en arrière-plan, puis **une unique étape finale** recherche les artistes, leurs photos, pages Spotify ou SoundCloud et liens de musique publics. Pour **9 soirées, 10 étapes** sont affichées.
+- Le **temps total restant** inclut l'enrichissement musical et est indiqué sous forme d'une plage prudente, plutôt que quelques secondes impossibles à garantir.
+- Recherche des artistes : nom exact, puis variations sans emoji, symboles décoratifs ou préfixe « DJ » ; les liens sont acceptés uniquement avec des indices d'identité fiables. Maissouille et Unicorn on K ont été rapprochés de leurs pages Spotify publiques corroborées. Si Spotify est indisponible, une relation publique SoundCloud (notamment Wikidata P3040, vérifiée par le profil officiel) est recherchée. Les extraits ne sont proposés que lorsqu'une piste officielle publique est accessible.
+- **Après synchronisation complète, le bandeau de progression disparaît tout seul.** En cas d'échec ou de profil/photo manquant, un bandeau décrit ce qui reste à faire et propose **« Masquer »**.
+- Les dates sont affichées au format français dans les listes et l'éditeur Android, sans modifier leur représentation ISO dans les données. Les cartes artistes et la recherche SoundCloud sont également disponibles dans la PWA iOS.
+- **Limites :** les requêtes Spotify, SoundCloud et Shotgun peuvent être bloquées, et certains artistes n'ont pas de photo ou de compte vérifiable. L'app laisse alors la fiche incomplète plutôt que de créer un faux lien. La PWA iPhone ne peut toujours pas synchroniser automatiquement les billets privés du compte personnel Shotgun.
+
+---
+
 # NØCTARIA 0.18.9 — Synchronisation des soirées et artistes
 
 - Connexion Shotgun Android : après authentification, le navigateur disparaît. Un traitement discret identifie les événements des trois catégories de billets, puis une liste avec miniature d'affiche et case cochée par défaut permet de retenir les soirées souhaitées.
