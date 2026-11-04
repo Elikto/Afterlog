@@ -7,13 +7,6 @@ const $ = s => document.querySelector(s);
 const screen = $('#screen');
 const overlay = $('#overlay');
 const toastBox = $('#toast');
-const SOURCE = {
- alcohol:'https://www.santepubliquefrance.fr/alcool',
- mdma:'https://www.drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Ecstasy-MDMA',
- ketamine:'https://www.drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Ketamine',
- cocaine:'https://www.drogues-info-service.fr/Tout-savoir-sur-les-drogues/Le-dico-des-drogues/Cocaine',
- all:'https://www.drogues-info-service.fr/'
-};
 const TYPES = [
  ['🍺','Bière','Alcool','verre','#e1b06a'],
  ['🍷','Vin','Alcool','verre','#d77db7'],
@@ -274,7 +267,7 @@ function renderEvent(event){
    '<span class="artist-letter">'+esc((a.name||'?')[0].toUpperCase())+'</span>'+
    (photo?'<img class="artist-image" loading="lazy" src="'+aesc(photo)+'" alt="" onerror="this.remove()">':'')+
    '<span class="artist-shade"></span><span class="spotify-badge '+(spotify?'':'unlinked')+'">≋</span><span class="artist-name">'+esc(a.name)+'</span></button>';
- }).join('')+'</div></section>':'';
+ }).join('')+'</div><div style="margin-top:12px">'+actionBtn('↻ Compléter les artistes Spotify','spotify-refresh','','tiny')+'</div></section>':'';
  screen.innerHTML='<button class="back" data-action="home">‹ Mes soirées</button>'+
  posterHtml(event,true)+
  '<div class="button-row" style="margin:-8px 0 19px">'+actionBtn('🖼 Modifier l’affiche','choose-poster','data-id="'+aesc(event.id)+'"','tiny')+
@@ -385,6 +378,9 @@ function renderSettings(){
  '<div class="card"><h2>Sauvegarde & migration</h2><p class="muted small" style="margin:8px 0 15px">Importe une sauvegarde JSON Android « afterlog-v1 » pour retrouver tes soirées, artistes et prises. Les fichiers photo et vidéo Android ne sont pas contenus dans ce JSON et doivent être ajoutés à nouveau.</p>'+
  '<div class="button-row">'+actionBtn('Importer une sauvegarde Android','import','','primary')+actionBtn('Exporter mon journal JSON','export')+'</div>'+
  '<p class="muted small" style="margin-top:14px">Le stockage local d’une PWA peut être supprimé si tu effaces les données Safari. Exporte régulièrement ton journal. Ce JSON ne contient pas les médias binaires.</p></div>'+
+ '<div class="card"><h2>Artistes Spotify</h2><p class="muted small" style="margin:8px 0">Les noms publics des artistes peuvent être recherchés sur Wikidata et Spotify. Aucune consommation n’est envoyée. Sur iOS, l’accès aux portraits officiels dépend de la politique CORS de Spotify.</p>'+
+ '<p class="muted small" style="margin:10px 0">'+esc(window.NoctariaSpotify?.status().state||'Jamais analysé')+'</p>'+
+ actionBtn('↻ Rechercher tous les artistes','spotify-refresh','','block')+'</div>'+
  '<div class="card"><h2>Confidentialité</h2><p class="muted small" style="margin:12px 0">Aucun compte ni serveur NØCTARIA. Les prises, notes et fichiers sont enregistrés dans la base locale du navigateur (IndexedDB). Les liens Spotify/Shotgun s’ouvrent sur leurs propres sites, qui ont leurs politiques de confidentialité.</p></div>'+
  '<div class="card"><h2>Shotgun et Instagram</h2><p class="muted small" style="margin:8px 0 12px">La connexion Shotgun automatique d’Android n’est pas encore disponible sur iOS. Tu peux créer tes soirées manuellement et importer leurs données par JSON. Le partage multiple utilise la feuille de partage iOS : Instagram décide ensuite des options de story disponibles.</p>'+
  '<a class="btn block" href="https://shotgun.live/" target="_blank" rel="noopener noreferrer">Ouvrir Shotgun ↗</a></div>';
@@ -564,6 +560,13 @@ async function act(action,button){
   case 'new-event':openEventForm(null);break;
   case 'shotgun':openShotgun();break;
   case 'shotgun-manual':closeModal();openEventForm(null);break;
+  case 'spotify-refresh':
+   if(window.NoctariaSpotify){
+    notify('Recherche des artistes dans toutes les soirées…');
+    window.NoctariaSpotify.scan(true).then(result=>{
+      notify('Spotify : '+(result.linked||0)+' comptes · '+(result.photos||0)+' photos officielles');
+    });
+   }break;
   case 'open-event':state.selectionMode=false;state.selected.clear();navigate('event/'+encodeURIComponent(idVal));break;
   case 'edit-event':openEventForm(eventById(idVal));break;
   case 'delete-event':{
@@ -715,6 +718,10 @@ $('#media-file').addEventListener('change',async e=>{
  if(e.target.files.length)await uploadFiles([...e.target.files]);
  e.target.value='';
 });
+window.addEventListener('noctaria:spotify-updated',async()=>{
+ if(!overlay.hidden)return;
+ await load();await render();
+});
 window.addEventListener('hashchange',render);
 window.addEventListener('beforeinstallprompt',event=>{
  event.preventDefault();state.installPrompt=event;
@@ -724,6 +731,8 @@ window.addEventListener('beforeinstallprompt',event=>{
   state.db=await openDb();
   await load();
   await render();
+  if(window.NoctariaSpotify && navigator.onLine)
+   window.NoctariaSpotify.scan(false).catch(()=>{});
   if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
  }catch(error){
   console.error('NØCTARIA startup',error);
