@@ -637,12 +637,19 @@ public final class MainActivity extends Activity {
 
         add(page,button("Modifier les informations",false,()->editEvent(event)),24);
 
-        String description=event.optString("shotgunAbout");
-        if(description.isEmpty())description=event.optString("description");
-        if(!description.isEmpty()) {
+        boolean shotgunEvent=event.optString("origin").toLowerCase(Locale.ROOT)
+            .contains("shotgun")||event.optString("url").matches(
+                "(?i)^https://(?:[a-z0-9-]+\\.)?shotgun\\.live/(?:[a-z]{2}/)?(?:events|festivals)/.*");
+        // A Shotgun card must never masquerade a marketing og:description or
+        // personal note as the event's actual "À propos".
+        String aboutText=shotgunEvent?event.optString("shotgunAbout").trim():
+            event.optString("description").trim();
+        if(!aboutText.isEmpty()||shotgunEvent){
             add(page,text("À propos",21,Color.WHITE,true),11);
             LinearLayout about=card();
-            add(about,text(description,15,Color.WHITE,false),0);
+            add(about,text(aboutText.isEmpty()?
+                "Description « À propos » non encore récupérée sur la fiche Shotgun.":
+                aboutText,15,aboutText.isEmpty()?SOFT:Color.WHITE,false),0);
             add(page,about,23);
         }
         if(!event.optString("artists").isEmpty() ||
