@@ -229,104 +229,6 @@ public final class MainActivity extends Activity {
     private String dateNow() { return LocalDate.now().toString(); }
     private String timeNow() { return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")); }
 
-    private void renderTicketSelection(LinearLayout panel) {
-        org.json.JSONArray found=TicketSelectionStore.list(this);
-        add(panel,text("🎟️  Tes billets passés",20,Color.WHITE,true),9);
-        add(panel,text(found.length()+" événement(s) détecté(s) sur Shotgun.\n"
-            +"Ils sont tous cochés par défaut. Décoche simplement ceux que tu veux ignorer.",14,SOFT,false),15);
-        TextView selectionCount=text(TicketSelectionStore.selectedCount(this)+
-            " / "+found.length()+" sélectionné(s)",14,ACCENT,true);
-        add(panel,selectionCount,12);
-
-        LinearLayout controls=new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams ctrlLayout=new LinearLayout.LayoutParams(-1,-2);
-        ctrlLayout.bottomMargin=dp(17);
-        panel.addView(controls,ctrlLayout);
-
-        TextView selectAll=button("✓ Tout cocher",false,()->{
-            TicketSelectionStore.markAll(this,true);
-            syncLastSignature="";
-            renderSyncProgress();
-        });
-        controls.addView(selectAll,new LinearLayout.LayoutParams(0,-2,1));
-        TextView selectNone=button("Tout décocher",false,()->{
-            TicketSelectionStore.markAll(this,false);
-            syncLastSignature="";
-            renderSyncProgress();
-        });
-        LinearLayout.LayoutParams noneLp=new LinearLayout.LayoutParams(0,-2,1);
-        noneLp.leftMargin=dp(8);
-        controls.addView(selectNone,noneLp);
-
-        TextView launch=button("Synchroniser",true,()->{
-            int n=TicketSelectionStore.selectedCount(this);
-            if(n<1){
-                message("Coche au moins une soirée à importer.");
-                return;
-            }
-            try {
-                AutoSyncScheduler.enable(this);
-                ShotgunSyncService.importSelected(this);
-                SyncState.save(this,SyncState.RUNNING,"Préparation de la synchronisation",
-                    0,n,-1,"Téléchargement des informations des soirées sélectionnées");
-                syncLastSignature="";
-                renderSyncProgress();
-            }catch(Exception ex) {
-                message("Synchronisation impossible : "+ex.getMessage());
-            }
-        });
-
-        for(int i=0;i<found.length();i++){
-            JSONObject event=found.optJSONObject(i);
-            if(event==null)continue;
-            final int index=i;
-            LinearLayout card=column();
-            card.setPadding(dp(11),dp(12),dp(11),dp(12));
-            card.setBackground(rounded(PANEL,15));
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);
-            cp.bottomMargin=dp(10);
-            panel.addView(card,cp);
-            LinearLayout row=new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            card.addView(row,new LinearLayout.LayoutParams(-1,-2));
-            String poster=event.optString("poster");
-            if(poster.startsWith("https://")){
-                ImageView image=new ImageView(this);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setBackground(rounded(Color.rgb(45,44,66),8));
-                LinearLayout.LayoutParams imgLp=new LinearLayout.LayoutParams(dp(56),dp(74));
-                imgLp.rightMargin=dp(11);
-                row.addView(image,imgLp);
-                loadImage(image,poster);
-            }
-            LinearLayout info=column();
-            row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-            TextView title=text(event.optString("title","Soirée"),15,Color.WHITE,true);
-            title.setMaxLines(3);
-            add(info,title,6);
-            String date=event.optString("date");
-            if(!date.isEmpty())add(info,text(prettyDate(date),12,SOFT,false),0);
-            CheckBox checked=new CheckBox(this);
-            checked.setButtonTintList(ColorStateList.valueOf(ACCENT));
-            checked.setChecked(event.optBoolean("selected",true));
-            checked.setContentDescription("Importer "+event.optString("title"));
-            row.addView(checked,new LinearLayout.LayoutParams(dp(46),dp(52)));
-            checked.setOnCheckedChangeListener((button,isChecked)->{
-                TicketSelectionStore.mark(this,index,isChecked);
-                int n=TicketSelectionStore.selectedCount(this);
-                selectionCount.setText(n+" / "+found.length()+" sélectionné(s)");
-                launch.setText("Synchroniser les "+n+" soirée(s)");
-                launch.setAlpha(n>0?1f:0.55f);
-            });
-            row.setOnClickListener(v->checked.setChecked(!checked.isChecked()));
-        }
-        launch.setText("Synchroniser les "+TicketSelectionStore.selectedCount(this)+" soirée(s)");
-        add(panel,launch,13);
-        add(panel,text("La synchronisation continuera sur l'accueil. Les cases décochées ne seront pas importées lors de cette sélection.",12,SOFT,false),0);
-    }
-
     private boolean allSelectedEventsPresent() {
         JSONArray wanted=TicketSelectionStore.chosen(this);
         if(wanted.length()==0)return false;
@@ -382,8 +284,27 @@ public final class MainActivity extends Activity {
         syncPanel.removeAllViews();
         LinearLayout panel=card();
         if(SyncState.SELECTION.equals(mode)) {
-            renderTicketSelection(panel);
-            add(syncPanel,panel,18);
+            // Migration d'un ancien parcours : plus aucune liste à cocher.
+            // Tous les billets déjà découverts partent en import automatiquement.
+            TicketSelectionStore.markAll(this,true);
+            int count=TicketSelectionStore.selectedCount(this);
+            if(count>0) {
+                try {
+                    SyncState.save(this,SyncState.RUNNING,
+                        "Synchronisation automatique des billets",
+                        0,count,-1,"Toutes les soirées trouvées sont importées.");
+                    AutoSyncScheduler.enable(this);
+                    ShotgunSyncService.importSelected(this);
+                }catch(Exception e) {
+                    SyncState.save(this,SyncState.ERROR,
+                        "Impossible de lancer la synchronisation",
+                        0,count,-1,"Reconnecte ton compte Shotgun.");
+                }
+            }else {
+                SyncState.save(this,SyncState.IDLE,"",0,0,-1,"");
+            }
+            syncLastSignature="";
+            renderSyncProgress();
             return;
         }
         if(SyncState.BLOCKED.equals(mode) || SyncState.ERROR.equals(mode) ||
