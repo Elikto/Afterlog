@@ -489,6 +489,38 @@ public final class ShotgunBrowserActivity extends Activity {
             }catch(_){return '';}
           };
           const artistUrl=v=>/^https:\\/\\/open\\.spotify\\.com\\/(?:intl-[a-z]{2}\\/)?artist\\/[a-zA-Z0-9]{22}\\/?(?:[?#].*)?$/i.test(v||'');
+          // Optional OFFICIAL music players/track pages already linked by
+          // Shotgun. Never extract or host audio file URLs or guess a track.
+          const officialPreview=v=>{
+            const href=absolute(v);
+            if(!href)return '';
+            try{
+              const u=new URL(href),host=u.hostname.toLowerCase();
+              if(host==='open.spotify.com' &&
+                 /^\\/(?:embed\\/)?track\\/[A-Za-z0-9]{22}\\/?$/i.test(u.pathname))
+                 return u.origin+u.pathname;
+              if(host==='soundcloud.com'&&
+                 /^\\/[^/?#]+\\/[^/?#]+(?:\\/)?$/.test(u.pathname) &&
+                 !/\\/(?:sets|pages|tags|discover)\\//i.test(u.pathname))
+                 return u.origin+u.pathname;
+              if(host==='w.soundcloud.com'&&u.pathname==='/player/' &&
+                 u.searchParams.has('url'))return href;
+              if((host==='shotgun.live'||host.endsWith('.shotgun.live')) &&
+                 /^\\/(?:[a-z]{2}\\/)?artists\\/[^/]+\\/music\\/?$/i.test(u.pathname))
+                 return u.origin+u.pathname;
+            }catch(_){}
+            return '';
+          };
+          const previewWithin=element=>{
+            if(!element)return '';
+            for(const node of element.querySelectorAll(
+              'a[href],iframe[src*="spotify"],iframe[src*="soundcloud"]')){
+              const found=officialPreview(node.href||node.src||
+                node.getAttribute('href')||node.getAttribute('src'));
+              if(found)return found;
+            }
+            return '';
+          };
           const picture=element=>{
             if(!element)return '';
             const found=[];
@@ -523,14 +555,14 @@ public final class ShotgunBrowserActivity extends Activity {
             }
             return '';
           };
-          const take=(name,photo,shotgunUrl,spotify)=>{
+          const take=(name,photo,shotgunUrl,spotify,preview)=>{
             name=(name||'').toString().trim().replace(/\\s+/g,' ');
             if(name.length<2||name.length>100)return;
             const key=norm(name);
             if(!key)return;
             if(!artistsByName.has(key)){
               if(profiles.length>=55)return;
-              const entry={name,photo:'',shotgunUrl:'',spotify:''};
+              const entry={name,photo:'',shotgunUrl:'',spotify:'',previewUrl:''};
               artistsByName.set(key,entry);
               profiles.push(entry);
             }
@@ -540,6 +572,8 @@ public final class ShotgunBrowserActivity extends Activity {
             if(sg&&/(^|\\.)shotgun\\.live$/i.test(new URL(sg).hostname) &&
                /\\/artists?\\//i.test(new URL(sg).pathname) && !p.shotgunUrl)p.shotgunUrl=sg;
             if(artistUrl(sp)&&!p.spotify)p.spotify=sp;
+            const track=officialPreview(preview);
+            if(track&&!p.previewUrl)p.previewUrl=track;
           };
           const performers=node?Array.isArray(node.performer)?node.performer:
             [node.performer]:[];
@@ -594,7 +628,8 @@ public final class ShotgunBrowserActivity extends Activity {
                 container.querySelector('a[href*="/artists/"],a[href*="/artist/"]');
               const social=container.querySelector(
                 'a[href*="open.spotify.com/artist/"]');
-              take(entry.name,portrait,anchor?.href||'',social?.href||'');
+              take(entry.name,portrait,anchor?.href||'',social?.href||'',
+                previewWithin(container));
               break;
             }
           }
@@ -607,7 +642,7 @@ public final class ShotgunBrowserActivity extends Activity {
             const link=card?.closest('a[href*="/artists/"]')||
               card?.querySelector('a[href*="/artists/"]');
             take(artistsByName.get(alt).name,picture(img)||picture(card),
-              link?.href||'',social?.href||'');
+              link?.href||'',social?.href||'',previewWithin(card));
           }
           // Données publiques structurées : Next.js, application/json ou LD+JSON.
           // Limites de taille/profondeur pour ne pas ralentir le téléphone.
@@ -629,8 +664,10 @@ public final class ShotgunBrowserActivity extends Activity {
                 x&&typeof x==='object'?(x.url||x.src||x.original||x.medium||''):'';
               const artistLink=object.url||object.profileUrl||object.shotgunUrl||'';
               const spotify=object.spotifyUrl||object.spotify||'';
+              const preview=object.previewUrl||object.trackUrl||
+                object.songUrl||object.musicUrl||'';
               take(artistsByName.get(norm(name)).name,unbox(image),unbox(artistLink),
-                unbox(spotify));
+                unbox(spotify),unbox(preview));
             }
             for(const [key,value] of Object.entries(object)){
               if(key==='description'||key==='html'||key==='content'||key==='body')continue;
@@ -652,7 +689,8 @@ public final class ShotgunBrowserActivity extends Activity {
             if(artistsByName.has(norm(name))){
               take(artistsByName.get(norm(name)).name,picture(anchor),
                 anchor.href,
-                anchor.querySelector('a[href*="open.spotify.com/artist/"]')?.href||'');
+                anchor.querySelector('a[href*="open.spotify.com/artist/"]')?.href||'',
+                previewWithin(anchor));
             }
           }
           if(profiles.length)result.artistProfiles=profiles;
