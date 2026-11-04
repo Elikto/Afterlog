@@ -24,6 +24,12 @@ jobs:
     steps:
       - name: Récupérer le projet
         uses: actions/checkout@v4
+      - name: Vérifier que les captures Shotgun sont autorisées
+        run: |
+          if grep -q 'LayoutParams.FLAG_SECURE' app/src/main/java/fr/afterlog/app/ShotgunBrowserActivity.java; then
+            echo 'Erreur : les captures écran sont bloquées dans le navigateur Shotgun.' >&2
+            exit 1
+          fi
       - name: Java 17
         uses: actions/setup-java@v4
         with:
