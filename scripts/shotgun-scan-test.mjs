@@ -40,7 +40,7 @@ for(const url of urls){
  assert.equal(response.events.length,2);
  assert.ok(!JSON.stringify(response).includes('SECRET_QR_NOT_ALLOWED'),
    'no ticket or QR secret data in extracted event info');
- assert.ok(response.events.every(e=>!//tickets/(?:past|pending)/?$/.test(e.url)),
+ assert.ok(response.events.every(e=>!e.url.match(/\/tickets\/(?:past|pending)\/?$/)),
    'category links never become events');
 }
 const auth=new JSDOM('<input type="password">',{
