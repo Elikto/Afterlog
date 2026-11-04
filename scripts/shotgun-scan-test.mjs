@@ -60,16 +60,33 @@ for(const buttonSection of ['nav','actions','footer']){
 }
 assert.match(browser,/if\(autoSyncMode\)\{finish\(\);return;\}/,
  'Android system back exits the login window, never navigates Shotgun');
-assert.match(browser,/else if\(autoSyncMode\)\s*\{[\s\S]*?beginDiscovery\(\);/,
- 'automatic ticket discovery starts with personal login');
-assert.doesNotMatch(browser,/SyncState\.SELECTION/, 
- 'connected personal Shotgun flow must never request ticket selection');
+assert.match(browser,/else if\(autoSyncMode\)\s*\{[\s\S]*?web\.loadUrl\(ShotgunTicketDiscovery\.ACCOUNT\)/,
+ 'personal login starts with only the official Shotgun account view');
+assert.match(browser,/offerSyncChoice\(\)/,
+ 'user receives a one-time choice once Shotgun authentication is verified');
+for(const label of ['Tout synchroniser','Choisir des soirées','Plus tard']){
+ assert.ok(browser.includes('"'+label+'"'),'missing sync preference '+label);
+}
+assert.match(browser,/ShotgunSyncService\.discoverAccount\(this,choose\)/,
+ 'authenticated user hands off silent navigation to background service');
+assert.doesNotMatch(browser,/ShotgunSyncService\.importSelected\(this\)/,
+ 'login UI must not handle import events by itself');
 const main=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/MainActivity.java'),'utf8');
-assert.doesNotMatch(main,/renderTicketSelection\(/,
- 'manual ticket selection UI was removed from the Android home screen');
-assert.match(main,/if\(SyncState\.SELECTION\.equals\(mode\)\)[\s\S]*?ShotgunSyncService\.importSelected\(this\)/,
- 'older pending ticket lists are migrated to automatic import');
-assert.match(browser,/ShotgunSyncService\.importSelected\(this\)/,
- 'all found tickets sync automatically without a manual selection button');
+assert.ok(main.includes('private void showTicketChoice()'),
+ 'user can choose which events to sync after silent discovery');
+assert.match(main,/TicketSelectionStore\.mark\(this,\(Integer\)b\.getTag\(\),b\.isChecked\(\)\)/,
+ 'per-event selection is persisted before background import');
+const service=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/ShotgunSyncService.java'),'utf8');
+assert.ok(service.includes('private void inspectTicketCategory(int nav)'),
+ 'event categories are inspected by the background service');
+assert.ok(service.includes('private void nextTicketCategory(boolean successful)'));
+assert.ok(service.includes('private void enrichArtistsDuringSync(JSONObject snapshot)'),
+ 'artist pages and Spotify accounts are resolved during Shotgun sync');
+assert.ok(service.includes('artistsPending>0')&&service.includes('metadataDone'),
+ 'completion waits for in-flight artist enrichment');
+assert.ok(service.includes('ShotgunTicketDiscovery.TICKET_PAGES[ticketPageIndex]'),
+ 'service reads tickets, pending and past without visible navigation');
+assert.doesNotMatch(browser,/SyncState\.SELECTION/,
+ 'login itself cannot enter a ticket-selection state');
 
 console.log('Shotgun Android extractor OK: 3 categories, events, no nav links/QR data, login detection');
