@@ -616,10 +616,10 @@ public final class ShotgunSyncService extends Service {
                 artistMissingPhotos+=unpictured;
                 if(unlinked==0&&unpictured==0)artistEventsComplete++;
                 if(metadataDone&&artistsPending==0)finish(SyncState.DONE,finalSummary);
-                else status("Artistes Spotify · synchronisation",
-                    "Fiches "+processed+"/"+queue.size()+" · "+verified+
-                    " profil(s) associés à cette soirée · "+artistsPending+
-                    " vérification(s) en cours.");
+                else status("Étape "+(queue.size()+1)+"/"+(queue.size()+1)+
+                    " · Artistes Spotify/SoundCloud",
+                    artistsPending+" soirée(s) à enrichir · "+artistLinksVerified+
+                    " compte(s) Spotify déjà confirmé(s).");
             });
         });
     }
