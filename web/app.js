@@ -452,7 +452,7 @@ async function importBackup(file){
  text=text.replace(/("(?:id|eventId)"\s*:\s*)(\d{16,20})(?=\s*[,}])/g,'$1"$2"');
  const data=JSON.parse(text);
  if(data.format!=='afterlog-v1'||!Array.isArray(data.events)||!Array.isArray(data.entries))
-  throw new Error('Format incompatible : export Android afterlog-v1 attendu.');
+  throw new Error('Format incompatible : sauvegarde NØCTARIA attendue.');
  if(data.events.length>10000||data.entries.length>200000)
   throw new Error('Sauvegarde trop volumineuse.');
  const ids=new Set();
