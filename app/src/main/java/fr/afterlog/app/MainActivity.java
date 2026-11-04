@@ -334,7 +334,7 @@ public final class MainActivity extends Activity {
         bar.setProgress(Math.min(Math.max(0,done),bar.getMax()));
         add(panel,bar,7);
         String amount=total>0?done+" / "+total+" événements récupérés":
-            "Recherche des billets passés…";
+            "Recherche de tous tes billets Shotgun…";
         add(panel,text(amount,13,ACCENT,true),5);
         long remaining=state.optLong("eta",-1);
         if(remaining>=0&&SyncState.RUNNING.equals(mode)&&total>0) {
