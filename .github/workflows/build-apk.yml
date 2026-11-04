@@ -24,6 +24,10 @@ jobs:
     steps:
       - name: Récupérer le projet
         uses: actions/checkout@v4
+      - name: Vérifier les profils Spotify communs Android et iPhone
+        run: |
+          node scripts/sync-spotify-profiles.mjs --check
+          node scripts/check-parity.mjs
       - name: Vérifier que les captures Shotgun sont autorisées
         run: |
           if grep -q 'LayoutParams.FLAG_SECURE' app/src/main/java/fr/afterlog/app/ShotgunBrowserActivity.java; then
