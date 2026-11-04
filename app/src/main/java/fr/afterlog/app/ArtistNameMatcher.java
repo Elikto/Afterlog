@@ -32,8 +32,9 @@ final class ArtistNameMatcher {
     static boolean compatible(String source,String expected){
         String actual=normalized(source);
         if(actual.isEmpty())return false;
-        for(String variant:variants(expected))if(actual.equals(normalized(variant)))
-            return true;
+        for(String left:variants(source))
+            for(String right:variants(expected))
+                if(normalized(left).equals(normalized(right)))return true;
         return false;
     }
 }
