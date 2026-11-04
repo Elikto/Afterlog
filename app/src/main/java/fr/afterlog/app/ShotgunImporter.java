@@ -35,7 +35,10 @@ final class ShotgunImporter {
         // Only the event's own visible "À propos" qualifies for this field.
         // The og:description above is deliberately not a substitute.
         String actualAbout=ShotgunAboutExtractor.extract(doc);
-        if(!actualAbout.isEmpty())event.put("shotgunAbout",actualAbout);
+        if(!actualAbout.isEmpty()){
+            event.put("shotgunAbout",actualAbout);
+            event.put("shotgunAboutSource","event_section");
+        }
         event.put("url", uri.toString());
         event.put("origin", "Shotgun");
         for (Element script : doc.select("script[type=application/ld+json]")) {
