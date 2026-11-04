@@ -449,7 +449,8 @@ function renderSettings(){
   const st=window.NoctariaSpotify?.status()||{};
   return esc(st.total==null?'Aucune recherche effectuée':
    st.total+' artistes distincts · '+(st.linked||0)+' comptes Spotify · '+
-   (st.photos||0)+' portraits · '+(st.state==='partial'?'Vérification à poursuivre':
+   (st.soundcloud||0)+' comptes SoundCloud · '+(st.photos||0)+
+   ' portraits · '+(st.state==='partial'?'Vérification à poursuivre':
     st.state==='running'?'En cours':'Dernier balayage terminé'));
  })()+'</p>'+
  actionBtn('↻ Rechercher tous les artistes','spotify-refresh','','block')+'</div>'+
