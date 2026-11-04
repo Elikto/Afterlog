@@ -490,6 +490,7 @@ public final class ShotgunBrowserActivity extends Activity {
                 if(/(?:^|\\n)(?:line[ -]?up|organis[ée] par|localisation)\\s*\\n/i.test(raw))
                   continue;
                 result.shotgunAbout=raw.slice(0,16000);
+                result.shotgunAboutSource='event_section';
                 break;
               }
               if(result.shotgunAbout)break;
