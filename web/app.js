@@ -34,7 +34,7 @@ const TYPES = [
 const state = {
   db:null,events:[],entries:[],route:'home',eventId:null,
   selected:new Set(),selectionMode:false,
-  media:[],urls:[],renderVersion:0,installPrompt:null,
+  media:[],urls:[],posterUrls:new Map(),posterUploadEventId:null,renderVersion:0,installPrompt:null,
   viewerUrl:null,toastTimer:null
 };
 const esc = value => String(value==null?'':value).replace(/[&<>"']/g,c=>({
@@ -156,7 +156,7 @@ function actionBtn(label,action,extra='',style=''){
  return '<button type="button" class="btn '+style+'" data-action="'+aesc(action)+'" '+extra+'>'+esc(label)+'</button>';
 }
 function posterHtml(e,large=false){
- const photo=safeImage(e.poster);
+ const photo=state.posterUrls.get(byId(e.id))||safeImage(e.poster);
  const title=e.title||'Ma soirée';
  const style=photo?' style="background-image:url(&quot;'+aesc(photo)+'&quot;)"':'';
  return '<div class="poster '+(large?'large ':'')+(photo?'with-image':'')+'"'+style+'><span class="poster-brand">✦ NØCTARIA</span><div><div class="poster-title">'+esc(title)+'</div><div class="poster-date">'+esc(formatDate(e.date))+'</div></div></div>';
@@ -180,12 +180,23 @@ function navigate(route){
 async function render(){
  const seq=++state.renderVersion;
  parseRoute();clearUrls();
+ state.posterUrls=new Map();
+ // Poster files are kept independently of the gallery; original Shotgun
+ // posters and generated NØCTARIA placeholders still work offline.
+ for(const event of state.events){
+  if(!event.posterLocal)continue;
+  try{
+   const record=await tx('media','readonly',obj=>obj.get(byId(event.posterLocal)));
+   if(record&&record.blob)state.posterUrls.set(byId(event.id),fileUrl(record.blob));
+  }catch(error){console.warn('Poster unavailable',error);}
+ }
+ if(seq!==state.renderVersion)return;
  if(state.route==='event'){
   const event=eventById(state.eventId);
   if(!event){navigate('home');return;}
   const media=await eventMedia(event.id);
   if(seq!==state.renderVersion)return;
-  state.media=media;
+  state.media=media.filter(m=>!m.isPoster);
   renderEvent(event);
  }else if(state.route==='tracking')renderTracking();
  else if(state.route==='settings')renderSettings();
@@ -265,9 +276,14 @@ function flags(entries){
  return risks.filter((r,i,a)=>a.findIndex(x=>x.title===r.title)===i);
 }
 function risksHtml(entries){
- const warnings=flags(entries);
- return warnings.length?'<section class="section"><div class="heading-row"><h2>Vigilance RDR</h2><span class="pill warn">'+warnings.length+' alerte(s)</span></div>'+
- warnings.map(w=>'<div class="notice '+(w.high?'high':'')+'"><strong>⚠ '+esc(w.title)+'</strong><p>'+esc(w.body)+'</p><a rel="noopener noreferrer" target="_blank" href="'+aesc(w.link)+'">Lire la source de prévention ↗</a></div>').join('')+'</section>':'';
+ const warnings=window.NoctariaParity?
+   window.NoctariaParity.warnings(entries,state.entries):flags(entries);
+ if(!warnings.length)return '';
+ const content=window.NoctariaParity?
+   window.NoctariaParity.warningMarkup(warnings):
+   warnings.map(w=>'<div class="notice '+(w.high?'high':'')+'"><strong>'+esc(w.title)+'</strong><p>'+esc(w.body)+'</p></div>').join('');
+ return '<section class="section"><div class="heading-row"><h2>Vigilance RDR</h2>'+
+ '<span class="pill warn">'+warnings.length+' alerte(s)</span></div>'+content+'</section>';
 }
 function renderEvent(event){
  const entries=state.entries.filter(e=>byId(e.eventId)===byId(event.id)).sort((a,b)=>String(a.date+' '+(a.time||'')).localeCompare(String(b.date+' '+(b.time||''))));
@@ -292,6 +308,8 @@ function renderEvent(event){
  }).join('')+'</div></section>':'';
  screen.innerHTML='<button class="back" data-action="home">‹ Mes soirées</button>'+
  posterHtml(event,true)+
+ '<div class="button-row" style="margin:-8px 0 19px">'+actionBtn('🖼 Modifier l’affiche','choose-poster','data-id="'+aesc(event.id)+'"','tiny')+
+ (event.posterLocal?actionBtn('Retirer ma photo','reset-poster','data-id="'+aesc(event.id)+'"','tiny ghost'):'')+'</div>'+
  '<div class="page-head"><div class="header-sub"><p class="eyebrow">JOURNAL DE SOIRÉE</p><h1>'+esc(event.title||'Ma soirée')+'</h1><p class="kicker">'+esc(formatDate(event.date))+(event.start?' · '+esc(event.start):'')+(event.venue?' · '+esc(event.venue):'')+'</p></div>'+
  actionBtn('✎','edit-event','data-id="'+aesc(event.id)+'"')+'</div>'+
  (event.address||event.city?'<p class="kicker">📍 '+esc([event.address,event.city].filter(Boolean).join(' · '))+'</p>':'')+
@@ -303,7 +321,9 @@ function renderEvent(event){
  '<section class="section"><div class="heading-row"><h2>Ma galerie · '+media.length+'</h2>'+actionBtn('＋ Médias','upload-media','','tiny')+'</div>'+
  '<div class="action-toolbar">'+actionBtn(state.selectionMode?'✕ Annuler':'✓ Sélectionner','selection-mode','','tiny')+
  (state.selectionMode?actionBtn('Tout','select-all','','tiny'):'')+
- (hasSelection?actionBtn('Partager '+state.selected.size,'share-selected','','tiny primary')+actionBtn('Supprimer','delete-selected','','tiny danger'):'')+'</div>'+gallery+
+ (hasSelection?actionBtn('Partager '+state.selected.size,'share-selected','','tiny primary')+
+ actionBtn('Story Instagram','share-story','','tiny')+
+ actionBtn('Supprimer','delete-selected','','tiny danger'):'')+'</div>'+gallery+
  '<p class="muted small">Appuie sur un média pour l’ouvrir ou active « Sélectionner » pour un partage multiple.</p></section>'+
  (event.description?'<section class="section"><h2>À propos</h2><p class="detail-description">'+esc(event.description)+'</p></section>':'')+
  lineUp+
@@ -329,6 +349,9 @@ function openEventForm(existing){
  field('genres','Styles musicaux',e.genres||'',{full:true})+
  field('poster','URL de l’affiche (facultatif)',e.poster||'',{full:true,type:'url',placeholder:'https://…'})+
  field('description','Souvenirs / description',e.description||'',{full:true,type:'textarea'})+
+ field('organizer','Organisateur',e.organizer||'',{full:true})+
+ field('url','Lien événement Shotgun',e.url||'',{full:true,type:'url'})+
+ field('notes','Notes personnelles',e.notes||'',{full:true,type:'textarea'})+
  '</div><p class="muted small" style="margin-top:12px">Une affiche NØCTARIA sera créée automatiquement si tu ne mets pas de photo.</p>'+
  submitButtons(existing?'Enregistrer':'Créer la soirée');
  if(existing)html+='<div style="margin-top:13px">'+actionBtn('Supprimer cette soirée','delete-event','data-id="'+aesc(e.id)+'"','danger block')+'</div>';
@@ -347,31 +370,19 @@ function openEventForm(existing){
 function openEntryForm(existing){
  const e=existing||{},event=eventById(state.eventId);
  if(!event)return;
- const opts=TYPES.map(t=>[t[1],t[0]+' '+t[1]]);
- if(e.name&&!opts.some(x=>x[0]===e.name))opts.unshift([e.name,e.name]);
- let html='<div class="fields">'+
- field('name','Produit / boisson',e.name||'Bière',{type:'select',options:opts,full:true})+
- field('quantity','Quantité',e.quantity||1,{type:'number',required:true})+
- field('unit','Unité',e.unit||'verre',{type:'select',options:[['verre','verre'],['prise','prise'],['quart','quart'],['demi','demi'],['entier','entier'],['mg','mg'],['g','g'],['mL','mL'],['unité','unité']]})+
- field('date','Date de la prise',e.date||event.date||day(),{type:'date'})+
- field('time','Heure (si connue)',e.time||'',{type:'time'})+
- field('notes','Notes personnelles',e.notes||'',{type:'textarea',full:true})+
- '</div><p class="muted small" style="margin-top:13px">Une quantité ou une fraction ne permet pas d’estimer la teneur réelle en substance active. Les alertes ne constituent pas un diagnostic.</p>'+
- submitButtons(existing?'Enregistrer la prise':'Ajouter la prise');
- if(existing)html+='<div style="margin-top:14px">'+actionBtn('Supprimer la prise','delete-entry','data-id="'+aesc(e.id)+'"','danger block')+'</div>';
- modal(existing?'Modifier la prise':'Nouvelle prise',html,async data=>{
-  const next={...e,id:e.id||id(),eventId:event.id};
-  for(const [key,value] of data.entries())next[key]=String(value).trim();
-  next.quantity=Math.max(0,Number(next.quantity)||0);
-  // Old native portion details no longer apply when the simplified iOS
-  // quantity is edited. Never show an obsolete fraction after editing.
-  if(e.parts||e.portions){delete next.parts;delete next.portions;}
-  if(!next.name||!next.date)throw new Error('Produit et date requis.');
-  next.category=typeOf(next)[2];
-  const at=state.entries.findIndex(x=>byId(x.id)===byId(next.id));
-  if(at===-1)state.entries.push(next);else state.entries[at]=next;
-  await persist();closeModal();await render();notify('Prise enregistrée');
+ const parity=window.NoctariaParity;
+ if(!parity){notify('Éditeur indisponible. Actualise la page.');return;}
+ modal(existing?'Modifier une consommation':'Ajouter une consommation',
+   parity.entryHtml(existing,event),async data=>{
+   const form=$('#active-form');
+   const next=parity.extractEntry(form,existing,event.id);
+   next.id=e.id||id();
+   const at=state.entries.findIndex(x=>byId(x.id)===byId(next.id));
+   if(at===-1)state.entries.push(next);else state.entries[at]=next;
+   await persist();closeModal();await render();
+   notify('Prise enregistrée et avertissements actualisés');
  });
+ parity.setupEntry($('#active-form'),existing);
 }
 function openConfirm(title,description,confirmLabel,callback){
  modal(title,'<p class="muted">'+esc(description)+'</p><div class="form-actions"><button type="button" class="btn ghost" data-action="close-modal">Annuler</button><button type="submit" class="btn danger">'+esc(confirmLabel)+'</button></div>',async()=>{await callback();closeModal();await render();});
@@ -581,6 +592,24 @@ async function act(action,button){
    });break;
   }
   case 'share-selected':await shareSelected();break;
+  case 'share-story':
+   await shareSelected();
+   notify('Dans la feuille de partage iOS, choisis Instagram puis Story si proposé. Instagram peut refuser un lot mixte.');
+   break;
+  case 'choose-poster':
+   state.posterUploadEventId=idVal||state.eventId;
+   $('#poster-file').click();
+   break;
+  case 'reset-poster':{
+   const target=eventById(idVal);
+   if(!target)return;
+   const old=target.posterLocal;
+   delete target.posterLocal;
+   await persist();
+   if(old)await deleteMedia(byId(old));
+   await render();notify('Affiche NØCTARIA rétablie');
+   break;
+  }
   case 'share-single':{
    const m=state.media.find(x=>byId(x.id)===byId(idVal));if(!m)return;
    if(navigator.share){try{await navigator.share({files:[new File([m.blob],m.name,{type:m.type})]});}
@@ -646,6 +675,25 @@ $('#import-file').addEventListener('change',async e=>{
  const file=e.target.files[0];
  if(file)try{await importBackup(file);}catch(error){notify(error.message||'Import impossible');}
  e.target.value='';
+});
+$('#poster-file').addEventListener('change',async e=>{
+ const file=e.target.files[0];
+ const event=eventById(state.posterUploadEventId);
+ e.target.value='';
+ if(!file||!event)return;
+ if(!file.type.startsWith('image/')||file.size>14*1024*1024){
+  notify('Choisis une image de moins de 14 Mo.');return;
+ }
+ const old=event.posterLocal;
+ const record={id:id(),eventId:byId(event.id),isPoster:true,
+  name:file.name,type:file.type,blob:file,createdAt:Date.now()};
+ try{
+  await recordMedia(record);
+  event.posterLocal=record.id;
+  await persist();
+  if(old)await deleteMedia(byId(old));
+  await render();notify('Affiche personnelle enregistrée');
+ }catch(error){notify('Impossible d’enregistrer cette affiche.');}
 });
 $('#media-file').addEventListener('change',async e=>{
  if(e.target.files.length)await uploadFiles([...e.target.files]);
