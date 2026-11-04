@@ -48,4 +48,21 @@ const auth=new JSDOM('<input type="password">',{
 });
 assert.equal(JSON.parse(auth.window.eval(js)).action,'login');
 auth.window.close();
+
+const browser=readFileSync(path.join(root,
+ 'app/src/main/java/fr/afterlog/app/ShotgunBrowserActivity.java'),'utf8');
+// The personal Shotgun login only shows the official Shotgun page and a status.
+// Manual import controls are still available in the separate manual-import flow.
+assert.match(browser,/autoSyncMode=getIntent\(\).getBooleanExtra\("afterlog_auto_sync",false\)/);
+for(const buttonSection of ['nav','actions','footer']){
+ assert.match(browser,new RegExp('if\\(!autoSyncMode\\)\\s*\\{\\s*LinearLayout '+buttonSection+'\\s*='),
+  buttonSection+' must only be constructed outside automatic login');
+}
+assert.match(browser,/if\(autoSyncMode\)\{finish\(\);return;\}/,
+ 'Android system back exits the login window, never navigates Shotgun');
+assert.match(browser,/else if\(autoSyncMode\)\s*\{[\s\S]*?beginDiscovery\(\);/,
+ 'automatic ticket discovery starts with personal login');
+assert.match(browser,/ShotgunSyncService\.importSelected\(this\)/,
+ 'all found tickets sync automatically without a manual selection button');
+
 console.log('Shotgun Android extractor OK: 3 categories, events, no nav links/QR data, login detection');
