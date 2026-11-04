@@ -9,8 +9,8 @@ android {
         applicationId = "fr.afterlog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "0.18.4"
+        versionCode = 25
+        versionName = "0.18.5"
     }
     signingConfigs {
         if (!persistentKeystore.isNullOrBlank()) {
