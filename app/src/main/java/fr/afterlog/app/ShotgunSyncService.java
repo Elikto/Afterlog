@@ -413,7 +413,8 @@ public final class ShotgunSyncService extends Service {
             return;
         }
         if(queue.isEmpty()){
-            finish(SyncState.DONE,"Aucun événement accessible dans les billets Shotgun.");
+            finish(SyncState.BLOCKED,
+                "Aucun événement accessible dans les billets Shotgun : liste vide ou chargement incomplet.");
             return;
         }
         JSONArray discovered=new JSONArray();
@@ -561,7 +562,8 @@ public final class ShotgunSyncService extends Service {
                     }
                 }
             }catch(Exception ignored){
-                // Keep event and Shotgun photos even if Spotify is unavailable.
+                // A lookup/merge failure cannot count as a complete artist page.
+                missingLink++;
             }
             final int verified=linked,unlinked=missingLink,unpictured=missingPhoto;
             handler.post(()->{
@@ -606,7 +608,7 @@ public final class ShotgunSyncService extends Service {
         synchronized(ShotgunSyncService.class){
         JSONObject existing=findExisting(incoming);
         if(existing==null){store.saveEvent(incoming);return;}
-        for(String key:new String[]{"poster","description","date","start","end","endDate",
+        for(String key:new String[]{"poster","description","shotgunAbout","date","start","end","endDate",
             "venue","city","address","artists","organizer","genres","url","ticketUrl"}) {
             String newValue=incoming.optString(key).trim();
             if(!newValue.isEmpty()&&existing.optString(key).trim().isEmpty())
