@@ -37,8 +37,10 @@ jobs:
           test -s web/icons/apple-touch-icon.png
           test -s web/icons/icon-192.png
           test -s web/icons/icon-512.png
-      - name: Set up GitHub Pages
+      - name: Set up and enable GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Package site
         uses: actions/upload-pages-artifact@v3
         with:
