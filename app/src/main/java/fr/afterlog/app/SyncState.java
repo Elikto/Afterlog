@@ -7,7 +7,7 @@ import org.json.JSONObject;
 /** État local de la synchronisation, jamais envoyé sur GitHub. */
 final class SyncState {
     static final String PREFS="afterlog_sync";
-    static final String IDLE="idle", RUNNING="running", DONE="done", SELECTION="selection", BLOCKED="blocked", ERROR="error", CANCELED="canceled";
+    static final String IDLE="idle", RUNNING="running", DONE="done", SELECTION="selection", PARTIAL="partial", BLOCKED="blocked", ERROR="error", CANCELED="canceled";
     static void save(Context ctx,String state,String phase,int done,int total,long eta,String detail) {
         SharedPreferences p=ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         p.edit().putString("state",state).putString("phase",phase)
