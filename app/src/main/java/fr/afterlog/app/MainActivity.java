@@ -272,7 +272,7 @@ public final class MainActivity extends Activity {
             check.setTextSize(14);
             check.setButtonTintList(ColorStateList.valueOf(ACCENT));
             check.setText(item.optString("title","Soirée")+
-                (item.optString("date").isEmpty()?"":"\n"+item.optString("date")));
+                (item.optString("date").isEmpty()?"":"\n"+frenchDate(item.optString("date"))));
             check.setChecked(item.optBoolean("selected",true));
             check.setTag(i);
             check.setPadding(dp(3),dp(5),dp(3),dp(5));
@@ -365,10 +365,9 @@ public final class MainActivity extends Activity {
             return;
         }
         syncPanel.setVisibility(View.VISIBLE);
+        // ETA belongs to the WHOLE sync, including final music profiles.
+        // Never count down to a misleading zero while remote lookups remain.
         long displayEta=state.optLong("eta",-1);
-        if(displayEta>=0&&SyncState.RUNNING.equals(mode))
-            displayEta=Math.max(0,displayEta-
-                (System.currentTimeMillis()-state.optLong("updatedAt",0))/1000);
         String signature=mode+"|"+state.optString("phase")+"|"+state.optInt("done")+
             "|"+state.optInt("total")+"|"+state.optString("detail")+
             "|"+displayEta;
@@ -427,15 +426,18 @@ public final class MainActivity extends Activity {
         add(panel,bar,7);
         add(panel,text(percent+" %",18,ACCENT,true),4);
         String amount=total>0?done+" / "+total+
-            " étapes validées (soirées + profils d'artistes)":
+            " étapes (soirées + 1 étape artistes Spotify/SoundCloud)":
             "Recherche de tes billets Shotgun…";
         add(panel,text(amount,13,ACCENT,true),5);
         long remaining=displayEta;
-        if(remaining>=0&&SyncState.RUNNING.equals(mode)&&total>0) {
-            long min=remaining/60,sec=remaining%60;
-            add(panel,text("Temps restant estimé : "+min+" min "+sec+" s",12,SOFT,false),7);
-        } else if(SyncState.RUNNING.equals(mode)) {
-            add(panel,text("Estimation disponible après les premières fiches.",12,SOFT,false),7);
+        if(remaining>=0&&SyncState.RUNNING.equals(mode)&&total>0){
+            long lower=Math.max(1,(long)Math.ceil(remaining/60.0*.65));
+            long upper=Math.max(lower+1,(long)Math.ceil(remaining/60.0*1.3));
+            add(panel,text("Temps total restant estimé : environ "+lower+
+                " à "+upper+" min (soirées + artistes)",12,SOFT,false),7);
+        }else if(SyncState.RUNNING.equals(mode)){
+            add(panel,text("Estimation globale après la découverte des billets "+
+                "(soirées + artistes).",12,SOFT,false),7);
         }
         if(!state.optString("detail").isEmpty())
             add(panel,text(state.optString("detail"),13,SOFT,false),12);
@@ -528,7 +530,8 @@ public final class MainActivity extends Activity {
             row.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             TextView title=text(e.optString("title","Événement"),17,Color.WHITE,true);
             title.setMaxLines(2);add(details,title,7);
-            add(details,text(e.optString("date")+"  "+e.optString("start"),13,ACCENT,false),5);
+            add(details,text(frenchDate(e.optString("date"))+
+                (e.optString("start").isEmpty()?"":" · "+e.optString("start")),13,ACCENT,false),5);
             String venue=e.optString("venue");
             if(venue.isEmpty())venue=e.optString("city");
             if(!venue.isEmpty())add(details,text(venue,13,SOFT,false),5);
@@ -1162,7 +1165,7 @@ public final class MainActivity extends Activity {
             LinearLayout c=card();
             add(c,text(item.optString("title","Événement"),16,Color.WHITE,true),6);
             if(!item.optString("date").isEmpty())
-                add(c,text(item.optString("date"),13,SOFT,false),5);
+                add(c,text(frenchDate(item.optString("date")),13,SOFT,false),5);
             add(c,text("Échec : "+item.optString("reason","Informations indisponibles"),13,SOFT,false),9);
             String url=item.optString("url");
             add(c,button("Réessayer cette soirée",false,()->{
@@ -1462,6 +1465,15 @@ public final class MainActivity extends Activity {
         EventGalleryActivity.shareMediaFiles(this,files,kinds,instagram);
     }
 
+    private String frenchDate(String date){
+        if(date==null||date.trim().isEmpty())return "";
+        try{
+            String iso=date.trim();
+            if(iso.length()>=10)iso=iso.substring(0,10);
+            return LocalDate.parse(iso).format(
+                DateTimeFormatter.ofPattern("d MMMM yyyy",Locale.FRANCE));
+        }catch(Exception ex){return date;}
+    }
     private String prettyDate(String date) {
         try {
             return java.time.LocalDate.parse(date)
