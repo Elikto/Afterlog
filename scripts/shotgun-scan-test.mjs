@@ -62,12 +62,12 @@ assert.match(browser,/if\(autoSyncMode\)\{finish\(\);return;\}/,
  'Android system back exits the login window, never navigates Shotgun');
 assert.match(browser,/else if\(autoSyncMode\)\s*\{[\s\S]*?beginDiscovery\(\);/,
  'automatic ticket discovery starts with personal login');
-assert.doesNotMatch(browser,/SyncState\\.SELECTION/, 
+assert.doesNotMatch(browser,/SyncState\.SELECTION/, 
  'connected personal Shotgun flow must never request ticket selection');
 const main=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/MainActivity.java'),'utf8');
-assert.doesNotMatch(main,/renderTicketSelection\\(/,
+assert.doesNotMatch(main,/renderTicketSelection\(/,
  'manual ticket selection UI was removed from the Android home screen');
-assert.match(main,/if\\(SyncState\\.SELECTION\\.equals\\(mode\\)\\)[\\s\\S]*?ShotgunSyncService\\.importSelected\\(this\\)/,
+assert.match(main,/if\(SyncState\.SELECTION\.equals\(mode\)\)[\s\S]*?ShotgunSyncService\.importSelected\(this\)/,
  'older pending ticket lists are migrated to automatic import');
 assert.match(browser,/ShotgunSyncService\.importSelected\(this\)/,
  'all found tickets sync automatically without a manual selection button');
