@@ -104,6 +104,10 @@ async function persist(){
  await tx('journal','readwrite',obj=>obj.put({
   key:'root',events:state.events,entries:state.entries,format:'afterlog-v1'
  }));
+ // Recheck every line-up after new or imported events. Fingerprints avoid
+ // redundant Spotify requests when the journal has not changed.
+ if(window.NoctariaSpotify && navigator.onLine)
+  window.NoctariaSpotify.scan(false).catch(()=>{});
 }
 async function eventMedia(eventId){
  return (await tx('media','readonly',obj=>obj.index('eventId').getAll(byId(eventId))))||[];
@@ -379,7 +383,13 @@ function renderSettings(){
  '<div class="button-row">'+actionBtn('Importer JSON ou archive complète','import','','primary')+actionBtn('Sauvegarder avec photos et vidéos','export-full')+actionBtn('Exporter JSON compatible Android','export')+'</div>'+
  '<p class="muted small" style="margin-top:14px">Les données restent sur cet appareil, sans synchronisation entre téléphones. Sauvegarde ton archive .noctaria sur Fichiers ou iCloud Drive. Effacer les données Safari peut supprimer ton journal local.</p></div>'+
  '<div class="card"><h2>Artistes Spotify</h2><p class="muted small" style="margin:8px 0">Les noms publics des artistes peuvent être recherchés sur Wikidata et Spotify. Aucune consommation n’est envoyée. Sur iOS, l’accès aux portraits officiels dépend de la politique CORS de Spotify.</p>'+
- '<p class="muted small" style="margin:10px 0">'+esc(window.NoctariaSpotify?.status().state||'Jamais analysé')+'</p>'+
+ '<p class="muted small" style="margin:10px 0">'+(()=>{
+  const st=window.NoctariaSpotify?.status()||{};
+  return esc(st.total==null?'Aucune recherche effectuée':
+   st.total+' artistes distincts · '+(st.linked||0)+' comptes Spotify · '+
+   (st.photos||0)+' portraits · '+(st.state==='partial'?'Vérification à poursuivre':
+    st.state==='running'?'En cours':'Dernier balayage terminé'));
+ })()+'</p>'+
  actionBtn('↻ Rechercher tous les artistes','spotify-refresh','','block')+'</div>'+
  '<div class="card"><h2>Confidentialité</h2><p class="muted small" style="margin:12px 0">Aucun compte ni serveur NØCTARIA. Les prises, notes et fichiers sont enregistrés dans la base locale du navigateur (IndexedDB). Les liens Spotify/Shotgun s’ouvrent sur leurs propres sites, qui ont leurs politiques de confidentialité.</p></div>'+
  '<div class="card"><h2>Shotgun et Instagram</h2><p class="muted small" style="margin:8px 0 12px">La connexion Shotgun automatique d’Android n’est pas encore disponible sur iOS. Tu peux créer tes soirées manuellement et importer leurs données par JSON. Le partage multiple utilise la feuille de partage iOS : Instagram décide ensuite des options de story disponibles.</p>'+
@@ -709,6 +719,7 @@ $('#import-file').addEventListener('change',async e=>{
      state.media=[];state.events=[];state.entries=[];
      state.selected.clear();state.selectionMode=false;
      await load();navigate('home');
+     window.NoctariaSpotify?.scan(false).catch(()=>{});
      notify('Archive restaurée : '+result.events+' soirées et '+result.media+' médias.');
     });
   }else await importBackup(file);
