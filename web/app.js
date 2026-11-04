@@ -246,7 +246,7 @@ function entryLabel(e){
 }
 function risksHtml(entries){
  const warnings=window.NoctariaParity?
-   window.NoctariaParity.warnings(entries,state.entries):flags(entries);
+   window.NoctariaParity.warnings(entries,state.entries):[];
  if(!warnings.length)return '';
  const content=window.NoctariaParity?
    window.NoctariaParity.warningMarkup(warnings):
@@ -296,13 +296,18 @@ function renderEvent(event){
  '<p class="muted small">Appuie sur un média pour l’ouvrir ou active « Sélectionner » pour un partage multiple.</p></section>'+
  (event.description?'<section class="section"><h2>À propos</h2><p class="detail-description">'+esc(event.description)+'</p></section>':'')+
  lineUp+
+ (event.genres?'<section class="section"><h2>Vibe · Styles musicaux</h2><div class="button-row" style="margin-top:12px">'+
+ String(event.genres).split(/[,;]+/).filter(Boolean).map(g=>'<span class="pill">♫ '+esc(g.trim())+'</span>').join('')+'</div></section>':'')+
+ (event.address||event.venue||event.city?'<section class="section"><h2>Localisation</h2><div class="card"><p class="muted">'+esc([event.venue,event.address,event.city].filter(Boolean).join(' · '))+
+ '</p><a class="btn block" style="margin-top:12px" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([event.address,event.venue,event.city].filter(Boolean).join(' '))+'">📍 Ouvrir sur la carte</a></div></section>':'')+
+ (event.notes?'<section class="section"><h2>Mes notes</h2><div class="card"><p class="detail-description">'+esc(event.notes)+'</p></div></section>':'')+
  '<section class="section"><div class="heading-row"><h2>Informations</h2></div><div class="card">'+
  '<p class="muted">Date : '+esc(formatDate(event.date))+'</p>'+
  (event.start?'<p class="muted">Horaires : '+esc(event.start)+(event.end?' → '+esc(event.end):'')+'</p>':'')+
  (event.address?'<p class="muted">Adresse : '+esc(event.address)+'</p>':'')+
  (event.genres?'<p class="muted">Styles : '+esc(event.genres)+'</p>':'')+
  (event.url&&safeImage(event.url)?'<p><a target="_blank" rel="noopener noreferrer" href="'+aesc(event.url)+'">Voir l’événement Shotgun ↗</a></p>':'')+
- '</div></section>';
+ '</div><div style="margin-top:15px">'+actionBtn('Supprimer cette soirée','delete-event','data-id="'+aesc(event.id)+'"','danger block')+'</div></section>';
 }
 function openEventForm(existing){
  const e=existing||{};
