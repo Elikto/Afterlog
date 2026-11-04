@@ -14,5 +14,7 @@ window.NoctariaTrustedSpotify=Object.freeze({
   "zapravka": "https://open.spotify.com/artist/4oCaLmRVMM4Ck4VGrmh4VC",
   "amygdala": "https://open.spotify.com/artist/7BGTl5Swxc7pcXnSgqzSSM",
   "a5km": "https://open.spotify.com/artist/3SIWzGY4GAe5R18PTHOK1v",
-  "hortense de beauharnais": "https://open.spotify.com/artist/6dwoHBXfXApma5YaoM2vE3"
+  "hortense de beauharnais": "https://open.spotify.com/artist/6dwoHBXfXApma5YaoM2vE3",
+  "maissouille": "https://open.spotify.com/artist/1aQbGaag8KEI8kKtY37UQU",
+  "unicorn on k": "https://open.spotify.com/artist/4Y1vfB7DE2qneIPdgylsL8"
 });
