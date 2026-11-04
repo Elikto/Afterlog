@@ -309,6 +309,14 @@ function renderEvent(event){
  (event.url&&safeImage(event.url)?'<p><a target="_blank" rel="noopener noreferrer" href="'+aesc(event.url)+'">Voir l’événement Shotgun ↗</a></p>':'')+
  '</div><div style="margin-top:15px">'+actionBtn('Supprimer cette soirée','delete-event','data-id="'+aesc(event.id)+'"','danger block')+'</div></section>';
 }
+function openShotgun(){
+ modal('Shotgun · Mes billets',
+ '<p class="muted">Tu peux ouvrir Shotgun et consulter tes billets depuis Safari, puis créer ou importer une fiche NØCTARIA.</p>'+
+ '<div class="notice"><strong>Synchronisation Shotgun sur iOS</strong><p>La session privée de Shotgun n’est pas accessible depuis un autre site dans Safari. L’import automatique des billets nécessite une intégration serveur autorisée, pas une simple WebView.</p></div>'+
+ '<div class="button-row" style="margin:13px 0"><a class="btn primary" href="https://shotgun.live/fr" rel="noopener noreferrer" target="_blank">Ouvrir Shotgun ↗</a>'+
+ '<button class="btn" type="button" data-action="shotgun-manual">＋ Fiche de soirée</button></div>'+
+ '<p class="muted small">Les événements déjà importés sur Android peuvent être transférés en sauvegardant ton journal JSON puis en l’important ici.</p>');
+}
 function openEventForm(existing){
  const e=existing||{};
  let html='<div class="fields">'+
@@ -554,6 +562,8 @@ async function act(action,button){
   case 'rdr':navigate('rdr');break;
   case 'settings':navigate('settings');break;
   case 'new-event':openEventForm(null);break;
+  case 'shotgun':openShotgun();break;
+  case 'shotgun-manual':closeModal();openEventForm(null);break;
   case 'open-event':state.selectionMode=false;state.selected.clear();navigate('event/'+encodeURIComponent(idVal));break;
   case 'edit-event':openEventForm(eventById(idVal));break;
   case 'delete-event':{
