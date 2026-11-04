@@ -431,40 +431,72 @@ public final class ShotgunBrowserActivity extends Activity {
               txt('[class*="EventDescription"]',7000) ||
               txt('[id*="description"]',7000);
           }
-          // "À propos" is the event's ORIGINAL description, not a teaser
-          // from og:description. Keep paragraph line breaks when available,
-          // and handle React layouts where heading and content are siblings.
-          const canonical=v=>(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
-            .replace(/\\s+/g,' ').trim().toLowerCase().replace(/\\s*[:：]$/,'');
-          const aboutHeadings=[...document.querySelectorAll(
-            'main h2,main h3,main h4,article h2,article h3,article h4,'+
-            'main [role="heading"],article [role="heading"]')];
-          const about=aboutHeadings.find(h=>
-            /^(a propos|about|description|infos pratiques|event details)$/
-              .test(canonical(h.textContent||'')));
-          if(about){
-            const containers=[
-              about.nextElementSibling,
-              about.parentElement?.nextElementSibling,
-              about.parentElement?.querySelector(
-                '[data-testid*="description"],[class*="description"],[class*="Description"]'),
-              about.parentElement?.parentElement?.querySelector(
-                '[data-testid*="about"],[class*="aboutText"],[class*="AboutText"]')
-            ];
-            for(const content of containers){
-              if(!content||content===about||content.contains(about))continue;
-              const raw=(content.innerText||content.textContent||'')
-                .replace(/\\r/g,'').replace(/\\n[ \\t]*\\n[ \\t]*\\n+/g,'\\n\\n').trim();
-              if(raw.length>=20&&raw.length<=12000&&
-                 raw.length>=(result.description||'').length*0.45){
-                result.description=raw.slice(0,12000);
-                result.shotgunAbout=result.description; // Preserve user-edited notes.
+          // The source of the NØCTARIA "À propos" is ONLY the public
+          // event's own "À propos" section. og:description is a social
+          // teaser, NOT proof that this section has been retrieved.
+          const aboutLabel=v=>(v||'').normalize('NFD')
+            .replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ')
+            .trim().toLowerCase().replace(/\\s*[:：]$/,'');
+          const aboutName=v=>/^(a propos|about|description)$/.test(aboutLabel(v));
+          const sectionName=v=>/^(line[ -]?up|programmation|artistes|artists|vibe|styles musicaux|localisation|location|organise par|organise par|billets|tickets|infos pratiques)$/.test(aboutLabel(v));
+          const main=document.querySelector('main')||document.querySelector('article');
+          const sectionText=element=>{
+            if(!element||element.matches?.('footer,nav,header,script,style'))return '';
+            const clone=element.cloneNode(true);
+            for(const hidden of clone.querySelectorAll(
+              'script,style,noscript,button,[role="button"],[aria-hidden="true"]'))
+              hidden.remove();
+            for(const br of clone.querySelectorAll('br'))
+              br.replaceWith(document.createTextNode('\\n'));
+            for(const block of clone.querySelectorAll('p,li,blockquote,div,section,h4,h5'))
+              block.appendChild(document.createTextNode('\\n'));
+            return (clone.textContent||'').replace(/\\u00a0/g,' ')
+              .replace(/\\r/g,'').replace(/[ \\t]+\\n/g,'\\n')
+              .replace(/\\n[ \\t]+/g,'\\n')
+              .replace(/\\n{3,}/g,'\\n\\n').trim();
+          };
+          if(main){
+            const candidates=[...main.querySelectorAll(
+              'h2,h3,h4,h5,[role="heading"],[role="tab"],button,strong,span,p,div')];
+            for(const heading of candidates){
+              if(!aboutName(heading.textContent)||heading.closest(
+                'footer,nav,header,a[href],[aria-hidden="true"]'))continue;
+              if(heading.children.length>2)continue;
+              const containers=[];
+              const tab=heading.getAttribute('aria-controls');
+              if(tab)containers.push(document.getElementById(tab));
+              containers.push(heading.nextElementSibling);
+              if(heading.parentElement){
+                containers.push(heading.parentElement.nextElementSibling);
+                const section=heading.closest('section,[data-testid*="about"],[class*="about"],[class*="About"]');
+                if(section&&section!==main){
+                  const copy=section.cloneNode(true);
+                  const head=copy.querySelector('h2,h3,h4,[role="heading"]');
+                  if(head&&aboutName(head.textContent))head.remove();
+                  containers.push(copy);
+                }
+                if(heading.parentElement.children.length<=5)
+                  containers.push(...[...heading.parentElement.children].filter(
+                    child=>child!==heading&&!child.contains(heading)));
+              }
+              for(const container of containers){
+                if(!container||container.contains?.(heading)||
+                   container===main||container.matches?.('nav,footer,header'))continue;
+                if([...container.querySelectorAll?.('h2,h3,[role="heading"]')||[]]
+                    .some(h=>sectionName(h.textContent)))continue;
+                const raw=sectionText(container);
+                if(!raw||raw.length>16000||aboutName(raw)||sectionName(raw))continue;
+                // Reject a whole page accidentally selected as the description.
+                if(/(?:^|\\n)(?:line[ -]?up|organis[ée] par|localisation)\\s*\\n/i.test(raw))
+                  continue;
+                result.shotgunAbout=raw.slice(0,16000);
                 break;
               }
+              if(result.shotgunAbout)break;
             }
           }
           if(typeof result.description==='string')
-            result.description=result.description.trim().slice(0,12000);
+            result.description=result.description.trim().slice(0,16000);
           if(!result.address)result.address=txt('main address',250);
           const linked=(pattern,max)=>{
             const anchors=[...document.querySelectorAll('main a[href]')];
