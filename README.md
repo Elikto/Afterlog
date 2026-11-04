@@ -1,3 +1,14 @@
+# NØCTARIA 0.18.9 — Synchronisation des soirées et artistes
+
+- Connexion Shotgun Android : après authentification, le navigateur disparaît. Un traitement discret identifie les événements des trois catégories de billets, puis une liste avec miniature d'affiche et case cochée par défaut permet de retenir les soirées souhaitées.
+- Après validation, l'accueil présente la barre de progression et le délai restant estimé. Chaque événement et ses fiches artistes sont suivis ensemble. 100 % n'apparaît que pour un import complet : les pages Spotify ou portraits manquants sont signalés comme incomplets.
+- Nouvelle page « Tous les artistes » dans Android et iPhone PWA : artistes regroupés de toutes les soirées, avec portraits et liens Spotify disponibles.
+- La rubrique « À propos » des événements Shotgun est importée lorsqu'elle est disponible, sans écraser les souvenirs personnels.
+- Un lien vers le lecteur musical officiel d'un artiste n'apparaît que si une URL de morceau ou de musique publique est présente. Aucune piste audio n'est copiée.
+- La PWA iPhone conserve sa limitation d'accès direct aux billets personnels Shotgun.
+
+---
+
 # NØCTARIA 0.18.8 — Shotgun invisible, artistes intégrés et villes proposées (Android + iPhone)
 
 - **Android :** après connexion sur le site officiel Shotgun dans NØCTARIA, trois choix : **Tout synchroniser**, **Choisir des soirées** ou **Plus tard**.
