@@ -33,18 +33,38 @@ const html=[
  '</script>'
 ].join('\n');
 const result=inspect(html);
-assert.ok(result.description.includes('Le festival rassemble plusieurs scènes'),
- 'event À propos replaces short social metadata');
-assert.ok(result.description.includes('Ouverture des portes'),
- 'full About includes the practical second paragraph');
-assert.equal(result.shotgunAbout,result.description,
- 'Shotgun About is preserved without erasing user-edited notes on older events');
+assert.ok(result.shotgunAbout.includes('Le festival rassemble plusieurs scènes'),
+ 'event À propos must come from the actual Shotgun section');
+assert.ok(result.shotgunAbout.includes('Ouverture des portes'),
+ 'all paragraphs from the source À propos must be retained');
+assert.equal(result.description,'Un court résumé marketing.',
+ 'social meta is not the source of the displayed À propos section');
 assert.equal(result.artistProfiles?.[0]?.name,'Perceval');
 assert.equal(result.artistProfiles?.[0]?.previewUrl,music,
  'only an explicit real official track is retained');
 const none=inspect(html.replaceAll(music,'https://example.com/not-music'));
 assert.ok(!none.artistProfiles?.[0]?.previewUrl,
  'no invented previews are created without official playable link');
+const inline=inspect('<!doctype html><meta property="og:description" content="Meta pas fiable">'+
+ '<main><h1>Soirée</h1><section><div><span>À propos</span>'+
+ '<div data-testid="event-description"><p>Vraie description complète provenant de Shotgun.</p>'+
+ '<p>Deuxième paragraphe conservé.</p></div></div></section>'+
+ '<h2>Line up</h2><div>DJ Test</div></main>');
+assert.ok(inline.shotgunAbout.includes('Vraie description complète'),
+ 'find À propos even when React renders a span instead of a heading');
+assert.ok(inline.shotgunAbout.includes('Deuxième paragraphe'),
+ 'retain multiple paragraphs of a React description');
+assert.ok(!inline.shotgunAbout.includes('Line up'),
+ 'never copy unrelated sections into the event À propos');
+const missing=inspect('<!doctype html><meta property="og:description" content="SEO sans À propos">'+
+ '<main><h1>Ma soirée</h1><h2>Infos pratiques</h2><p>Adresse</p></main>'+
+ '<footer><h2>À propos</h2><p>À propos du site</p></footer>');
+assert.equal(missing.shotgunAbout,undefined,
+ 'never replace event À propos with SEO, practical info or site footer');
+const short=inspect('<!doctype html><main><h1>Soirée</h1>'+
+ '<h2>À propos</h2><p>Entrée gratuite.</p><h2>Line up</h2></main>');
+assert.equal(short.shotgunAbout,'Entrée gratuite.',
+ 'short genuine Shotgun À propos is valid even under 20 characters');
 const main=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/MainActivity.java'),'utf8');
 assert.ok(main.includes('isOfficialArtistPreview(preview)'),'only safe music pages shown');
 assert.ok(main.includes('private void showAllArtists()'),'all artist directory exists');
