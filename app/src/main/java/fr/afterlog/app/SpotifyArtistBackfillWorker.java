@@ -92,6 +92,8 @@ public final class SpotifyArtistBackfillWorker extends Worker {
         String state=prefs.getString("state","");
         if("".equals(state))return "Recherche Spotify prévue pour toutes tes soirées.";
         int total=prefs.getInt("total",0);
+        int events=prefs.getInt("events",0);
+        int withoutLineup=prefs.getInt("withoutLineup",0);
         int linked=prefs.getInt("linked",0);
         int photos=prefs.getInt("photos",0);
         int pending=Math.max(0,total-linked);
@@ -99,7 +101,8 @@ public final class SpotifyArtistBackfillWorker extends Worker {
         String suffix="running".equals(state)?" · Recherche en cours":
             "partial".equals(state)?" · Autres artistes en attente de vérification":
             " · Vérification terminée pour ce passage";
-        return total+" artistes distincts · "+linked+" profils Spotify · "+
+        return events+" soirées analysées · "+withoutLineup+" sans artistes renseignés · "+
+            total+" artistes distincts · "+linked+" profils Spotify · "+
             photos+" portraits Spotify · "+missingPortraits+
             " portraits à récupérer · "+pending+" comptes sans correspondance"+suffix;
     }
