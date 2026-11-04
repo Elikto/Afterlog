@@ -1,3 +1,13 @@
+# NØCTARIA 0.19.1 — « À propos » identique à la fiche Shotgun
+
+- La rubrique **« À propos »** des soirées Shotgun est maintenant récupérée exclusivement dans la section **« À propos » de la page événement** (et non depuis le résumé `og:description` utilisé pour les réseaux sociaux). L'extraction gère les titres HTML et les libellés affichés par les interfaces React, ainsi que les paragraphes courts ou longs.
+- La provenance `shotgunAboutSource=event_section` accompagne toute description confirmée. Si la section n'est pas accessible, NØCTARIA indique qu'elle n'a pas été récupérée, plutôt que d'afficher un texte sans rapport avec la soirée. Les notes personnelles ne sont jamais remplacées.
+- Les soirées Shotgun déjà enregistrées sont automatiquement réexaminées à partir de leur **page publique** au prochain démarrage Android, sans ouvrir tes billets personnels ni redemander tes identifiants. Une réactualisation Shotgun ultérieure remplace aussi l'ancien « À propos » par la version publiée.
+- Le compte Spotify de **Sköne** (Montpellier, outre-acid) a été ajouté aux correspondances vérifiées sur Android et iPhone. Son SoundCloud public et une piste musicale de son propre compte sont reconnus ; les anciens événements Android sont enrichis sans nouvelle synchronisation des billets.
+- La synchronisation automatique des billets personnels reste spécifique à Android ; une PWA iPhone ne peut pas lire les pages privées Shotgun directement.
+
+---
+
 # NØCTARIA 0.19.0 — Synchronisation, Spotify et SoundCloud
 
 - Après la connexion Shotgun sur Android, l'utilisateur choisit les événements dans une liste précochée avec mini-affiches. L'import des soirées se déroule en arrière-plan, puis **une unique étape finale** recherche les artistes, leurs photos, pages Spotify ou SoundCloud et liens de musique publics. Pour **9 soirées, 10 étapes** sont affichées.
