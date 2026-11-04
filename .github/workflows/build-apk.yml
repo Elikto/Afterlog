@@ -2,8 +2,15 @@ name: Compiler NØCTARIA APK
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - README.md
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 concurrency:
   group: noctaria-android-release
