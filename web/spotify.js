@@ -8,10 +8,20 @@ const NS='noctaria-spotify-v2';
 const TRUSTED=window.NoctariaTrustedSpotify||{};
 const MAX_NETWORK_LOOKUPS=12;
 const RETRY_MS=6*3600*1000;
+const KNOWN_SOUNDCLOUD=Object.freeze({maissouille:'https://soundcloud.com/maissouille'});
 let running=false,queuedRescan=false;
 const norm=s=>String(s||'').toLowerCase().replace(/ø/g,'o').normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const isSpotify=s=>/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?artist\/[a-zA-Z0-9]{22}(?:[/?#].*)?$/.test(s||'');
+const isSoundCloud=s=>/^https:\/\/soundcloud\.com\/(?!search|discover|sets|pages|tags|charts|stream|upload)[a-zA-Z0-9_-]{2,100}\/?$/.test(s||'');
+const variants=s=>{
+ const full=String(s||'').trim();
+ const plain=full.replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF\uFE0E\uFE0F]/gu,' ')
+  .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,'').replace(/\s+/g,' ').trim();
+ const withoutDJ=plain.replace(/^dj[\s._:-]+/i,'').trim();
+ return [...new Set([full,plain,withoutDJ].filter(x=>x.length>=2))];
+};
+const sameArtist=(a,b)=>variants(a).some(x=>variants(b).some(y=>norm(x)===norm(y)));
 const idOf=s=>String(s).match(/\/artist\/([a-zA-Z0-9]{22})/);
 const status=()=>{try{return JSON.parse(localStorage.getItem(NS)||'{}');}catch{return {};}};
 const update=data=>{try{localStorage.setItem(NS,JSON.stringify({...status(),...data}));}catch{}};
@@ -39,17 +49,19 @@ function distinctArtistNames(events){
    if(!artist.name)continue;
    const key=norm(artist.name);if(!key)continue;
    const existing=map.get(key);
-   if(!existing)map.set(key,{name:artist.name,link:artist.spotify||'',photo:artist.spotifyPhoto||'',ambiguous:false});
+   if(!existing)map.set(key,{name:artist.name,link:artist.spotify||'',
+    soundcloud:artist.soundcloud||'',photo:artist.spotifyPhoto||'',ambiguous:false});
    else {
     if(artist.spotify&&existing.link&&existing.link!==artist.spotify)existing.ambiguous=true;
     if(!existing.link&&artist.spotify)existing.link=artist.spotify;
     if(!existing.photo&&artist.spotifyPhoto)existing.photo=artist.spotifyPhoto;
+    if(!existing.soundcloud&&artist.soundcloud)existing.soundcloud=artist.soundcloud;
    }
   }
  }
  return map;
 }
-async function wiki(name){
+async function wiki(name,property='P1902'){
  const search=await fetchJson('https://www.wikidata.org/w/api.php?'+new URLSearchParams({
   action:'wbsearchentities',format:'json',language:'en',limit:'12',search:name,origin:'*'
  }));
@@ -60,11 +72,15 @@ async function wiki(name){
  }));
  const candidates=new Set();
  for(const id of ids){
-  const claims=data.entities?.[id]?.claims?.P1902||[];
+  const claims=data.entities?.[id]?.claims?.[property]||[];
   for(const claim of claims){
    const spotifyId=claim?.mainsnak?.datavalue?.value;
-   if(typeof spotifyId==='string'&&/^[0-7][A-Za-z0-9]{21}$/.test(spotifyId))
+   if(property==='P1902'&&typeof spotifyId==='string'&&
+      /^[0-7][A-Za-z0-9]{21}$/.test(spotifyId))
     candidates.add('https://open.spotify.com/artist/'+spotifyId);
+   if(property==='P3040'&&typeof spotifyId==='string'&&
+      /^[a-zA-Z0-9_-]{2,100}$/.test(spotifyId))
+    candidates.add('https://soundcloud.com/'+spotifyId);
   }
  }
  // Do not pick a profile when multiple distinct Spotify IDs fit the same name.
@@ -82,7 +98,7 @@ async function spotifyMetadata(link,name){
    .replace(/\s*[|·–-]\s*Spotify\s*$/i,'')
    .replace(/\s*[|·–-]\s*(artist|artiste)\s*$/i,'')
    .replace(/\s*·\s*Top tracks\s*$/i,'');
-  if(data.provider_name!=='Spotify'||norm(title)!==norm(name))return null;
+  if(data.provider_name!=='Spotify'||!sameArtist(title,name))return null;
   const src=data.thumbnail_url||'';
   let photo='';
   if(src){
@@ -93,6 +109,26 @@ async function spotifyMetadata(link,name){
   }
   return {photo};
  }catch{return null;} // Never guess when Spotify cannot be checked.
+}
+async function verifiedSoundCloud(link,name){
+ if(!isSoundCloud(link))return false;
+ try{
+  const data=await fetchJson('https://soundcloud.com/oembed?format=json&url='+
+   encodeURIComponent(link),9500);
+  const title=String(data.title||'').replace(/\s*(?:on|\||·|–)\s*SoundCloud\s*$/i,'')
+   .replace(/\s*\|\s*Listen on SoundCloud\s*$/i,'').trim();
+  return data.provider_name==='SoundCloud'&&sameArtist(title,name);
+ }catch{return false;}
+}
+async function findSoundCloud(name){
+ for(const variant of variants(name)){
+  const known=KNOWN_SOUNDCLOUD[norm(variant)];
+  if(isSoundCloud(known))return known;
+  let candidate='';
+  try{candidate=await wiki(variant,'P3040');}catch{}
+  if(candidate && await verifiedSoundCloud(candidate,name))return candidate;
+ }
+ return '';
 }
 function openDb(){
  return new Promise((resolve,reject)=>{
@@ -109,7 +145,7 @@ function getRoot(db){
   rq.onerror=()=>reject(rq.error);
  });
 }
-async function saveArtist(db,name,link,photo){
+async function saveArtist(db,name,link,photo,soundcloud=''){
  const key=norm(name);
  return new Promise((resolve,reject)=>{
   const tx=db.transaction('journal','readwrite');
@@ -128,6 +164,8 @@ async function saveArtist(db,name,link,photo){
      if(artist.spotify&&artist.spotify!==link)continue;
      if(!artist.spotify&&link){artist.spotify=link;eventChanged=true;}
      if(photo&&!artist.spotifyPhoto){artist.spotifyPhoto=photo;eventChanged=true;}
+     if(!artist.spotify && soundcloud && !artist.soundcloud &&
+        isSoundCloud(soundcloud)){artist.soundcloud=soundcloud;eventChanged=true;}
     }
     if(eventChanged){event.artistProfiles=p;changed=true;}
    }
@@ -164,8 +202,9 @@ async function scan(force=false){
    checked++;
    // The same 15 explicitly confirmed artist profiles as the Android app.
    // Propagate already known URLs to EVERY occurrence across all events.
-   let link=isSpotify(a.link)?a.link:(TRUSTED[key]||'');
-   let photo=a.photo||'';
+   let link=isSpotify(a.link)?a.link:(
+    variants(a.name).map(n=>TRUSTED[norm(n)]).find(isSpotify)||'');
+   let photo=a.photo||'',soundcloud=isSoundCloud(a.soundcloud)?a.soundcloud:'';
    if(isSpotify(link)){
     try{if(await saveArtist(db,a.name,link,photo))changed=true;}catch{}
    }
@@ -175,29 +214,32 @@ async function scan(force=false){
    network++;
    attempts[key]=Date.now();
    if(!link){
-    // Wikidata alone does not prove the identity of an artist.
-    let candidate='';
-    try{candidate=await wiki(a.name);}catch{}
-    if(!candidate)continue;
-    const result=await spotifyMetadata(candidate,a.name);
-    if(!result)continue;
-    link=candidate;photo=result.photo;
+    // Exact name, then safe variants (DJ prefix and decorative emojis).
+    for(const variant of variants(a.name)){
+     let candidate='';
+     try{candidate=await wiki(variant);}catch{}
+     if(!candidate)continue;
+     const result=await spotifyMetadata(candidate,a.name);
+     if(result){link=candidate;photo=result.photo;break;}
+    }
+    // SoundCloud is the fallback when Spotify could not be confirmed.
+    if(!link&&!soundcloud)soundcloud=await findSoundCloud(a.name);
    }else{
-    // Preserve a previously confirmed/manual link when Spotify blocks CORS.
     const result=await spotifyMetadata(link,a.name);
     if(result&&result.photo)photo=result.photo;
    }
-   try{if(await saveArtist(db,a.name,link,photo))changed=true;}catch{}
+   try{if(await saveArtist(db,a.name,link,photo,soundcloud))changed=true;}catch{}
    if(checked%3===0)update({state:'running',total:artists.size,checked,fingerprint});
   }
   const latest=distinctArtistNames((await getRoot(db)).events||[]);
-  let linked=0,photos=0;
+  let linked=0,photos=0,soundcloud=0;
   for(const a of latest.values()){
    if(isSpotify(a.link))linked++;
+   else if(isSoundCloud(a.soundcloud))soundcloud++;
    if(a.photo)photos++;
   }
   const result={state:pending?'partial':'completed',total:artists.size,checked,
-   linked,photos,fingerprint,attempts,lastRun:Date.now(),
+   linked,soundcloud,photos,fingerprint,attempts,lastRun:Date.now(),
    note:pending?'Recherche progressive des profils sur toutes les soirées.':
     'Les homonymes et profils non confirmés restent sans lien.'};
   update(result);
