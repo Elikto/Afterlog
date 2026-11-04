@@ -201,6 +201,30 @@
           "afterlog-v1"
         ]
       ]
+    },
+    {
+      "id": "city_autocomplete",
+      "name": "Complétion automatique de ville pour les structures et associations",
+      "android": [
+        [
+          "app/src/main/java/fr/afterlog/app/RdrActivity.java",
+          "AutoCompleteTextView"
+        ],
+        [
+          "app/src/main/java/fr/afterlog/app/RdrPlacesSearch.java",
+          "suggestCities("
+        ]
+      ],
+      "web": [
+        [
+          "web/app.js",
+          "case 'rdr-city':"
+        ],
+        [
+          "web/places.js",
+          "async function suggestCities("
+        ]
+      ]
     }
   ],
   "platformGaps": [
