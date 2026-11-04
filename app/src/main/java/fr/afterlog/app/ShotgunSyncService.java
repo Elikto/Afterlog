@@ -649,7 +649,14 @@ public final class ShotgunSyncService extends Service {
         synchronized(ShotgunSyncService.class){
         JSONObject existing=findExisting(incoming);
         if(existing==null){store.saveEvent(incoming);return;}
-        for(String key:new String[]{"poster","description","shotgunAbout","date","start","end","endDate",
+        // A verified Shotgun À propos may change when the organizer edits
+        // the event. Refresh that sourced field, but never overwrite notes.
+        if("event_section".equals(incoming.optString("shotgunAboutSource")) &&
+           !incoming.optString("shotgunAbout").trim().isEmpty()){
+            existing.put("shotgunAbout",incoming.optString("shotgunAbout"));
+            existing.put("shotgunAboutSource","event_section");
+        }
+        for(String key:new String[]{"poster","description","date","start","end","endDate",
             "venue","city","address","artists","organizer","genres","url","ticketUrl"}) {
             String newValue=incoming.optString(key).trim();
             if(!newValue.isEmpty()&&existing.optString(key).trim().isEmpty())
