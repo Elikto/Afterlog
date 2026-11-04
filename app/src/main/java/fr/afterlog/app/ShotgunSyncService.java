@@ -125,11 +125,11 @@ public final class ShotgunSyncService extends Service {
             }
             gotTickets=true;
         }
-        status(selectedImport?"Synchronisation des soirées sélectionnées…":
-            "Recherche des billets passés…",selectedImport?
-            "Détails des événements choisis":"Recherche automatique dans Mes billets → Passés");
+        status(selectedImport?"Synchronisation automatique des soirées…":
+            "Recherche de tous tes billets Shotgun…",selectedImport?
+            "Récupération des affiches, dates et artistes":"Tous les billets, à venir et passés");
         if(Build.VERSION.SDK_INT>=29)
-            startForeground(NOTIF_ID,notification("Recherche des billets passés…"),
+            startForeground(NOTIF_ID,notification("Synchronisation des billets Shotgun…"),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         else startForeground(NOTIF_ID,notification("Recherche des billets passés…"));
         try {
