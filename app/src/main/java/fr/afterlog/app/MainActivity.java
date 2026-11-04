@@ -621,7 +621,8 @@ public final class MainActivity extends Activity {
 
         add(page,button("Modifier les informations",false,()->editEvent(event)),24);
 
-        String description=event.optString("description");
+        String description=event.optString("shotgunAbout");
+        if(description.isEmpty())description=event.optString("description");
         if(!description.isEmpty()) {
             add(page,text("À propos",21,Color.WHITE,true),11);
             LinearLayout about=card();
