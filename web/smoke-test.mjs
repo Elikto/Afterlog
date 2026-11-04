@@ -26,10 +26,14 @@ window.IDBKeyRange=IDBKeyRange;
 // jsdom does not expose these browser globals by default on Node.js 22.
 window.TextEncoder=TextEncoder;
 window.TextDecoder=TextDecoder;
+// Mirror browser File/Blob APIs so the binary archive can be round-tripped in jsdom.
+window.Blob=globalThis.Blob;
+window.File=globalThis.File;
 window.scrollTo=()=>{};
 window.matchMedia=()=>({matches:false,addListener(){},removeListener(){}});
 window.navigator.vibrate=()=>{};
-window.URL.createObjectURL=blob=>'blob:mock-'+Math.random();
+let exportedBlob=null;
+window.URL.createObjectURL=blob=>{exportedBlob=blob;return 'blob:mock-export';};
 window.URL.revokeObjectURL=()=>{};
 window.eval(readFileSync(path.join(root,'parity.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'places.js'),'utf8'));
@@ -87,5 +91,40 @@ const rows=await new Promise((resolve,reject)=>{
 });
 assert.equal(rows.events.length,1);
 assert.equal(rows.entries.length,1);
-console.log('NØCTARIA PWA smoke test OK: initial load, event, default poster, consumption, tracking, settings, IndexedDB');
+// Complete media archive must preserve the image/video bytes and the journal.
+const mediaDb=await new Promise((resolve,reject)=>{
+ const req=indexedDB.open('noctaria-pwa-v1',1);
+ req.onsuccess=()=>resolve(req.result);
+ req.onerror=()=>reject(req.error);
+});
+const mediaBytes=new Uint8Array([2,7,12,99,255]);
+await new Promise((resolve,reject)=>{
+ const tx=mediaDb.transaction('media','readwrite');
+ tx.objectStore('media').put({id:'picture-1',eventId:String(rows.events[0].id),
+  name:'image-test.png',type:'image/png',createdAt:Date.now(),
+  blob:new globalThis.Blob([mediaBytes],{type:'image/png'})});
+ tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+});
+const oldClick=window.HTMLAnchorElement.prototype.click;
+window.HTMLAnchorElement.prototype.click=function(){};
+const saved=await window.NoctariaBackup.exportFull();
+window.HTMLAnchorElement.prototype.click=oldClick;
+assert.equal(saved.count,1,'one image included in complete export');
+assert.ok(exportedBlob && exportedBlob.size>0,'binary archive generated');
+const archive=new globalThis.File([exportedBlob],'journal.noctaria');
+const prepared=await window.NoctariaBackup.previewImport(archive);
+assert.equal(prepared.header.journal.events.length,1);
+assert.equal(prepared.files.length,1);
+const restored=await window.NoctariaBackup.restore(prepared);
+assert.equal(restored.media,1);
+const fetched=await new Promise((resolve,reject)=>{
+ const tx=mediaDb.transaction('media','readonly');
+ const req=tx.objectStore('media').get('picture-1');
+ req.onsuccess=()=>resolve(req.result);
+ req.onerror=()=>reject(req.error);
+});
+assert.deepEqual(new Uint8Array(await fetched.blob.arrayBuffer()),mediaBytes,
+ 'complete archive preserves the original binary media');
+mediaDb.close();
+console.log('NØCTARIA PWA smoke test OK: events, consumption, tracking, settings, IndexedDB, full media archive round-trip');
 dom.window.close();
