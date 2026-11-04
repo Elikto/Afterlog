@@ -20,7 +20,7 @@ final class TicketSelectionStore {
     static void saveFound(Context context,JSONArray found) throws Exception {
         JSONArray safe=new JSONArray();
         Set<String> urls=new HashSet<>();
-        for(int i=0;i<found.length()&&safe.length()<75;i++) {
+        for(int i=0;i<found.length()&&safe.length()<ShotgunTicketDiscovery.MAX_EVENTS;i++) {
             JSONObject ticket=found.optJSONObject(i);
             if(ticket==null)continue;
             String url=ticket.optString("url");
