@@ -121,6 +121,16 @@ public final class SpotifyArtistBackfillWorker extends Worker {
             // "artists" string and no "artistProfiles" objects.
             ensureProfiles(ctx);
             LinkedHashMap<String,Artist> artists=collect(new AppStore(ctx).events());
+            // Old imported line-ups gain verified SoundCloud/track links without
+            // having to sync every Shotgun ticket again.
+            for(Map.Entry<String,Artist> row:artists.entrySet()){
+                if(isStopped())return Result.retry();
+                String account=SoundCloudArtistFinder.knownProfile(row.getValue().name);
+                if(account.isEmpty())continue;
+                String track=account.equals("https://soundcloud.com/skonebzh")?
+                    SoundCloudArtistFinder.firstOfficialTrack(account):"";
+                applyMusic(ctx,row.getKey(),account,track);
+            }
             // First propagate every already-confirmed direct link across ALL events.
             // This is fast and does not consume a slow network lookup slot.
             for(Map.Entry<String,Artist> row:artists.entrySet()){
@@ -294,6 +304,37 @@ public final class SpotifyArtistBackfillWorker extends Worker {
                     }
                     current.put("artistProfiles",latest);
                     store.saveEvent(current);
+                }catch(Exception ignored){}
+            }
+        }
+    }
+    private static void applyMusic(Context context,String target,
+                                   String soundcloud,String preview){
+        synchronized(ShotgunSyncService.class){
+            for(JSONObject snapshot:new AppStore(context).events()){
+                try{
+                    AppStore store=new AppStore(context);
+                    JSONObject event=store.event(snapshot.optLong("id"));
+                    if(event==null)continue;
+                    JSONArray profiles=event.optJSONArray("artistProfiles");
+                    if(profiles==null)continue;
+                    boolean changed=false;
+                    for(int i=0;i<profiles.length();i++){
+                        JSONObject item=profiles.optJSONObject(i);
+                        if(item==null||!target.equals(key(item.optString("name"))))continue;
+                        if(item.optString("soundcloud").isEmpty()&&
+                            SoundCloudArtistFinder.validProfile(soundcloud)){
+                            item.put("soundcloud",soundcloud);changed=true;
+                        }
+                        if(item.optString("previewUrl").isEmpty()&&
+                            preview.startsWith("https://soundcloud.com/")){
+                            item.put("previewUrl",preview);changed=true;
+                        }
+                    }
+                    if(changed){
+                        event.put("artistProfiles",profiles);
+                        store.saveEvent(event);
+                    }
                 }catch(Exception ignored){}
             }
         }
