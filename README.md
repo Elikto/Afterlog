@@ -1,3 +1,15 @@
+# NØCTARIA 0.18.8 — Shotgun invisible, artistes intégrés et villes proposées (Android + iPhone)
+
+- **Android :** après connexion sur le site officiel Shotgun dans NØCTARIA, trois choix : **Tout synchroniser**, **Choisir des soirées** ou **Plus tard**.
+- Si tu synchronises, la lecture des trois catégories de billets (tous, à venir, passés) s'effectue dans un **service Android en arrière-plan**, sans navigation visible dans le navigateur de connexion. La progression apparaît sur l'accueil et dans une notification Android.
+- **Tout synchroniser :** l'import des événements commence après leur découverte. **Choisir des soirées :** l'application propose une liste à cocher une fois les billets trouvés ; seules les soirées retenues sont importées. Les exclusions sont conservées pour les recherches périodiques.
+- **Les artistes sont vérifiés pendant cette même synchronisation**, à partir des line-ups collectés sur Shotgun et des liens Spotify publics. La synchronisation attend la fin des enrichissements en cours avant d'être marquée terminée. Un artiste sans profil Spotify fiable reste sans lien.
+- **Android et PWA iPhone :** dans « Structures et associations », saisir une ville déclenche des **suggestions de communes françaises** issues de l'IGN. Après sélection et validation, les CAARUD, CSAPA et autres lieux cartographiés sont recherchés autour de la **nouvelle ville**, triés par distance. Aucun GPS demandé.
+- **Identité : NØCTARIA** sur les écrans, le suivi et les noms de sauvegardes. L'identifiant Android, les clés de stockage et les URL d'anciens téléchargements restent techniquement inchangés pour préserver les installations et les journaux.
+- **Limites :** la synchronisation d'un compte personnel Shotgun via la PWA iPhone n'est pas opérationnelle sans accès autorisé. Le comportement Android dépend des pages Shotgun ; tester sur un compte réel est nécessaire. L'annuaire OSM n'est pas exhaustif.
+
+---
+
 # NØCTARIA 0.18.7 — Shotgun : connexion et synchronisation sans navigation (Android)
 
 - Le bouton **Connecter Shotgun** présente désormais uniquement la page officielle de connexion et un état de progression : suppression des boutons NØCTARIA **Retour**, **Précédent**, **Actualiser**, **Importer la soirée** et **Synchroniser mes billets** sur cet écran.
