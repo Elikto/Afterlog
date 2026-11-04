@@ -198,7 +198,11 @@ public final class EventEditorActivity extends Activity {
     }
     private void refreshDate() {
         String date=event.optString("date");
-        dateButton.setText(date.isEmpty()?"📅 Choisir une date":"📅 "+date);
+        String label=date;
+        try{label=LocalDate.parse(date).format(java.time.format.DateTimeFormatter
+            .ofPattern("d MMMM yyyy",Locale.FRANCE));}
+        catch(Exception ignored){}
+        dateButton.setText(date.isEmpty()?"📅 Choisir une date":"📅 "+label);
         String start=event.optString("start"),end=event.optString("end");
         startButton.setText(start.isEmpty()?"🕒 Heure de début":"🕒 Début · "+start);
         endButton.setText(end.isEmpty()?"🕔 Heure de fin":"🕔 Fin · "+end);
