@@ -8,7 +8,7 @@ const NS='noctaria-spotify-v2';
 const TRUSTED=window.NoctariaTrustedSpotify||{};
 const MAX_NETWORK_LOOKUPS=12;
 const RETRY_MS=6*3600*1000;
-let running=false;
+let running=false,queuedRescan=false;
 const norm=s=>String(s||'').toLowerCase().replace(/ø/g,'o').normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const isSpotify=s=>/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?artist\/[a-zA-Z0-9]{22}(?:[/?#].*)?$/.test(s||'');
@@ -138,7 +138,8 @@ function eventFingerprint(events){
  ]).sort((a,b)=>a[0].localeCompare(b[0])));
 }
 async function scan(force=false){
- if(running||!navigator.onLine)return status();
+ if(running){queuedRescan=true;return status();}
+ if(!navigator.onLine)return status();
  running=true;
  let db;
  try{
@@ -207,6 +208,10 @@ async function scan(force=false){
  }finally{
   running=false;
   if(db)db.close();
+  if(queuedRescan){
+   queuedRescan=false;
+   setTimeout(()=>scan(false).catch(()=>{}),300);
+  }
  }
 }
 window.NoctariaSpotify={scan,status};
