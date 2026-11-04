@@ -54,3 +54,15 @@ d'authentification ou un jeton Shotgun vers le site sans intégration autorisée
 - Android : APK GitHub Actions avec identité et signature existantes.
 
 Aucun abonnement développeur Apple nécessaire pour la PWA.
+
+## Spotify — couverture multiplateforme
+
+- Source unique des 15 profils connus : `SpotifyArtistFinder.java` ; génération de
+  `web/spotify-trusted.js` par `node scripts/sync-spotify-profiles.mjs`.
+- Avant chaque publication, `node scripts/sync-spotify-profiles.mjs --check`
+  et `node scripts/spotify-parity-test.mjs` doivent réussir.
+- Toute nouvelle soirée sur Android ou iPhone est éligible à la recherche Spotify,
+  y compris une soirée importée depuis une sauvegarde. Les homonymes et profils
+  impossibles à confirmer ne doivent jamais être attribués automatiquement.
+- Un compte Spotify confirmé ne garantit pas de portrait public. Ne pas inventer
+  de photo quand Spotify ne renvoie pas de vignette.
