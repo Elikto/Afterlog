@@ -38,7 +38,7 @@ window.fetch=async input=>{
  if(url.hostname==='open.spotify.com'&&url.pathname==='/oembed'){
   const artistUrl=url.searchParams.get('url');
   if(artistUrl===urlCorrect)return response({provider_name:'Spotify',
-   title:'Verified Performer',thumbnail_url:'https://i.scdn.co/image/testphoto'});
+   title:'Spotify Embed: Verified Performer',thumbnail_url:'https://i.scdn.co/image/testphoto'});
   if(artistUrl===urlWrong)return response({provider_name:'Spotify',
    title:'Un autre musicien',thumbnail_url:'https://i.scdn.co/image/wrong'});
   return response({provider_name:'Spotify',title:'Perceval'});
