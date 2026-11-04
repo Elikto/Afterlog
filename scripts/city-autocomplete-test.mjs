@@ -20,7 +20,7 @@ window.fetch=async raw=>{
 };
 window.eval(readFileSync(path.join(root,'web/places.js'),'utf8'));
 const choices=await window.NoctariaPlaces.suggestCities('mar');
-assert.deepEqual(choices.map(x=>x.label),['Marseille, 13001','Martigues, 13500']);
+assert.deepEqual(Array.from(choices,x=>String(x.label)),['Marseille, 13001','Martigues, 13500']);
 assert.equal((await window.NoctariaPlaces.suggestCities('m')).length,0);
 assert.ok(fetched.some(u=>u.includes('type=municipality')),'municipality-only results are preferred');
 const app=readFileSync(path.join(root,'web/app.js'),'utf8');
