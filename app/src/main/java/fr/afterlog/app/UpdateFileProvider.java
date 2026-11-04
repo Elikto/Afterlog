@@ -10,7 +10,7 @@ import android.provider.OpenableColumns;
 import java.io.File;
 import java.io.FileNotFoundException;
 
-/** Offre seulement l'APK de mise à jour téléchargé par AfterLog à l'installateur Android. */
+/** Offre seulement l'APK de mise à jour téléchargé par NØCTARIA à l'installateur Android. */
 public final class UpdateFileProvider extends ContentProvider {
     public static final String FILE = "afterlog-update.apk";
     public static Uri uri(String packageName) {
@@ -43,7 +43,7 @@ public final class UpdateFileProvider extends ContentProvider {
             MatrixCursor cursor = new MatrixCursor(columns);
             MatrixCursor.RowBuilder row = cursor.newRow();
             for (String column : columns) {
-                if (OpenableColumns.DISPLAY_NAME.equals(column)) row.add("AfterLog-update.apk");
+                if (OpenableColumns.DISPLAY_NAME.equals(column)) row.add("NOCTARIA-update.apk");
                 else if (OpenableColumns.SIZE.equals(column)) row.add(f.length());
                 else row.add(null);
             }
