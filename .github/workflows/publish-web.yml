@@ -45,7 +45,15 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: web
-# Mise en ligne iOS suspendue tant que GitHub Pages n'est pas activé dans
-# Settings → Pages → Build and deployment → GitHub Actions.
-# Le workflow valide l'application mais évite les échecs et e-mails inutiles.
-# La mise en ligne peut être réactivée après configuration de Pages.
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy NØCTARIA Web
+        id: deploy
+        uses: actions/deploy-pages@v4
