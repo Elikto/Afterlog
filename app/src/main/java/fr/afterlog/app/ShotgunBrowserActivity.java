@@ -53,6 +53,8 @@ public final class ShotgunBrowserActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         // Ne pas activer FLAG_SECURE : les captures d’écran et enregistrements
         // d’écran sont autorisés dans le navigateur Shotgun intégré.
+        autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
+        autoExtractEvent=getIntent().getBooleanExtra("afterlog_auto_extract",false);
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
@@ -63,13 +65,17 @@ public final class ShotgunBrowserActivity extends Activity {
         header.setPadding(dp(12), dp(9), dp(12), dp(8));
         outer.addView(header,new LinearLayout.LayoutParams(-1,-2));
 
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        header.addView(nav);
-        button(nav,"← Retour",()->{
-            if(batch!=null && batch.isActive())batch.askCancel();else finish();
-        },1);
-        button(nav,"↻",()->web.reload(),0.23f);
+        // Connexion personnelle : aucune barre de navigation NØCTARIA.
+        // Le formulaire Shotgun officiel et le statut de synchronisation suffisent.
+        // Conserver les commandes seulement dans l'import manuel d'événement,
+        // lancé depuis une autre entrée de l'application.
+        if(!autoSyncMode){
+            LinearLayout nav=new LinearLayout(this);
+            nav.setOrientation(LinearLayout.HORIZONTAL);
+            header.addView(nav);
+            button(nav,"← Retour",this::finish,1);
+            button(nav,"↻",()->web.reload(),0.23f);
+        }
         status = new TextView(this);
         status.setTextColor(Color.LTGRAY);
         status.setTextSize(12);
@@ -77,11 +83,12 @@ public final class ShotgunBrowserActivity extends Activity {
         status.setPadding(0,dp(10),0,dp(10));
         header.addView(status);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        header.addView(actions);
-        button(actions,"Importer la soirée",this::importCurrent,1);
-        button(actions,"↻ Synchroniser mes billets",this::beginDiscovery,1);
+        if(!autoSyncMode){
+            LinearLayout actions=new LinearLayout(this);
+            actions.setOrientation(LinearLayout.HORIZONTAL);
+            header.addView(actions);
+            button(actions,"Importer la soirée",this::importCurrent,1);
+        }
 
         web = new WebView(this);
         discovery=new ShotgunTicketDiscovery(this,web,status,this::onTicketsFound);
@@ -135,17 +142,17 @@ public final class ShotgunBrowserActivity extends Activity {
                 }
             }
         });
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setPadding(dp(12),dp(7),dp(12),dp(10));
-        outer.addView(footer,new LinearLayout.LayoutParams(-1,-2));
-        button(footer,"‹ Précédent",()->{
-            if(batch!=null && batch.isActive()){batch.askCancel();return;}
-            if(web.canGoBack()) web.goBack(); else finish();
-        },1);
+        if(!autoSyncMode){
+            LinearLayout footer=new LinearLayout(this);
+            footer.setOrientation(LinearLayout.HORIZONTAL);
+            footer.setPadding(dp(12),dp(7),dp(12),dp(10));
+            outer.addView(footer,new LinearLayout.LayoutParams(-1,-2));
+            button(footer,"‹ Précédent",()->{
+                if(batch!=null && batch.isActive()){batch.askCancel();return;}
+                if(web.canGoBack())web.goBack();else finish();
+            },1);
+        }
 
-        autoExtractEvent=getIntent().getBooleanExtra("afterlog_auto_extract",false);
-        autoSyncMode=getIntent().getBooleanExtra("afterlog_auto_sync",false);
         String initial=getIntent().getStringExtra(EXTRA_URL);
         if(initial!=null && trusted(Uri.parse(initial)))web.loadUrl(initial);
         else if(autoSyncMode) {
@@ -269,6 +276,9 @@ public final class ShotgunBrowserActivity extends Activity {
             }).show();
     }
     @Override public void onBackPressed() {
+        // En mode connexion, le retour système ferme simplement la fenêtre :
+        // il n'envoie jamais l'utilisateur parcourir les pages Shotgun.
+        if(autoSyncMode){finish();return;}
         if(batch!=null && batch.isActive()){batch.askCancel();return;}
         if(web!=null && web.canGoBack())web.goBack();
         else super.onBackPressed();
