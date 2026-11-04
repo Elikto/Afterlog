@@ -60,6 +60,8 @@ final class SoundCloudArtistFinder {
         for(String variant:alternatives){
             if(ArtistNameMatcher.normalized(variant).equals("maissouille"))
                 return "https://soundcloud.com/maissouille";
+            if(ArtistNameMatcher.normalized(variant).equals("skone"))
+                return "https://soundcloud.com/skonebzh";
         }
         try{
             LinkedHashSet<String> candidates=new LinkedHashSet<>();
@@ -106,6 +108,9 @@ final class SoundCloudArtistFinder {
      */
     static String firstOfficialTrack(String profile){
         if(!validProfile(profile))return "";
+        // Confirmed public link from Sköne's own SoundCloud artist track list.
+        if("https://soundcloud.com/skonebzh".equals(profile))
+            return "https://soundcloud.com/skonebzh/fulmination";
         try{
             Document doc=Jsoup.connect(profile).timeout(10000)
                 .userAgent("Mozilla/5.0 (compatible; NOCTARIA/0.19)").get();
