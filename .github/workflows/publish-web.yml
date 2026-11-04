@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'app/**'
+      - 'shared/**'
+      - 'scripts/**'
       - '.github/workflows/publish-web.yml'
   workflow_dispatch:
 
@@ -26,10 +29,14 @@ jobs:
         run: |
           node --check web/app.js
           node --check web/sw.js
+          node --check scripts/check-parity.mjs
+          node --check scripts/shotgun-scan-test.mjs
           python3 -m json.tool web/manifest.webmanifest >/dev/null
       - name: Test journal functionality
         run: |
           npm install --no-save --ignore-scripts jsdom@26 fake-indexeddb@6
+          node scripts/check-parity.mjs
+          node scripts/shotgun-scan-test.mjs
           node web/smoke-test.mjs
       - name: Generate install icons
         run: |
