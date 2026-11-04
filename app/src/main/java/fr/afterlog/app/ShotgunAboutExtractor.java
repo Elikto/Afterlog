@@ -52,9 +52,9 @@ final class ShotgunAboutExtractor {
         for(Element block:copy.select("p,li,blockquote,div,section,h4,h5"))
             block.appendText("\n");
         String raw=copy.wholeText().replace('\u00a0',' ')
-            .replaceAll("[ \\t]+\\n","\\n")
-            .replaceAll("\\n[ \\t]+","\\n")
-            .replaceAll("\\n{3,}","\\n\\n").trim();
+            .replaceAll("[ \\t]+\\n","\n")
+            .replaceAll("\\n[ \\t]+","\n")
+            .replaceAll("\\n{3,}","\n\n").trim();
         if(raw.isEmpty()||raw.length()>16000||about(raw)||boundary(raw))return "";
         if(raw.matches("(?s).*(?m:^(?:Line.?up|Localisation|Organis[eé] par)\\s*$).*"))
             return "";
