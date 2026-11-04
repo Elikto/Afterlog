@@ -126,6 +126,9 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         store = new AppStore(this);
         updater = new AppUpdater(this);
+        // Fix older imported "À propos" using the public source page,
+        // without requiring another personal-account Shotgun login.
+        ShotgunAboutBackfillWorker.schedule(this);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         showHome();
@@ -642,7 +645,9 @@ public final class MainActivity extends Activity {
                 "(?i)^https://(?:[a-z0-9-]+\\.)?shotgun\\.live/(?:[a-z]{2}/)?(?:events|festivals)/.*");
         // A Shotgun card must never masquerade a marketing og:description or
         // personal note as the event's actual "À propos".
-        String aboutText=shotgunEvent?event.optString("shotgunAbout").trim():
+        String aboutText=shotgunEvent?
+            ("event_section".equals(event.optString("shotgunAboutSource"))?
+                event.optString("shotgunAbout").trim():""):
             event.optString("description").trim();
         if(!aboutText.isEmpty()||shotgunEvent){
             add(page,text("À propos",21,Color.WHITE,true),11);
