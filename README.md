@@ -1,3 +1,13 @@
+# NØCTARIA 0.18.4 — Billets personnels Shotgun (Android)
+
+- Après la connexion dans le navigateur Shotgun **intégré à Android**, NØCTARIA visite automatiquement les trois pages de billets : `/fr/account/tickets`, `/fr/account/tickets/pending`, `/fr/account/tickets/past`.
+- Les cartes de soirées accessibles sont dédoublonnées et la synchronisation démarre **sans sélection manuelle** ; les vérifications périodiques explorent maintenant les mêmes trois listes.
+- La synchronisation dépend du chargement et de la structure des pages Shotgun ; elle peut échouer en cas de session expirée, de connexion via un fournisseur externe, de contrôle anti-automatisation ou de changement d'interface. Le code ne récupère pas les mots de passe ni les QR codes.
+- **iPhone/PWA : cette synchronisation des billets personnels n'est pas disponible.** Safari interdit à la PWA NØCTARIA de lire les pages privées d'un autre domaine. Aucun faux état « connecté/synchronisé » ne doit être affiché.
+- Pour les évolutions futures, Android et iOS doivent être traités ensemble. Les écarts réels sont consignés dans [le contrat multiplateforme](docs/CROSS_PLATFORM.md) et vérifiés automatiquement pour les fonctionnalités communes.
+
+---
+
 # NØCTARIA 0.18.3 — Portraits Spotify dans toutes les soirées
 
 - Si Spotify ne fournit pas `thumbnail_url` via oEmbed, NØCTARIA cherche désormais le **portrait de l'artiste sur les pages officielles Spotify et son lecteur intégré**, en vérifiant le nom. Aucune photo arbitraire n'est attribuée à un homonyme.
