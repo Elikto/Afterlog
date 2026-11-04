@@ -54,7 +54,9 @@ assert.ok(window.document.querySelector('.consume-bubble .consume-name').textCon
 click('[data-action="tracking"]');
 await pause(55);
 assert.ok(window.document.body.textContent.includes('Produits consignés'),'tracking appears');
-assert.ok(window.document.body.textContent.includes('MDMA'),'tracking has custom product');
+click('[data-action="tracking-prev"]');
+await pause(60);
+assert.ok(window.document.body.textContent.includes('MDMA'),'history navigation reveals the saved substance');
 click('[data-action="settings"]');
 await pause(45);
 assert.ok(window.document.body.textContent.includes('Importer une sauvegarde Android'),'Android import offered');
