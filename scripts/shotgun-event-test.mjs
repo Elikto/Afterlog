@@ -53,4 +53,22 @@ const svc=readFileSync(path.join(root,'app/src/main/java/fr/afterlog/app/Shotgun
 assert.ok(svc.includes('private int artistEventsComplete'),'artist enrichment belongs to sync');
 assert.ok(svc.includes('artistEventsComplete!=queue.size()'),
  'partial artist sync cannot report 100%');
+const android=readFileSync(path.join(root,
+ 'app/src/main/java/fr/afterlog/app/MainActivity.java'),'utf8');
+assert.ok(svc.includes('queue.size()+1'),
+ '9 selected events mean 10 progress steps, including the final artist stage');
+assert.ok(svc.includes('artistSnapshots.add(')&&svc.includes('startArtistStage();'),
+ 'all selected events are imported before any Spotify/SoundCloud work starts');
+assert.ok(svc.includes('SoundCloudArtistFinder.find(')&&
+ svc.includes('OfficialMusicPreview.firstSpotifyTrack('),
+ 'genuine SoundCloud and Spotify music lookups are attempted');
+assert.ok(android.includes('SyncState.IDLE.equals(mode)||SyncState.DONE.equals(mode)'),
+ 'successful synchronization hides the banner automatically');
+assert.ok(android.includes('button("Masquer"'),
+ 'failed or partial syncs offer a manual hide control');
+assert.ok(android.includes('Temps total restant estimé'),
+ 'ETA includes the full final artists stage, not only current event');
+assert.ok(android.includes('frenchDate(e.optString("date"))'),
+ 'home event dates use French long display, not ISO');
+
 console.log('NØCTARIA event extraction OK: full À propos, explicit official preview, artist directory and strict completion');
