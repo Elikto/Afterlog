@@ -4,7 +4,10 @@
    permits) must confirm its title before recording its official thumbnail.
    When browser CORS blocks Spotify thumbnails, keep Shotgun artwork intact. */
 (()=>{'use strict';
-const NS='noctaria-spotify-v1';
+const NS='noctaria-spotify-v2';
+const TRUSTED=window.NoctariaTrustedSpotify||{};
+const MAX_NETWORK_LOOKUPS=12;
+const RETRY_MS=6*3600*1000;
 let running=false;
 const norm=s=>String(s||'').toLowerCase().replace(/ø/g,'o').normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
@@ -67,18 +70,23 @@ async function wiki(name){
  // Do not pick a profile when multiple distinct Spotify IDs fit the same name.
  return candidates.size===1?[...candidates][0]:'';
 }
-async function spotifyPortrait(link,name){
- if(!isSpotify(link))return '';
+// Never accept an automatically discovered Wikidata ID without checking the
+// official Spotify oEmbed artist title; the thumbnail is optional.
+async function spotifyMetadata(link,name){
+ if(!isSpotify(link))return null;
  try{
   const data=await fetchJson('https://open.spotify.com/oembed?url='+encodeURIComponent(link),9500);
-  if(norm(data.title)!==norm(name))return '';
+  if(data.provider_name!=='Spotify'||norm(data.title)!==norm(name))return null;
   const src=data.thumbnail_url||'';
-  const u=new URL(src);
-  if(u.protocol!=='https:'||!(
+  let photo='';
+  if(src){
+   const u=new URL(src);
+   if(u.protocol==='https:'&&(
     u.hostname==='i.scdn.co'||u.hostname==='mosaic.scdn.co'||
-    u.hostname.endsWith('.spotifycdn.com')))return '';
-  return src;
- }catch{return '';} // CORS-blocked on many iOS browsers: no arbitrary photo.
+    u.hostname.endsWith('.spotifycdn.com')))photo=src;
+  }
+  return {photo};
+ }catch{return null;} // Never guess when Spotify cannot be checked.
 }
 function openDb(){
  return new Promise((resolve,reject)=>{
@@ -107,56 +115,99 @@ async function saveArtist(db,name,link,photo){
    if(!root||!Array.isArray(root.events))return;
    for(const event of root.events){
     const p=profiles(event);
+    let eventChanged=false;
     for(const artist of p){
      if(norm(artist.name)!==key)continue;
      if(artist.spotify&&!isSpotify(artist.spotify))continue;
      if(artist.spotify&&artist.spotify!==link)continue;
-     if(!artist.spotify&&link){artist.spotify=link;changed=true;}
-     if(photo&&!artist.spotifyPhoto){artist.spotifyPhoto=photo;changed=true;}
+     if(!artist.spotify&&link){artist.spotify=link;eventChanged=true;}
+     if(photo&&!artist.spotifyPhoto){artist.spotifyPhoto=photo;eventChanged=true;}
     }
-    if(changed)event.artistProfiles=p;
+    if(eventChanged){event.artistProfiles=p;changed=true;}
    }
    if(changed)store.put(root);
   };
   tx.oncomplete=()=>resolve(changed);
   tx.onerror=()=>reject(tx.error);
+  tx.onabort=()=>reject(tx.error||Error('Sauvegarde Spotify annulée'));
  });
+}
+function eventFingerprint(events){
+ return JSON.stringify(events.map(e=>[
+  String(e.id||''),profiles(e).map(a=>norm(a.name)).filter(Boolean).sort()
+ ]).sort((a,b)=>a[0].localeCompare(b[0])));
 }
 async function scan(force=false){
  if(running||!navigator.onLine)return status();
- const prev=status();
- if(!force&&Date.now()-Number(prev.lastRun||0)<24*3600e3)return prev;
  running=true;
- const db=await openDb();
- let linked=0,photos=0,checked=0,changed=false;
+ let db;
  try{
-  const root=await getRoot(db),artists=distinctArtistNames(root.events||[]);
-  update({state:'running',total:artists.size,checked:0});
+  db=await openDb();
+  const root=await getRoot(db),events=root.events||[];
+  const fingerprint=eventFingerprint(events);
+  const prev=status();
+  if(!force&&prev.state==='completed'&&prev.fingerprint===fingerprint&&
+     Date.now()-Number(prev.lastRun||0)<24*3600e3)return prev;
+  const artists=distinctArtistNames(events);
+  const attempts={...(prev.attempts||{})};
+  let checked=0,network=0,changed=false,pending=false;
+  update({state:'running',total:artists.size,checked:0,fingerprint});
   for(const [key,a] of artists){
-   if(a.ambiguous)continue;
+   if(a.ambiguous){checked++;continue;}
    checked++;
-   if(a.link&&a.photo){linked++;photos++;continue;}
-   let link=isSpotify(a.link)?a.link:'';
-   if(!link){
-    try{link=await wiki(a.name);}catch{}
-   }
-   if(!link)continue;
-   linked++;
+   // The same 15 explicitly confirmed artist profiles as the Android app.
+   // Propagate already known URLs to EVERY occurrence across all events.
+   let link=isSpotify(a.link)?a.link:(TRUSTED[key]||'');
    let photo=a.photo||'';
-   if(!photo)photo=await spotifyPortrait(link,a.name);
-   if(photo)photos++;
+   if(isSpotify(link)){
+    try{if(await saveArtist(db,a.name,link,photo))changed=true;}catch{}
+   }
+   if(link&&photo)continue;
+   if(!force&&Number(attempts[key])>0&&Date.now()-attempts[key]<RETRY_MS)continue;
+   if(network>=MAX_NETWORK_LOOKUPS){pending=true;continue;}
+   network++;
+   attempts[key]=Date.now();
+   if(!link){
+    // Wikidata alone does not prove the identity of an artist.
+    let candidate='';
+    try{candidate=await wiki(a.name);}catch{}
+    if(!candidate)continue;
+    const result=await spotifyMetadata(candidate,a.name);
+    if(!result)continue;
+    link=candidate;photo=result.photo;
+   }else{
+    // Preserve a previously confirmed/manual link when Spotify blocks CORS.
+    const result=await spotifyMetadata(link,a.name);
+    if(result&&result.photo)photo=result.photo;
+   }
    try{if(await saveArtist(db,a.name,link,photo))changed=true;}catch{}
-   if(checked%4===0)update({state:'running',checked,total:artists.size,linked,photos});
+   if(checked%3===0)update({state:'running',total:artists.size,checked,fingerprint});
   }
-  const result={state:'completed',total:artists.size,checked,linked,photos,
-    lastRun:Date.now(),note:'Les portraits peuvent être indisponibles si Spotify refuse l’accès du navigateur.'};
+  const latest=distinctArtistNames((await getRoot(db)).events||[]);
+  let linked=0,photos=0;
+  for(const a of latest.values()){
+   if(isSpotify(a.link))linked++;
+   if(a.photo)photos++;
+  }
+  const result={state:pending?'partial':'completed',total:artists.size,checked,
+   linked,photos,fingerprint,attempts,lastRun:Date.now(),
+   note:pending?'Recherche progressive des profils sur toutes les soirées.':
+    'Les homonymes et profils non confirmés restent sans lien.'};
   update(result);
   if(changed)window.dispatchEvent(new Event('noctaria:spotify-updated'));
+  if(pending){
+   // iOS can suspend background JS: remaining names are also retried next time
+   // the PWA is opened. Keep each foreground batch bounded and respectful.
+   setTimeout(()=>scan(false).catch(()=>{}),20000);
+  }
   return result;
  }catch(error){
   update({state:'partial',error:error.message||'Recherche temporairement indisponible',lastRun:Date.now()});
   return status();
- }finally{running=false;db.close();}
+ }finally{
+  running=false;
+  if(db)db.close();
+ }
 }
 window.NoctariaSpotify={scan,status};
 })();
