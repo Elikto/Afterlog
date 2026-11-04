@@ -23,6 +23,7 @@ window.URL.revokeObjectURL=()=>{};
 window.eval(readFileSync(path.join(root,'parity.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'places.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'tracking.js'),'utf8'));
+window.eval(readFileSync(path.join(root,'spotify.js'),'utf8'));
 window.eval(readFileSync(path.join(root,'app.js'),'utf8'));
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const click=selector=>{
